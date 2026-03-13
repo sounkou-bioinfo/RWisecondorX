@@ -3,10 +3,9 @@ Title: An 'R' Port of 'WisecondorX' for Copy Number Analysis using 'Duckhts'
 Version: 0.0.0.9000
 Authors@R: 
     c(
-        person(given = "Sounkou Mahamane", family = "Toure",
-    email = "sounkoutoure@gmail.com",
+        person(given = "Sounkou Mahamane", family = "Toure", email = "sounkoutoure@gmail.com", comment = c( ORCID = "0009-0001-5914-6798" ),
     role = c("aut", "cre")),
-    person(given = "WisecondorX Authors", role = "ctb", comment = "Authors of the original WisecondorX tool implemented in Python"),
+    person(given = "WisecondorX Authors", role = "ctb", comment = "Authors of the original WisecondorX tool implemented in Python")
     )
 Description: An 'R' port of the 'WisecondorX' tool for copy number analysis of cell-free DNA sequencing data, implemented using the 'duckhts' extension for 'DuckDB'. 
             This package provides functions to perform copy number variation analysis using the 'WisecondorX' algorithm, leveraging the high-throughput sequencing file format support provided by 'duckhts'. 

@@ -5,3 +5,11 @@
 ^\.github$
 ^README\.Rmd$
 ^LICENSE\.md$
+^AGENTS\.md$
+^Dockerfile$
+^MANIFEST\.in$
+^pyproject\.toml$
+^setup\.py$
+^setup\.cfg$
+^conda\.yml$
+^README\.WisecondorX\.md$

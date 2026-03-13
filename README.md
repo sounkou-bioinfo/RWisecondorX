@@ -17,7 +17,7 @@ You can install the development version of RWisecondorX from
 
 ``` r
 # install.packages("pak")
-pak::pak("CenterForMedicalGeneticsGhent/WisecondorX")
+pak::pak("sounkou-bionfo/WisecondorX")
 ```
 
 ## Example

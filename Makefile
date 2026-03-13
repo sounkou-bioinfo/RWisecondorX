@@ -3,7 +3,6 @@
 # Package name
 PKG_NAME := RWisecondorX
 PKG_VERSION := $(shell grep '^Version:' DESCRIPTION | awk '{print $$2}')
-R_LIB_DIR := $(CURDIR)/.Rlib
 
 # Default target
 .PHONY: all
@@ -12,7 +11,9 @@ all: build
 # Install package dependencies (if needed)
 .PHONY: deps
 deps:
-	R -e "for (pkg in c('tinytest', 'roxygen2')) if (!require(pkg, quietly = TRUE, character.only = TRUE)) install.packages(pkg, repos = 'https://cran.r-project.org')"
+	R -e "for (pkg in c('tinytest', 'roxygen2', 'BiocManager')) if (!require(pkg, quietly = TRUE, character.only = TRUE)) install.packages(pkg, repos = 'https://cran.r-project.org')"
+	R -e "if (!require('DNAcopy', quietly = TRUE)) BiocManager::install('DNAcopy', ask = FALSE, update = FALSE)"
+	R -e "if (!require('ParDNAcopy', quietly = TRUE)) install.packages('ParDNAcopy', repos = c('https://gsun2018.r-universe.dev', 'https://cloud.r-project.org'))"
 
 # Build the package
 .PHONY: build
@@ -22,8 +23,7 @@ build: deps
 .PHONY: install check build rd test test-source clean help
 
 install: build
-	mkdir -p $(R_LIB_DIR)
-	THREADS=4 R CMD INSTALL -l $(R_LIB_DIR) $(PKG_NAME)_$(PKG_VERSION).tar.gz
+	THREADS=4 R CMD INSTALL $(PKG_NAME)_$(PKG_VERSION).tar.gz
 
 .PHONY: check
 
@@ -35,7 +35,7 @@ rd:
 	R -e 'roxygen2::roxygenize(".",load_code=NULL)'
 
 test: install
-	R_LIBS_USER=$(R_LIB_DIR) R -e "tinytest::test_package('$(PKG_NAME)', lib.loc = '$(R_LIB_DIR)')"
+	R -e "tinytest::test_package('$(PKG_NAME)')"
 
 test-source:
 	R -e "tinytest::run_test_dir('inst/tinytest')"
@@ -45,7 +45,6 @@ test-source:
 clean:
 	rm -f $(PKG_NAME)_*.tar.gz
 	rm -rf $(PKG_NAME).Rcheck/
-	rm -rf $(R_LIB_DIR)
 	rm -f src/*.o src/*.so
 
 # Help target

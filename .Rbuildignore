@@ -13,3 +13,4 @@
 ^setup\.cfg$
 ^conda\.yml$
 ^README\.WisecondorX\.md$
+^\.Rlib$

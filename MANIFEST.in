@@ -1,1 +1,1 @@
-recursive-include src/wisecondorx *.R
+recursive-include inst/python/wisecondorx *.R

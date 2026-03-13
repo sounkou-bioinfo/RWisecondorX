@@ -11,8 +11,8 @@ Authors@R:
 Description: An 'R' port of the 'WisecondorX' tool for copy number analysis of cell-free DNA sequencing data, implemented using the 'duckhts' extension for 'DuckDB'. 
             This package provides functions to perform copy number variation analysis using the 'WisecondorX' algorithm, leveraging the high-throughput sequencing file format support provided by 'duckhts'. 
             The original 'WisecondorX' tool was developed in Python. This package performs conformance testing against the reference Python implementation to ensure consistency of results.
-Imports: Rduckhts(>= 0.1.3-0.0.2.9001), DBI, duckdb, reticulate, utils
-Suggests: tinytest, condathis
+Imports: Rduckhts(>= 0.1.3-0.0.2.9001), DBI, duckdb, utils
+Suggests: tinytest, condathis, reticulate
 License: GPL (>= 3)
 Encoding: UTF-8
 Roxygen: list(markdown = TRUE)

@@ -6,9 +6,10 @@ This document provides guidance for AI agents working on `RWisecondorX`.
 Build an R package that exposes WisecondorX-style copy number analysis workflows on top of `Rduckhts`, while keeping conformance with the upstream Python implementation bundled under `inst/python/wisecondorx`.
 
 ## Current Direction
-- Runtime Python integration should use `reticulate`.
+- Runtime R package functionality should avoid requiring Python by default.
 - `condathis` is optional and should be used for reproducible conformance environments, not as the primary runtime path.
 - The package vendors the upstream Python reference implementation inside `inst/python/wisecondorx`.
+- `reticulate` should remain an optional dependency used primarily for tests and conformance checks.
 - Conformance work should compare package behavior against the bundled Python implementation or an explicitly managed reference environment.
 
 ## Agent Working Instructions
@@ -17,7 +18,7 @@ Always read the existing implementation before changing it:
 2. Inspect the bundled Python sources under `inst/python/wisecondorx` before changing behavior that mirrors upstream WisecondorX.
 3. When upstream behavior is unclear, consult the local upstream mirror at `../../duckhts/.sync/WisecondorX` before relying on secondary summaries.
 4. Preserve CRAN-friendly package behavior. Do not make package loading depend on a preconfigured external Python installation.
-5. Keep runtime integration and conformance tooling separate: `reticulate` for package code, `condathis` only for optional reproducible tests.
+5. Keep package runtime logic and conformance tooling separate: use `reticulate` only for optional Python-backed checks or helpers, and `condathis` only for optional reproducible test environments.
 
 ## Source Layout Expectations
 - R package code lives under `R/`.
@@ -28,7 +29,7 @@ Always read the existing implementation before changing it:
 ## Documentation Conventions
 - `README.Rmd` is the primary editable README source.
 - Keep package metadata in `DESCRIPTION` aligned with the actual runtime strategy.
-- If Python dependency requirements change, update both `DESCRIPTION` and `R/zzz.R`.
+- If Python dependency requirements change, update test helpers and `DESCRIPTION` together.
 - R documentation and `NAMESPACE` should be generated from roxygen2 tags in `R/` files.
 - Do not manually edit generated artifacts when a source file exists upstream of them.
 
@@ -44,8 +45,9 @@ Always read the existing implementation before changing it:
 - Keep CRAN-facing package behavior intact when changing build or test workflows.
 
 ## Python Integration Rules
-- Declare Python requirements with `reticulate::py_require()` in `.onLoad()`.
-- Prefer delay-loaded imports when adding Python module bindings from R.
+- Do not make package load depend on `reticulate` or Python availability.
+- Use `reticulate` primarily in tests, conformance helpers, or explicitly optional workflows.
+- If optional Python-backed helpers are added, guard them with `requireNamespace("reticulate", quietly = TRUE)`.
 - Avoid hard-coding machine-local Python paths in package code.
 - Keep version constraints as loose as practical; pin only when conformance requires it.
 
@@ -59,6 +61,7 @@ Always read the existing implementation before changing it:
 - Add package tests under `inst/tinytest/`, preferably one file per feature family or workflow.
 - When R-facing behavior changes, update or add `tinytest` coverage rather than relying only on manual checks.
 - Prefer running tests through the repository `Makefile` when a suitable target exists.
+- Tests that depend on Python or `reticulate` must skip cleanly when those dependencies are unavailable.
 
 ## Build And Packaging Rules
 - The R package tarball should exclude repo-maintenance files such as Python packaging metadata, container files, and agent-only documentation.

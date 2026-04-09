@@ -8,6 +8,8 @@
 #' ≥ 1.16 works — the format is stable).
 #'
 #' @param bam Path to an indexed BAM or CRAM file.
+#' @param reference Optional FASTA reference path for CRAM inputs. Passed to
+#'   [bam_convert()].
 #' @param npz Path for the output `.npz` file (created or overwritten).
 #' @param binsize Bin size in base pairs (default 5000).
 #' @param rmdup Duplicate-removal strategy passed to [bam_convert()].
@@ -31,7 +33,8 @@ bam_convert_npz <- function(bam,
                             binsize = 5000L,
                             rmdup   = c("streaming", "none", "flag"),
                             con     = NULL,
-                            np      = NULL) {
+                            np      = NULL,
+                            reference = NULL) {
   rmdup <- match.arg(rmdup)
   stopifnot(is.character(npz), length(npz) == 1L, nzchar(npz))
 
@@ -51,7 +54,13 @@ bam_convert_npz <- function(bam,
     )
   }
 
-  bins <- bam_convert(bam, binsize = binsize, rmdup = rmdup, con = con)
+  bins <- bam_convert(
+    bam = bam,
+    reference = reference,
+    binsize = binsize,
+    rmdup = rmdup,
+    con = con
+  )
 
   # Keep only chromosomes that have data; match wisecondorx key format (string)
   arrays <- Filter(Negate(is.null), bins)

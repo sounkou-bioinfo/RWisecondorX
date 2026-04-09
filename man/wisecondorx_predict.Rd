@@ -9,9 +9,19 @@ wisecondorx_predict(
   ref,
   output_prefix,
   ref_binsize = 50000L,
+  minrefbins = 150L,
+  maskrepeats = 5L,
   zscore = 5,
+  alpha = 1e-04,
+  beta = NULL,
+  blacklist = NULL,
+  gender = NULL,
   bed = FALSE,
-  gender_file = NULL,
+  plot = FALSE,
+  regions = NULL,
+  ylim = NULL,
+  cairo = FALSE,
+  seed = NULL,
   env_name = "wisecondorx",
   extra_args = character(0)
 )
@@ -25,20 +35,52 @@ wisecondorx_predict(
 files (e.g. \code{"results/sample1"}).}
 
 \item{ref_binsize}{Reference bin size in base pairs (default 50000).
-Must match the \code{ref_binsize} used when building the reference.}
+Passed to upstream \code{--binsize}. Must match the \code{ref_binsize} used when
+building the reference.}
 
-\item{zscore}{Z-score threshold for aberration calling (default 5).}
+\item{minrefbins}{Minimum number of sensible reference bins per target bin.
+Passed to upstream \code{--minrefbins}.}
 
-\item{bed}{Logical; also write BED output files (default \code{FALSE}).}
+\item{maskrepeats}{Number of repeat-masking cycles. Passed to upstream
+\code{--maskrepeats}.}
 
-\item{gender_file}{Optional path to a gender model file produced by
-\verb{wisecondorx gender} (passed as \code{--gender}).}
+\item{zscore}{Z-score threshold for aberration calling. Passed to upstream
+\code{--zscore}.}
+
+\item{alpha}{P-value cutoff for circular binary segmentation breakpoints.
+Passed to upstream \code{--alpha}.}
+
+\item{beta}{Optional ratio cutoff for aberration calling. Passed to upstream
+\code{--beta}. When set, upstream ignores \code{zscore}.}
+
+\item{blacklist}{Optional path to a headerless BED blacklist file. Passed to
+upstream \code{--blacklist}.}
+
+\item{gender}{Optional forced gender, \code{"F"} or \code{"M"}. Passed to upstream
+\code{--gender}.}
+
+\item{bed}{Logical; also write BED output files. Passed to upstream \code{--bed}.}
+
+\item{plot}{Logical; also write plot output files. Passed to upstream
+\code{--plot}.}
+
+\item{regions}{Optional path to a headerless BED file with regions to mark on
+the plot. Passed to upstream \code{--regions}.}
+
+\item{ylim}{Optional numeric vector of length 2 giving the y-axis interval,
+e.g. \code{c(-2, 2)}. Passed to upstream \code{--ylim} as \verb{[a,b]}.}
+
+\item{cairo}{Logical; use Cairo bitmap output. Passed to upstream \code{--cairo}.}
+
+\item{seed}{Optional integer random seed for segmentation. Passed to
+upstream \code{--seed}.}
 
 \item{env_name}{Name of the conda environment containing \code{wisecondorx}
 (default \code{"wisecondorx"}).}
 
 \item{extra_args}{Character vector of additional arguments passed verbatim
-to \verb{wisecondorx predict}.}
+after the mapped CLI flags. Keep this for forward compatibility with future
+upstream WisecondorX releases.}
 }
 \value{
 \code{output_prefix} (invisibly).
@@ -47,12 +89,32 @@ to \verb{wisecondorx predict}.}
 Calls \verb{wisecondorx predict} via \code{\link[condathis:run]{condathis::run()}} on a single-sample NPZ
 file against a reference panel built by \code{\link[=wisecondorx_newref]{wisecondorx_newref()}}.
 }
+\details{
+This wrapper exposes the current upstream \verb{wisecondorx predict} CLI flags
+documented in the WisecondorX README: \code{--minrefbins}, \code{--maskrepeats},
+\code{--zscore}, \code{--alpha}, \code{--beta}, \code{--blacklist}, \code{--gender}, \code{--bed},
+\code{--plot}, \code{--regions}, \code{--ylim}, \code{--cairo}, and \code{--seed}.
+}
 \examples{
 \dontrun{
 wisecondorx_predict(
-  npz    = "sample.npz",
-  ref    = "reference.npz",
-  output_prefix = "results/sample"
+  npz = "sample.npz",
+  ref = "reference.npz",
+  output_prefix = "results/sample",
+  ref_binsize = 50000L,
+  minrefbins = 150L,
+  maskrepeats = 5L,
+  zscore = 5,
+  alpha = 1e-4,
+  beta = NULL,
+  blacklist = NULL,
+  gender = "F",
+  bed = TRUE,
+  plot = FALSE,
+  regions = NULL,
+  ylim = c(-2, 2),
+  cairo = FALSE,
+  seed = 1L
 )
 }
 

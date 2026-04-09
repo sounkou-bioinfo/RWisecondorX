@@ -20,6 +20,17 @@ library(tinytest)
   candidates[[1L]]
 }
 
+.fixture_path <- function(name) {
+  candidates <- c(
+    system.file("extdata", name, package = "RWisecondorX"),
+    file.path("inst", "extdata", name),
+    file.path("..", "..", "inst", "extdata", name)
+  )
+  candidates <- candidates[!is.na(candidates) & nzchar(candidates) & file.exists(candidates)]
+  if (length(candidates) == 0L) return(NULL)
+  candidates[[1L]]
+}
+
 test_bam <- .find_test_bam()
 if (is.null(test_bam)) {
   exit_file("No test BAM available")
@@ -27,6 +38,7 @@ if (is.null(test_bam)) {
 if (!requireNamespace("Rduckhts", quietly = TRUE)) {
   exit_file("Rduckhts not available")
 }
+Sys.setenv(RETICULATE_USE_MANAGED_VENV = "no")
 if (!requireNamespace("reticulate", quietly = TRUE)) {
   exit_file("reticulate not available; skipping NPZ tests")
 }
@@ -87,3 +99,26 @@ for (k in keys) {
                    info = paste("chr", k, "round-trip identical"))
 }
 data2$close()
+
+# ---------------------------------------------------------------------------
+# CRAM path: bam_convert_npz() accepts a reference FASTA
+# ---------------------------------------------------------------------------
+
+test_cram <- .fixture_path("fixture_mixed.cram")
+test_ref <- .fixture_path("fixture_ref.fa")
+
+if (!is.null(test_cram) && !is.null(test_ref)) {
+  npz_cram <- tempfile(fileext = ".npz")
+  on.exit(unlink(npz_cram), add = TRUE)
+
+  bam_convert_npz(
+    bam = test_cram,
+    reference = test_ref,
+    npz = npz_cram,
+    binsize = 5000L,
+    rmdup = "streaming",
+    np = np
+  )
+
+  expect_true(file.exists(npz_cram), info = "bam_convert_npz supports CRAM inputs with reference")
+}

@@ -14,6 +14,8 @@
 #' - Bin assignment matches Python's `int(pos / binsize)` (truncating division).
 #'
 #' @param bam Path to an indexed BAM or CRAM file.
+#' @param reference Optional FASTA reference path for CRAM inputs. Passed to
+#'   `read_bam(..., reference := ...)`. Leave `NULL` for BAM inputs.
 #' @param binsize Bin size in base pairs (default 5000, matching WisecondorX
 #'   convert default). The reference bin size should be a multiple of this value.
 #' @param rmdup Duplicate removal strategy. One of:
@@ -51,10 +53,15 @@
 bam_convert <- function(bam,
                         binsize = 5000L,
                         rmdup   = c("streaming", "none", "flag"),
-                        con     = NULL) {
+                        con     = NULL,
+                        reference = NULL) {
   rmdup <- match.arg(rmdup)
   stopifnot(is.character(bam), length(bam) == 1L, nzchar(bam))
   stopifnot(file.exists(bam))
+  if (!is.null(reference)) {
+    stopifnot(is.character(reference), length(reference) == 1L, nzchar(reference))
+    stopifnot(file.exists(reference))
+  }
   stopifnot(is.numeric(binsize), length(binsize) == 1L, binsize >= 1L)
   binsize <- as.integer(binsize)
 
@@ -70,7 +77,7 @@ bam_convert <- function(bam,
     on.exit(DBI::dbDisconnect(con, shutdown = TRUE), add = TRUE)
   }
 
-  sql <- .convert_sql(bam, binsize, rmdup)
+  sql <- .convert_sql(bam, binsize, rmdup, reference = reference)
   rows <- DBI::dbGetQuery(con, sql)
 
   .rows_to_bins(rows, binsize)
@@ -87,8 +94,8 @@ bam_convert <- function(bam,
   "Y" = "24", "y" = "24"
 )
 
-.convert_sql <- function(bam_path, binsize, rmdup) {
-  bam_path <- gsub("'", "''", bam_path)  # escape single quotes
+.convert_sql <- function(bam_path, binsize, rmdup, reference = NULL) {
+  read_bam_call <- .read_bam_call(bam_path, reference = reference)
 
   # Base filtering: keep proper pairs and unpaired reads; remove improper pairs.
   # This matches pysam's `continue` on `not read.is_proper_pair`.
@@ -113,7 +120,7 @@ WITH raw AS (
         flag,
         file_offset,
         (flag & 1)       AS is_paired
-    FROM read_bam('%s')
+    FROM %s
     WHERE rname IS NOT NULL
       AND %s
 ),
@@ -156,7 +163,18 @@ ORDER BY
         END,
     '[^0-9]', '', 'g') AS INTEGER),
     bin
-", bam_path, proper_filter, dedup_where, binsize)
+", read_bam_call, proper_filter, dedup_where, binsize)
+}
+
+.read_bam_call <- function(bam_path, reference = NULL) {
+  bam_path <- gsub("'", "''", bam_path)
+
+  if (is.null(reference)) {
+    return(sprintf("read_bam('%s')", bam_path))
+  }
+
+  reference <- gsub("'", "''", reference)
+  sprintf("read_bam('%s', reference := '%s')", bam_path, reference)
 }
 
 .dedup_where_streaming <- function() {
@@ -165,6 +183,8 @@ ORDER BY
   # where pnext comparison uses the previous PAIRED read's pnext (larp2).
   paste(
     "NOT (",
+    "  prev_pos IS NOT NULL",
+    "  AND",
     "  pos0 = prev_pos",
     "  AND (is_paired = 0 OR pnext0 = prev_pnext)",
     ")"

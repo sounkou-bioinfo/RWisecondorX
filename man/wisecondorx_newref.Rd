@@ -9,6 +9,10 @@ wisecondorx_newref(
   output,
   binsize = 5000L,
   ref_binsize = 50000L,
+  nipt = FALSE,
+  refsize = 300L,
+  yfrac = NULL,
+  plotyfrac = NULL,
   cpus = 1L,
   env_name = "wisecondorx",
   extra_args = character(0)
@@ -23,33 +27,54 @@ wisecondorx_newref(
 Must match the \code{binsize} used when calling \code{\link[=bam_convert_npz]{bam_convert_npz()}}.}
 
 \item{ref_binsize}{Reference bin size in base pairs (default 50000).
-Must be a multiple of \code{binsize}.}
+Passed to upstream \code{--binsize}. Must be a multiple of \code{binsize}.}
+
+\item{nipt}{Logical; pass upstream \code{--nipt}.}
+
+\item{refsize}{Number of reference locations per target bin. Passed to
+upstream \code{--refsize}.}
+
+\item{yfrac}{Optional numeric Y-read fraction cutoff. Passed to upstream
+\code{--yfrac}.}
+
+\item{plotyfrac}{Optional output path for the Y-fraction histogram and
+mixture-model plot. Passed to upstream \code{--plotyfrac}.}
 
 \item{cpus}{Number of CPUs to pass to \verb{wisecondorx newref} (default 1).}
 
 \item{env_name}{Name of the conda environment containing \code{wisecondorx}
-(default \code{"wisecondorx"}).  Created automatically by condathis on first
+(default \code{"wisecondorx"}). Created automatically by condathis on first
 use via the \code{bioconda} channel.}
 
 \item{extra_args}{Character vector of additional arguments passed verbatim
-to \verb{wisecondorx newref} (e.g. \code{c("--yfrac", "0.4")}).}
+after the mapped CLI flags. Keep this for forward compatibility with future
+upstream WisecondorX releases.}
 }
 \value{
 \code{output} (invisibly).
 }
 \description{
 Calls \verb{wisecondorx newref} via \code{\link[condathis:run]{condathis::run()}} on a set of NPZ files
-produced by \code{\link[=bam_convert_npz]{bam_convert_npz()}}.  The NPZ files must all use the same
+produced by \code{\link[=bam_convert_npz]{bam_convert_npz()}}. The NPZ files must all use the same
 \code{binsize}; the reference is built at \code{ref_binsize} (must be a multiple of
 \code{binsize}).
 }
+\details{
+This wrapper exposes the current upstream \verb{wisecondorx newref} CLI flags
+documented in the WisecondorX README: \code{--nipt}, \code{--binsize}, \code{--refsize},
+\code{--yfrac}, \code{--plotyfrac}, and \code{--cpus}.
+}
 \examples{
 \dontrun{
-# Build a reference from 30 NIPT controls
 wisecondorx_newref(
   npz_files = list.files("controls/", "\\\\.npz$", full.names = TRUE),
-  output    = "reference.npz",
-  ref_binsize = 50000L
+  output = "reference.npz",
+  binsize = 5000L,
+  ref_binsize = 50000L,
+  nipt = TRUE,
+  refsize = 300L,
+  yfrac = 0.05,
+  cpus = 1L
 )
 }
 

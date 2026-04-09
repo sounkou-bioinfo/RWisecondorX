@@ -20,7 +20,7 @@ deps:
 build: deps
 	R CMD build .
 
-.PHONY: install check build rd test test-source clean help
+.PHONY: install check build rd test test-source fixtures clean help
 
 install: build
 	THREADS=4 R CMD INSTALL $(PKG_NAME)_$(PKG_VERSION).tar.gz
@@ -31,6 +31,8 @@ check: build
 	R CMD check --as-cran  $(PKG_NAME)_$(PKG_VERSION).tar.gz
 readme:
 	R -e "rmarkdown::render('README.Rmd', output_format = rmarkdown::github_document(html_preview = FALSE))"
+fixtures:
+	bash scripts/make_fixtures.sh
 rd:
 	R -e 'roxygen2::roxygenize(".",load_code=NULL)'
 
@@ -59,5 +61,6 @@ help:
 	@echo "  rd         - Regenerate NAMESPACE and man/ from roxygen2"
 	@echo "  test       - Run installed-package tinytest tests"
 	@echo "  test-source - Run tinytest directly from the source tree"
+	@echo "  fixtures   - Regenerate packaged BAM/CRAM fixtures under inst/extdata"
 	@echo "  clean      - Clean build artifacts"
 	@echo "  help       - Show this help message"

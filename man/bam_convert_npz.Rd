@@ -10,7 +10,8 @@ bam_convert_npz(
   binsize = 5000L,
   rmdup = c("streaming", "none", "flag"),
   con = NULL,
-  np = NULL
+  np = NULL,
+  reference = NULL
 )
 }
 \arguments{
@@ -27,6 +28,9 @@ Passed through to \code{\link[=bam_convert]{bam_convert()}}.}
 
 \item{np}{Optional numpy module imported via \code{reticulate::import("numpy")}.
 If \code{NULL} (default) it is imported automatically.}
+
+\item{reference}{Optional FASTA reference path for CRAM inputs. Passed to
+\code{\link[=bam_convert]{bam_convert()}}.}
 }
 \value{
 \code{npz} (invisibly).

@@ -81,7 +81,7 @@ length(bins[["11"]])
 #> [1] 1198
 
 sum(bins[["11"]])
-#> [1] 981
+#> [1] 982
 ```
 
 The `rmdup` argument supports the three intended duplicate-handling
@@ -96,31 +96,120 @@ modes:
 ## Optional NPZ And CLI Workflow
 
 When you want to continue into the original WisecondorX reference and
-prediction steps, use the optional helpers below.
+prediction steps, the package provides an optional NPZ bridge via
+`reticulate` and CLI wrappers via `condathis`.
 
 ``` r
-# Requires reticulate + numpy
-bam_convert_npz(
-  bam = "sample.bam",
-  npz = "sample.npz",
-  binsize = 5000L,
-  rmdup = "streaming"
-)
+library(RWisecondorX)
 
-# Requires condathis; installs official bioconda wisecondorx on first use
-wisecondorx_newref(
-  npz_files = c("control1.npz", "control2.npz"),
-  output = "reference.npz",
-  binsize = 5000L,
-  ref_binsize = 50000L
-)
+fixture_npz <- tempfile(fileext = ".npz")
+Sys.setenv(RETICULATE_USE_MANAGED_VENV = "no")
 
-wisecondorx_predict(
-  npz = "sample.npz",
-  ref = "reference.npz",
-  output_prefix = "results/sample",
-  ref_binsize = 50000L
-)
+if (!requireNamespace("reticulate", quietly = TRUE)) {
+  "reticulate not available; skipping NPZ example"
+} else {
+  np <- tryCatch(
+    reticulate::import("numpy", convert = FALSE),
+    error = function(e) NULL
+  )
+
+  if (is.null(np)) {
+    "numpy not available in the active Python environment; skipping NPZ example"
+  } else {
+    bam_convert_npz(
+      bam = fixture_bam,
+      npz = fixture_npz,
+      binsize = 5000L,
+      rmdup = "streaming",
+      np = np
+    )
+
+    c(
+      npz_created = file.exists(fixture_npz),
+      npz_size = file.info(fixture_npz)$size
+    )
+  }
+}
+#> npz_created    npz_size 
+#>           1         392
+```
+
+The CLI wrappers expose the upstream arguments documented in the
+WisecondorX README. The chunk below is evaluated, but it only runs the
+external CLI calls when `RWISECONDORX_EVAL_CLI_EXAMPLES=1` is set in the
+environment.
+
+``` r
+library(RWisecondorX)
+
+cli_enabled <- identical(Sys.getenv("RWISECONDORX_EVAL_CLI_EXAMPLES"), "1")
+
+if (!cli_enabled) {
+  "Set RWISECONDORX_EVAL_CLI_EXAMPLES=1 to run the condathis-backed CLI example"
+} else if (!file.exists(fixture_npz)) {
+  "NPZ example did not create an input file; skipping CLI example"
+} else if (!requireNamespace("condathis", quietly = TRUE)) {
+  "condathis not available; skipping CLI example"
+} else {
+  reference_npz <- tempfile(fileext = ".npz")
+  plotyfrac_png <- tempfile(fileext = ".png")
+  output_prefix <- tempfile(pattern = "wisecondorx-")
+
+  newref_status <- tryCatch(
+    {
+      wisecondorx_newref(
+        npz_files = c(fixture_npz, fixture_npz),
+        output = reference_npz,
+        binsize = 5000L,
+        ref_binsize = 50000L,
+        nipt = TRUE,
+        refsize = 300L,
+        yfrac = NULL,
+        plotyfrac = plotyfrac_png,
+        cpus = 1L
+      )
+      "ok"
+    },
+    error = function(e) conditionMessage(e)
+  )
+
+  predict_status <- if (identical(newref_status, "ok") && file.exists(reference_npz)) {
+    tryCatch(
+      {
+        wisecondorx_predict(
+          npz = fixture_npz,
+          ref = reference_npz,
+          output_prefix = output_prefix,
+          ref_binsize = 50000L,
+          minrefbins = 150L,
+          maskrepeats = 5L,
+          zscore = 5,
+          alpha = 1e-4,
+          beta = NULL,
+          blacklist = NULL,
+          gender = NULL,
+          bed = TRUE,
+          plot = FALSE,
+          regions = NULL,
+          ylim = NULL,
+          cairo = FALSE,
+          seed = 1L
+        )
+        "ok"
+      },
+      error = function(e) conditionMessage(e)
+    )
+  } else {
+    "predict skipped because newref did not produce a reference"
+  }
+
+  c(
+    newref_status = newref_status,
+    reference_exists = file.exists(reference_npz),
+    predict_status = predict_status
+  )
+}
+#> [1] "Set RWISECONDORX_EVAL_CLI_EXAMPLES=1 to run the condathis-backed CLI example"
 ```
 
 ## SRA Metadata Helpers
@@ -142,4 +231,6 @@ sra_runinfo_url("PRJNA400134")
 
 ``` sh
 make readme
+make fixtures
+make rd
 ```

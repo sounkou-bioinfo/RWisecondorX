@@ -1,0 +1,153 @@
+library(tinytest)
+
+# ---------------------------------------------------------------------------
+# Load source helpers when running from the source tree
+# ---------------------------------------------------------------------------
+
+.source_candidate <- function(path) {
+  candidates <- c(path, file.path("..", "..", path))
+  candidates[file.exists(candidates)][1L]
+}
+
+src_convert <- .source_candidate("R/convert.R")
+src_npz <- .source_candidate("R/npz.R")
+src_pipeline <- .source_candidate("R/pipeline.R")
+
+if (!is.na(src_convert) && !is.na(src_npz) && !is.na(src_pipeline)) {
+  source(src_convert)
+  source(src_npz)
+  source(src_pipeline)
+} else if (requireNamespace("RWisecondorX", quietly = TRUE)) {
+  .read_bam_call <- getFromNamespace(".read_bam_call", "RWisecondorX")
+  .wisecondorx_newref_args <- getFromNamespace(".wisecondorx_newref_args", "RWisecondorX")
+  .wisecondorx_predict_args <- getFromNamespace(".wisecondorx_predict_args", "RWisecondorX")
+  .format_ylim <- getFromNamespace(".format_ylim", "RWisecondorX")
+} else {
+  stop("Unable to locate source files or installed RWisecondorX namespace for CLI tests.", call. = FALSE)
+}
+
+# ---------------------------------------------------------------------------
+# read_bam SQL call builder
+# ---------------------------------------------------------------------------
+
+expect_identical(
+  .read_bam_call("reads.bam"),
+  "read_bam('reads.bam')"
+)
+
+expect_identical(
+  .read_bam_call("reads.cram", reference = "ref.fa"),
+  "read_bam('reads.cram', reference := 'ref.fa')"
+)
+
+expect_identical(
+  .read_bam_call("a'b.cram", reference = "r'e.fa"),
+  "read_bam('a''b.cram', reference := 'r''e.fa')"
+)
+
+# ---------------------------------------------------------------------------
+# newref CLI argument mapping
+# ---------------------------------------------------------------------------
+
+tmp_dir <- tempdir()
+npz1 <- tempfile(tmpdir = tmp_dir, fileext = ".npz")
+npz2 <- tempfile(tmpdir = tmp_dir, fileext = ".npz")
+plotyfrac <- tempfile(tmpdir = tmp_dir, fileext = ".png")
+output_ref <- file.path(tmp_dir, "reference.npz")
+
+file.create(npz1)
+file.create(npz2)
+
+newref_args <- .wisecondorx_newref_args(
+  npz_files = c(npz1, npz2),
+  output = output_ref,
+  ref_binsize = 50000L,
+  nipt = TRUE,
+  refsize = 300L,
+  yfrac = 0.05,
+  plotyfrac = plotyfrac,
+  cpus = 2L,
+  extra_args = c("--extra-flag", "value")
+)
+
+expect_identical(
+  newref_args,
+  c(
+    "newref",
+    normalizePath(npz1, mustWork = TRUE),
+    normalizePath(npz2, mustWork = TRUE),
+    normalizePath(output_ref, mustWork = FALSE),
+    "--nipt",
+    "--binsize", "50000",
+    "--refsize", "300",
+    "--yfrac", "0.05",
+    "--plotyfrac", normalizePath(plotyfrac, mustWork = FALSE),
+    "--cpus", "2",
+    "--extra-flag", "value"
+  )
+)
+
+# ---------------------------------------------------------------------------
+# predict CLI argument mapping
+# ---------------------------------------------------------------------------
+
+blacklist <- tempfile(tmpdir = tmp_dir, fileext = ".bed")
+regions <- tempfile(tmpdir = tmp_dir, fileext = ".bed")
+sample_npz <- tempfile(tmpdir = tmp_dir, fileext = ".npz")
+reference_npz <- tempfile(tmpdir = tmp_dir, fileext = ".npz")
+output_prefix <- file.path(tmp_dir, "results", "sample")
+
+dir.create(dirname(output_prefix), recursive = TRUE, showWarnings = FALSE)
+file.create(blacklist)
+file.create(regions)
+file.create(sample_npz)
+file.create(reference_npz)
+
+predict_args <- .wisecondorx_predict_args(
+  npz = sample_npz,
+  ref = reference_npz,
+  output_prefix = output_prefix,
+  ref_binsize = 50000L,
+  minrefbins = 150L,
+  maskrepeats = 5L,
+  zscore = 5,
+  alpha = 1e-4,
+  beta = 0.2,
+  blacklist = blacklist,
+  gender = "m",
+  bed = TRUE,
+  plot = TRUE,
+  regions = regions,
+  ylim = c(-2, 2),
+  cairo = TRUE,
+  seed = 7L,
+  extra_args = c("--future-flag", "future-value")
+)
+
+expect_identical(
+  predict_args,
+  c(
+    "predict",
+    normalizePath(sample_npz, mustWork = TRUE),
+    normalizePath(reference_npz, mustWork = TRUE),
+    normalizePath(output_prefix, mustWork = FALSE),
+    "--binsize", "50000",
+    "--minrefbins", "150",
+    "--maskrepeats", "5",
+    "--zscore", "5",
+    "--alpha", "1e-04",
+    "--beta", "0.2",
+    "--blacklist", normalizePath(blacklist, mustWork = TRUE),
+    "--gender", "M",
+    "--bed",
+    "--plot",
+    "--regions", normalizePath(regions, mustWork = TRUE),
+    "--ylim", "[-2,2]",
+    "--cairo",
+    "--seed", "7",
+    "--future-flag", "future-value"
+  )
+)
+
+expect_identical(.format_ylim(c(-2, 2)), "[-2,2]")
+expect_identical(.format_ylim(NULL), NULL)

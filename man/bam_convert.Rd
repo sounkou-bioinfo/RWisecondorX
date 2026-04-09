@@ -8,7 +8,8 @@ bam_convert(
   bam,
   binsize = 5000L,
   rmdup = c("streaming", "none", "flag"),
-  con = NULL
+  con = NULL,
+  reference = NULL
 )
 }
 \arguments{
@@ -32,6 +33,9 @@ been processed with Picard, sambamba, or similar tools.}
 \item{con}{An optional open DBI connection with the duckhts extension already
 loaded. If \code{NULL} (default), a temporary in-memory DuckDB connection is
 created for this call.}
+
+\item{reference}{Optional FASTA reference path for CRAM inputs. Passed to
+\code{read_bam(..., reference := ...)}. Leave \code{NULL} for BAM inputs.}
 }
 \value{
 A named list with one integer vector per chromosome key ("1"-"22",

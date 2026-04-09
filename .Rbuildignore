@@ -1,6 +1,7 @@
 ^Makefile$
 ^_pkgdown\.yml$
 ^docs$
+^scripts$
 ^pkgdown$
 ^\.github$
 ^README\.Rmd$

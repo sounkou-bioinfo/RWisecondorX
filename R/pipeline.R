@@ -1,22 +1,34 @@
 #' Build a WisecondorX reference panel
 #'
 #' Calls `wisecondorx newref` via [condathis::run()] on a set of NPZ files
-#' produced by [bam_convert_npz()].  The NPZ files must all use the same
+#' produced by [bam_convert_npz()]. The NPZ files must all use the same
 #' `binsize`; the reference is built at `ref_binsize` (must be a multiple of
 #' `binsize`).
+#'
+#' This wrapper exposes the current upstream `wisecondorx newref` CLI flags
+#' documented in the WisecondorX README: `--nipt`, `--binsize`, `--refsize`,
+#' `--yfrac`, `--plotyfrac`, and `--cpus`.
 #'
 #' @param npz_files Character vector of paths to `.npz` files (one per sample).
 #' @param output Path for the output reference `.npz` file.
 #' @param binsize Convert-step bin size in base pairs (default 5000).
 #'   Must match the `binsize` used when calling [bam_convert_npz()].
 #' @param ref_binsize Reference bin size in base pairs (default 50000).
-#'   Must be a multiple of `binsize`.
+#'   Passed to upstream `--binsize`. Must be a multiple of `binsize`.
+#' @param nipt Logical; pass upstream `--nipt`.
+#' @param refsize Number of reference locations per target bin. Passed to
+#'   upstream `--refsize`.
+#' @param yfrac Optional numeric Y-read fraction cutoff. Passed to upstream
+#'   `--yfrac`.
+#' @param plotyfrac Optional output path for the Y-fraction histogram and
+#'   mixture-model plot. Passed to upstream `--plotyfrac`.
 #' @param cpus Number of CPUs to pass to `wisecondorx newref` (default 1).
 #' @param env_name Name of the conda environment containing `wisecondorx`
-#'   (default `"wisecondorx"`).  Created automatically by condathis on first
+#'   (default `"wisecondorx"`). Created automatically by condathis on first
 #'   use via the `bioconda` channel.
 #' @param extra_args Character vector of additional arguments passed verbatim
-#'   to `wisecondorx newref` (e.g. `c("--yfrac", "0.4")`).
+#'   after the mapped CLI flags. Keep this for forward compatibility with future
+#'   upstream WisecondorX releases.
 #'
 #' @return `output` (invisibly).
 #'
@@ -24,11 +36,15 @@
 #'
 #' @examples
 #' \dontrun{
-#' # Build a reference from 30 NIPT controls
 #' wisecondorx_newref(
 #'   npz_files = list.files("controls/", "\\.npz$", full.names = TRUE),
-#'   output    = "reference.npz",
-#'   ref_binsize = 50000L
+#'   output = "reference.npz",
+#'   binsize = 5000L,
+#'   ref_binsize = 50000L,
+#'   nipt = TRUE,
+#'   refsize = 300L,
+#'   yfrac = 0.05,
+#'   cpus = 1L
 #' )
 #' }
 #'
@@ -37,6 +53,10 @@ wisecondorx_newref <- function(npz_files,
                                output,
                                binsize     = 5000L,
                                ref_binsize = 50000L,
+                               nipt        = FALSE,
+                               refsize     = 300L,
+                               yfrac       = NULL,
+                               plotyfrac   = NULL,
                                cpus        = 1L,
                                env_name    = "wisecondorx",
                                extra_args  = character(0)) {
@@ -44,18 +64,23 @@ wisecondorx_newref <- function(npz_files,
   stopifnot(is.character(npz_files), length(npz_files) >= 1L)
   stopifnot(all(file.exists(npz_files)))
   stopifnot(is.character(output), length(output) == 1L, nzchar(output))
-  stopifnot(is.numeric(ref_binsize), ref_binsize %% binsize == 0)
+  stopifnot(is.numeric(binsize), length(binsize) == 1L, binsize >= 1L)
+  stopifnot(is.numeric(ref_binsize), length(ref_binsize) == 1L, ref_binsize >= 1L)
+  stopifnot(ref_binsize %% binsize == 0)
 
   .ensure_wisecondorx_env(env_name)
 
-  # condathis::run does not expand relative paths; use absolute paths
-  npz_abs <- normalizePath(npz_files, mustWork = TRUE)
-  out_abs <- normalizePath(output, mustWork = FALSE)
-
-  args <- c("newref", npz_abs, out_abs,
-            "--binsize", as.character(as.integer(ref_binsize)),
-            "--cpus", as.character(as.integer(cpus)),
-            extra_args)
+  args <- .wisecondorx_newref_args(
+    npz_files = npz_files,
+    output = output,
+    ref_binsize = ref_binsize,
+    nipt = nipt,
+    refsize = refsize,
+    yfrac = yfrac,
+    plotyfrac = plotyfrac,
+    cpus = cpus,
+    extra_args = extra_args
+  )
 
   do.call(condathis::run, c(list("wisecondorx"), as.list(args),
                             list(env_name = env_name)))
@@ -68,20 +93,47 @@ wisecondorx_newref <- function(npz_files,
 #' Calls `wisecondorx predict` via [condathis::run()] on a single-sample NPZ
 #' file against a reference panel built by [wisecondorx_newref()].
 #'
+#' This wrapper exposes the current upstream `wisecondorx predict` CLI flags
+#' documented in the WisecondorX README: `--minrefbins`, `--maskrepeats`,
+#' `--zscore`, `--alpha`, `--beta`, `--blacklist`, `--gender`, `--bed`,
+#' `--plot`, `--regions`, `--ylim`, `--cairo`, and `--seed`.
+#'
 #' @param npz Path to the sample `.npz` file (from [bam_convert_npz()]).
 #' @param ref Path to the reference `.npz` file (from [wisecondorx_newref()]).
 #' @param output_prefix Output prefix for all `wisecondorx predict` output
 #'   files (e.g. `"results/sample1"`).
 #' @param ref_binsize Reference bin size in base pairs (default 50000).
-#'   Must match the `ref_binsize` used when building the reference.
-#' @param zscore Z-score threshold for aberration calling (default 5).
-#' @param bed Logical; also write BED output files (default `FALSE`).
-#' @param gender_file Optional path to a gender model file produced by
-#'   `wisecondorx gender` (passed as `--gender`).
+#'   Passed to upstream `--binsize`. Must match the `ref_binsize` used when
+#'   building the reference.
+#' @param minrefbins Minimum number of sensible reference bins per target bin.
+#'   Passed to upstream `--minrefbins`.
+#' @param maskrepeats Number of repeat-masking cycles. Passed to upstream
+#'   `--maskrepeats`.
+#' @param zscore Z-score threshold for aberration calling. Passed to upstream
+#'   `--zscore`.
+#' @param alpha P-value cutoff for circular binary segmentation breakpoints.
+#'   Passed to upstream `--alpha`.
+#' @param beta Optional ratio cutoff for aberration calling. Passed to upstream
+#'   `--beta`. When set, upstream ignores `zscore`.
+#' @param blacklist Optional path to a headerless BED blacklist file. Passed to
+#'   upstream `--blacklist`.
+#' @param gender Optional forced gender, `"F"` or `"M"`. Passed to upstream
+#'   `--gender`.
+#' @param bed Logical; also write BED output files. Passed to upstream `--bed`.
+#' @param plot Logical; also write plot output files. Passed to upstream
+#'   `--plot`.
+#' @param regions Optional path to a headerless BED file with regions to mark on
+#'   the plot. Passed to upstream `--regions`.
+#' @param ylim Optional numeric vector of length 2 giving the y-axis interval,
+#'   e.g. `c(-2, 2)`. Passed to upstream `--ylim` as `[a,b]`.
+#' @param cairo Logical; use Cairo bitmap output. Passed to upstream `--cairo`.
+#' @param seed Optional integer random seed for segmentation. Passed to
+#'   upstream `--seed`.
 #' @param env_name Name of the conda environment containing `wisecondorx`
 #'   (default `"wisecondorx"`).
 #' @param extra_args Character vector of additional arguments passed verbatim
-#'   to `wisecondorx predict`.
+#'   after the mapped CLI flags. Keep this for forward compatibility with future
+#'   upstream WisecondorX releases.
 #'
 #' @return `output_prefix` (invisibly).
 #'
@@ -90,9 +142,23 @@ wisecondorx_newref <- function(npz_files,
 #' @examples
 #' \dontrun{
 #' wisecondorx_predict(
-#'   npz    = "sample.npz",
-#'   ref    = "reference.npz",
-#'   output_prefix = "results/sample"
+#'   npz = "sample.npz",
+#'   ref = "reference.npz",
+#'   output_prefix = "results/sample",
+#'   ref_binsize = 50000L,
+#'   minrefbins = 150L,
+#'   maskrepeats = 5L,
+#'   zscore = 5,
+#'   alpha = 1e-4,
+#'   beta = NULL,
+#'   blacklist = NULL,
+#'   gender = "F",
+#'   bed = TRUE,
+#'   plot = FALSE,
+#'   regions = NULL,
+#'   ylim = c(-2, 2),
+#'   cairo = FALSE,
+#'   seed = 1L
 #' )
 #' }
 #'
@@ -101,9 +167,19 @@ wisecondorx_predict <- function(npz,
                                 ref,
                                 output_prefix,
                                 ref_binsize = 50000L,
+                                minrefbins  = 150L,
+                                maskrepeats = 5L,
                                 zscore      = 5,
+                                alpha       = 1e-4,
+                                beta        = NULL,
+                                blacklist   = NULL,
+                                gender      = NULL,
                                 bed         = FALSE,
-                                gender_file = NULL,
+                                plot        = FALSE,
+                                regions     = NULL,
+                                ylim        = NULL,
+                                cairo       = FALSE,
+                                seed        = NULL,
                                 env_name    = "wisecondorx",
                                 extra_args  = character(0)) {
   .check_condathis()
@@ -113,20 +189,26 @@ wisecondorx_predict <- function(npz,
 
   .ensure_wisecondorx_env(env_name)
 
-  npz_abs <- normalizePath(npz, mustWork = TRUE)
-  ref_abs <- normalizePath(ref, mustWork = TRUE)
-  out_abs <- normalizePath(output_prefix, mustWork = FALSE)
-
-  args <- c("predict", npz_abs, ref_abs, out_abs,
-            "--binsize", as.character(as.integer(ref_binsize)),
-            "--zscore", as.character(zscore))
-
-  if (isTRUE(bed)) args <- c(args, "--bed")
-  if (!is.null(gender_file)) {
-    gender_abs <- normalizePath(gender_file, mustWork = TRUE)
-    args <- c(args, "--gender", gender_abs)
-  }
-  args <- c(args, extra_args)
+  args <- .wisecondorx_predict_args(
+    npz = npz,
+    ref = ref,
+    output_prefix = output_prefix,
+    ref_binsize = ref_binsize,
+    minrefbins = minrefbins,
+    maskrepeats = maskrepeats,
+    zscore = zscore,
+    alpha = alpha,
+    beta = beta,
+    blacklist = blacklist,
+    gender = gender,
+    bed = bed,
+    plot = plot,
+    regions = regions,
+    ylim = ylim,
+    cairo = cairo,
+    seed = seed,
+    extra_args = extra_args
+  )
 
   do.call(condathis::run, c(list("wisecondorx"), as.list(args),
                             list(env_name = env_name)))
@@ -166,4 +248,112 @@ wisecondorx_predict <- function(npz,
       )
     }
   )
+}
+
+.wisecondorx_newref_args <- function(npz_files,
+                                     output,
+                                     ref_binsize,
+                                     nipt,
+                                     refsize,
+                                     yfrac,
+                                     plotyfrac,
+                                     cpus,
+                                     extra_args = character(0)) {
+  npz_abs <- normalizePath(npz_files, mustWork = TRUE)
+  out_abs <- normalizePath(output, mustWork = FALSE)
+
+  stopifnot(is.logical(nipt), length(nipt) == 1L)
+  stopifnot(is.numeric(refsize), length(refsize) == 1L, refsize >= 1L)
+  stopifnot(is.numeric(cpus), length(cpus) == 1L, cpus >= 1L)
+
+  args <- c("newref", npz_abs, out_abs)
+  args <- .append_flag(args, "--nipt", isTRUE(nipt))
+  args <- .append_value(args, "--binsize", as.integer(ref_binsize))
+  args <- .append_value(args, "--refsize", as.integer(refsize))
+  args <- .append_optional_scalar(args, "--yfrac", yfrac)
+  args <- .append_optional_path(args, "--plotyfrac", plotyfrac, must_work = FALSE)
+  args <- .append_value(args, "--cpus", as.integer(cpus))
+  c(args, extra_args)
+}
+
+.wisecondorx_predict_args <- function(npz,
+                                      ref,
+                                      output_prefix,
+                                      ref_binsize,
+                                      minrefbins,
+                                      maskrepeats,
+                                      zscore,
+                                      alpha,
+                                      beta,
+                                      blacklist,
+                                      gender,
+                                      bed,
+                                      plot,
+                                      regions,
+                                      ylim,
+                                      cairo,
+                                      seed,
+                                      extra_args = character(0)) {
+  npz_abs <- normalizePath(npz, mustWork = TRUE)
+  ref_abs <- normalizePath(ref, mustWork = TRUE)
+  out_abs <- normalizePath(output_prefix, mustWork = FALSE)
+
+  stopifnot(is.numeric(ref_binsize), length(ref_binsize) == 1L, ref_binsize >= 1L)
+  stopifnot(is.numeric(minrefbins), length(minrefbins) == 1L, minrefbins >= 1L)
+  stopifnot(is.numeric(maskrepeats), length(maskrepeats) == 1L, maskrepeats >= 0L)
+  stopifnot(is.numeric(zscore), length(zscore) == 1L)
+  stopifnot(is.numeric(alpha), length(alpha) == 1L)
+  stopifnot(is.logical(bed), length(bed) == 1L)
+  stopifnot(is.logical(plot), length(plot) == 1L)
+  stopifnot(is.logical(cairo), length(cairo) == 1L)
+
+  if (!is.null(gender)) {
+    stopifnot(is.character(gender), length(gender) == 1L, nzchar(gender))
+    gender <- match.arg(toupper(gender), c("F", "M"))
+  }
+
+  if (!is.null(ylim)) {
+    stopifnot(is.numeric(ylim), length(ylim) == 2L)
+  }
+
+  args <- c("predict", npz_abs, ref_abs, out_abs)
+  args <- .append_value(args, "--binsize", as.integer(ref_binsize))
+  args <- .append_value(args, "--minrefbins", as.integer(minrefbins))
+  args <- .append_value(args, "--maskrepeats", as.integer(maskrepeats))
+  args <- .append_value(args, "--zscore", zscore)
+  args <- .append_value(args, "--alpha", alpha)
+  args <- .append_optional_scalar(args, "--beta", beta)
+  args <- .append_optional_path(args, "--blacklist", blacklist, must_work = TRUE)
+  args <- .append_optional_scalar(args, "--gender", gender)
+  args <- .append_flag(args, "--bed", isTRUE(bed))
+  args <- .append_flag(args, "--plot", isTRUE(plot))
+  args <- .append_optional_path(args, "--regions", regions, must_work = TRUE)
+  args <- .append_optional_scalar(args, "--ylim", .format_ylim(ylim))
+  args <- .append_flag(args, "--cairo", isTRUE(cairo))
+  args <- .append_optional_scalar(args, "--seed", seed)
+  c(args, extra_args)
+}
+
+.append_value <- function(args, flag, value) {
+  c(args, flag, as.character(value))
+}
+
+.append_flag <- function(args, flag, include) {
+  if (isTRUE(include)) c(args, flag) else args
+}
+
+.append_optional_scalar <- function(args, flag, value) {
+  if (is.null(value)) return(args)
+  c(args, flag, as.character(value))
+}
+
+.append_optional_path <- function(args, flag, path, must_work) {
+  if (is.null(path)) return(args)
+  stopifnot(is.character(path), length(path) == 1L, nzchar(path))
+  c(args, flag, normalizePath(path, mustWork = must_work))
+}
+
+.format_ylim <- function(ylim) {
+  if (is.null(ylim)) return(NULL)
+  sprintf("[%s,%s]", format(ylim[[1L]], trim = TRUE), format(ylim[[2L]], trim = TRUE))
 }

@@ -12,7 +12,8 @@ bam_convert(
   bam,
   binsize = 5000L,
   rmdup = c("streaming", "none", "flag"),
-  con = NULL
+  con = NULL,
+  reference = NULL
 )
 ```
 
@@ -53,6 +54,11 @@ bam_convert(
   An optional open DBI connection with the duckhts extension already
   loaded. If `NULL` (default), a temporary in-memory DuckDB connection
   is created for this call.
+
+- reference:
+
+  Optional FASTA reference path for CRAM inputs. Passed to
+  `read_bam(..., reference := ...)`. Leave `NULL` for BAM inputs.
 
 ## Value
 

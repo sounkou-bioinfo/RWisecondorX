@@ -113,7 +113,7 @@
 <span><span class="co">#&gt; [1] 1198</span></span>
 <span></span>
 <span><span class="fu"><a href="https://rdrr.io/r/base/sum.html" class="external-link">sum</a></span><span class="op">(</span><span class="va">bins</span><span class="op">[[</span><span class="st">"11"</span><span class="op">]</span><span class="op">]</span><span class="op">)</span></span>
-<span><span class="co">#&gt; [1] 981</span></span></code></pre></div>
+<span><span class="co">#&gt; [1] 982</span></span></code></pre></div>
 <p>The <code>rmdup</code> argument supports the three intended duplicate-handling modes:</p>
 <ul>
 <li>
@@ -129,36 +129,118 @@
 <div class="section level2">
 <h2 id="optional-npz-and-cli-workflow">Optional NPZ And CLI Workflow<a class="anchor" aria-label="anchor" href="#optional-npz-and-cli-workflow"></a>
 </h2>
-<p>When you want to continue into the original WisecondorX reference and prediction steps, use the optional helpers below.</p>
+<p>When you want to continue into the original WisecondorX reference and prediction steps, the package provides an optional NPZ bridge via <code>reticulate</code> and CLI wrappers via <code>condathis</code>.</p>
 <div class="sourceCode" id="cb3"><pre class="downlit sourceCode r">
-<code class="sourceCode R"><span><span class="co"># Requires reticulate + numpy</span></span>
-<span><span class="fu"><a href="reference/bam_convert_npz.html">bam_convert_npz</a></span><span class="op">(</span></span>
-<span>  bam <span class="op">=</span> <span class="st">"sample.bam"</span>,</span>
-<span>  npz <span class="op">=</span> <span class="st">"sample.npz"</span>,</span>
-<span>  binsize <span class="op">=</span> <span class="fl">5000L</span>,</span>
-<span>  rmdup <span class="op">=</span> <span class="st">"streaming"</span></span>
-<span><span class="op">)</span></span>
+<code class="sourceCode R"><span><span class="kw"><a href="https://rdrr.io/r/base/library.html" class="external-link">library</a></span><span class="op">(</span><span class="va"><a href="https://sounkou-bioinfo.github.io/RWisecondorX/">RWisecondorX</a></span><span class="op">)</span></span>
 <span></span>
-<span><span class="co"># Requires condathis; installs official bioconda wisecondorx on first use</span></span>
-<span><span class="fu"><a href="reference/wisecondorx_newref.html">wisecondorx_newref</a></span><span class="op">(</span></span>
-<span>  npz_files <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"control1.npz"</span>, <span class="st">"control2.npz"</span><span class="op">)</span>,</span>
-<span>  output <span class="op">=</span> <span class="st">"reference.npz"</span>,</span>
-<span>  binsize <span class="op">=</span> <span class="fl">5000L</span>,</span>
-<span>  ref_binsize <span class="op">=</span> <span class="fl">50000L</span></span>
-<span><span class="op">)</span></span>
+<span><span class="va">fixture_npz</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/tempfile.html" class="external-link">tempfile</a></span><span class="op">(</span>fileext <span class="op">=</span> <span class="st">".npz"</span><span class="op">)</span></span>
+<span><span class="fu"><a href="https://rdrr.io/r/base/Sys.setenv.html" class="external-link">Sys.setenv</a></span><span class="op">(</span>RETICULATE_USE_MANAGED_VENV <span class="op">=</span> <span class="st">"no"</span><span class="op">)</span></span>
 <span></span>
-<span><span class="fu"><a href="reference/wisecondorx_predict.html">wisecondorx_predict</a></span><span class="op">(</span></span>
-<span>  npz <span class="op">=</span> <span class="st">"sample.npz"</span>,</span>
-<span>  ref <span class="op">=</span> <span class="st">"reference.npz"</span>,</span>
-<span>  output_prefix <span class="op">=</span> <span class="st">"results/sample"</span>,</span>
-<span>  ref_binsize <span class="op">=</span> <span class="fl">50000L</span></span>
-<span><span class="op">)</span></span></code></pre></div>
+<span><span class="kw">if</span> <span class="op">(</span><span class="op">!</span><span class="fu"><a href="https://rdrr.io/r/base/ns-load.html" class="external-link">requireNamespace</a></span><span class="op">(</span><span class="st">"reticulate"</span>, quietly <span class="op">=</span> <span class="cn">TRUE</span><span class="op">)</span><span class="op">)</span> <span class="op">{</span></span>
+<span>  <span class="st">"reticulate not available; skipping NPZ example"</span></span>
+<span><span class="op">}</span> <span class="kw">else</span> <span class="op">{</span></span>
+<span>  <span class="va">np</span> <span class="op">&lt;-</span> <span class="kw"><a href="https://rdrr.io/r/base/conditions.html" class="external-link">tryCatch</a></span><span class="op">(</span></span>
+<span>    <span class="fu">reticulate</span><span class="fu">::</span><span class="fu"><a href="https://rstudio.github.io/reticulate/reference/import.html" class="external-link">import</a></span><span class="op">(</span><span class="st">"numpy"</span>, convert <span class="op">=</span> <span class="cn">FALSE</span><span class="op">)</span>,</span>
+<span>    error <span class="op">=</span> <span class="kw">function</span><span class="op">(</span><span class="va">e</span><span class="op">)</span> <span class="cn">NULL</span></span>
+<span>  <span class="op">)</span></span>
+<span></span>
+<span>  <span class="kw">if</span> <span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/NULL.html" class="external-link">is.null</a></span><span class="op">(</span><span class="va">np</span><span class="op">)</span><span class="op">)</span> <span class="op">{</span></span>
+<span>    <span class="st">"numpy not available in the active Python environment; skipping NPZ example"</span></span>
+<span>  <span class="op">}</span> <span class="kw">else</span> <span class="op">{</span></span>
+<span>    <span class="fu"><a href="reference/bam_convert_npz.html">bam_convert_npz</a></span><span class="op">(</span></span>
+<span>      bam <span class="op">=</span> <span class="va">fixture_bam</span>,</span>
+<span>      npz <span class="op">=</span> <span class="va">fixture_npz</span>,</span>
+<span>      binsize <span class="op">=</span> <span class="fl">5000L</span>,</span>
+<span>      rmdup <span class="op">=</span> <span class="st">"streaming"</span>,</span>
+<span>      np <span class="op">=</span> <span class="va">np</span></span>
+<span>    <span class="op">)</span></span>
+<span></span>
+<span>    <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span></span>
+<span>      npz_created <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/files.html" class="external-link">file.exists</a></span><span class="op">(</span><span class="va">fixture_npz</span><span class="op">)</span>,</span>
+<span>      npz_size <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/file.info.html" class="external-link">file.info</a></span><span class="op">(</span><span class="va">fixture_npz</span><span class="op">)</span><span class="op">$</span><span class="va">size</span></span>
+<span>    <span class="op">)</span></span>
+<span>  <span class="op">}</span></span>
+<span><span class="op">}</span></span>
+<span><span class="co">#&gt; npz_created    npz_size </span></span>
+<span><span class="co">#&gt;           1         392</span></span></code></pre></div>
+<p>The CLI wrappers expose the upstream arguments documented in the WisecondorX README. The chunk below is evaluated, but it only runs the external CLI calls when <code>RWISECONDORX_EVAL_CLI_EXAMPLES=1</code> is set in the environment.</p>
+<div class="sourceCode" id="cb4"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span><span class="kw"><a href="https://rdrr.io/r/base/library.html" class="external-link">library</a></span><span class="op">(</span><span class="va"><a href="https://sounkou-bioinfo.github.io/RWisecondorX/">RWisecondorX</a></span><span class="op">)</span></span>
+<span></span>
+<span><span class="va">cli_enabled</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/identical.html" class="external-link">identical</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/Sys.getenv.html" class="external-link">Sys.getenv</a></span><span class="op">(</span><span class="st">"RWISECONDORX_EVAL_CLI_EXAMPLES"</span><span class="op">)</span>, <span class="st">"1"</span><span class="op">)</span></span>
+<span></span>
+<span><span class="kw">if</span> <span class="op">(</span><span class="op">!</span><span class="va">cli_enabled</span><span class="op">)</span> <span class="op">{</span></span>
+<span>  <span class="st">"Set RWISECONDORX_EVAL_CLI_EXAMPLES=1 to run the condathis-backed CLI example"</span></span>
+<span><span class="op">}</span> <span class="kw">else</span> <span class="kw">if</span> <span class="op">(</span><span class="op">!</span><span class="fu"><a href="https://rdrr.io/r/base/files.html" class="external-link">file.exists</a></span><span class="op">(</span><span class="va">fixture_npz</span><span class="op">)</span><span class="op">)</span> <span class="op">{</span></span>
+<span>  <span class="st">"NPZ example did not create an input file; skipping CLI example"</span></span>
+<span><span class="op">}</span> <span class="kw">else</span> <span class="kw">if</span> <span class="op">(</span><span class="op">!</span><span class="fu"><a href="https://rdrr.io/r/base/ns-load.html" class="external-link">requireNamespace</a></span><span class="op">(</span><span class="st">"condathis"</span>, quietly <span class="op">=</span> <span class="cn">TRUE</span><span class="op">)</span><span class="op">)</span> <span class="op">{</span></span>
+<span>  <span class="st">"condathis not available; skipping CLI example"</span></span>
+<span><span class="op">}</span> <span class="kw">else</span> <span class="op">{</span></span>
+<span>  <span class="va">reference_npz</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/tempfile.html" class="external-link">tempfile</a></span><span class="op">(</span>fileext <span class="op">=</span> <span class="st">".npz"</span><span class="op">)</span></span>
+<span>  <span class="va">plotyfrac_png</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/tempfile.html" class="external-link">tempfile</a></span><span class="op">(</span>fileext <span class="op">=</span> <span class="st">".png"</span><span class="op">)</span></span>
+<span>  <span class="va">output_prefix</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/tempfile.html" class="external-link">tempfile</a></span><span class="op">(</span>pattern <span class="op">=</span> <span class="st">"wisecondorx-"</span><span class="op">)</span></span>
+<span></span>
+<span>  <span class="va">newref_status</span> <span class="op">&lt;-</span> <span class="kw"><a href="https://rdrr.io/r/base/conditions.html" class="external-link">tryCatch</a></span><span class="op">(</span></span>
+<span>    <span class="op">{</span></span>
+<span>      <span class="fu"><a href="reference/wisecondorx_newref.html">wisecondorx_newref</a></span><span class="op">(</span></span>
+<span>        npz_files <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="va">fixture_npz</span>, <span class="va">fixture_npz</span><span class="op">)</span>,</span>
+<span>        output <span class="op">=</span> <span class="va">reference_npz</span>,</span>
+<span>        binsize <span class="op">=</span> <span class="fl">5000L</span>,</span>
+<span>        ref_binsize <span class="op">=</span> <span class="fl">50000L</span>,</span>
+<span>        nipt <span class="op">=</span> <span class="cn">TRUE</span>,</span>
+<span>        refsize <span class="op">=</span> <span class="fl">300L</span>,</span>
+<span>        yfrac <span class="op">=</span> <span class="cn">NULL</span>,</span>
+<span>        plotyfrac <span class="op">=</span> <span class="va">plotyfrac_png</span>,</span>
+<span>        cpus <span class="op">=</span> <span class="fl">1L</span></span>
+<span>      <span class="op">)</span></span>
+<span>      <span class="st">"ok"</span></span>
+<span>    <span class="op">}</span>,</span>
+<span>    error <span class="op">=</span> <span class="kw">function</span><span class="op">(</span><span class="va">e</span><span class="op">)</span> <span class="fu"><a href="https://rdrr.io/r/base/conditions.html" class="external-link">conditionMessage</a></span><span class="op">(</span><span class="va">e</span><span class="op">)</span></span>
+<span>  <span class="op">)</span></span>
+<span></span>
+<span>  <span class="va">predict_status</span> <span class="op">&lt;-</span> <span class="kw">if</span> <span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/identical.html" class="external-link">identical</a></span><span class="op">(</span><span class="va">newref_status</span>, <span class="st">"ok"</span><span class="op">)</span> <span class="op">&amp;&amp;</span> <span class="fu"><a href="https://rdrr.io/r/base/files.html" class="external-link">file.exists</a></span><span class="op">(</span><span class="va">reference_npz</span><span class="op">)</span><span class="op">)</span> <span class="op">{</span></span>
+<span>    <span class="kw"><a href="https://rdrr.io/r/base/conditions.html" class="external-link">tryCatch</a></span><span class="op">(</span></span>
+<span>      <span class="op">{</span></span>
+<span>        <span class="fu"><a href="reference/wisecondorx_predict.html">wisecondorx_predict</a></span><span class="op">(</span></span>
+<span>          npz <span class="op">=</span> <span class="va">fixture_npz</span>,</span>
+<span>          ref <span class="op">=</span> <span class="va">reference_npz</span>,</span>
+<span>          output_prefix <span class="op">=</span> <span class="va">output_prefix</span>,</span>
+<span>          ref_binsize <span class="op">=</span> <span class="fl">50000L</span>,</span>
+<span>          minrefbins <span class="op">=</span> <span class="fl">150L</span>,</span>
+<span>          maskrepeats <span class="op">=</span> <span class="fl">5L</span>,</span>
+<span>          zscore <span class="op">=</span> <span class="fl">5</span>,</span>
+<span>          alpha <span class="op">=</span> <span class="fl">1e-4</span>,</span>
+<span>          beta <span class="op">=</span> <span class="cn">NULL</span>,</span>
+<span>          blacklist <span class="op">=</span> <span class="cn">NULL</span>,</span>
+<span>          gender <span class="op">=</span> <span class="cn">NULL</span>,</span>
+<span>          bed <span class="op">=</span> <span class="cn">TRUE</span>,</span>
+<span>          plot <span class="op">=</span> <span class="cn">FALSE</span>,</span>
+<span>          regions <span class="op">=</span> <span class="cn">NULL</span>,</span>
+<span>          ylim <span class="op">=</span> <span class="cn">NULL</span>,</span>
+<span>          cairo <span class="op">=</span> <span class="cn">FALSE</span>,</span>
+<span>          seed <span class="op">=</span> <span class="fl">1L</span></span>
+<span>        <span class="op">)</span></span>
+<span>        <span class="st">"ok"</span></span>
+<span>      <span class="op">}</span>,</span>
+<span>      error <span class="op">=</span> <span class="kw">function</span><span class="op">(</span><span class="va">e</span><span class="op">)</span> <span class="fu"><a href="https://rdrr.io/r/base/conditions.html" class="external-link">conditionMessage</a></span><span class="op">(</span><span class="va">e</span><span class="op">)</span></span>
+<span>    <span class="op">)</span></span>
+<span>  <span class="op">}</span> <span class="kw">else</span> <span class="op">{</span></span>
+<span>    <span class="st">"predict skipped because newref did not produce a reference"</span></span>
+<span>  <span class="op">}</span></span>
+<span></span>
+<span>  <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span></span>
+<span>    newref_status <span class="op">=</span> <span class="va">newref_status</span>,</span>
+<span>    reference_exists <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/files.html" class="external-link">file.exists</a></span><span class="op">(</span><span class="va">reference_npz</span><span class="op">)</span>,</span>
+<span>    predict_status <span class="op">=</span> <span class="va">predict_status</span></span>
+<span>  <span class="op">)</span></span>
+<span><span class="op">}</span></span>
+<span><span class="co">#&gt; [1] "Set RWISECONDORX_EVAL_CLI_EXAMPLES=1 to run the condathis-backed CLI example"</span></span></code></pre></div>
 </div>
 <div class="section level2">
 <h2 id="sra-metadata-helpers">SRA Metadata Helpers<a class="anchor" aria-label="anchor" href="#sra-metadata-helpers"></a>
 </h2>
 <p>The package also includes small helpers for staging SRA run metadata used by conformance fixtures.</p>
-<div class="sourceCode" id="cb4"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb5"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="kw"><a href="https://rdrr.io/r/base/library.html" class="external-link">library</a></span><span class="op">(</span><span class="va"><a href="https://sounkou-bioinfo.github.io/RWisecondorX/">RWisecondorX</a></span><span class="op">)</span></span>
 <span></span>
 <span><span class="fu"><a href="reference/sra_runinfo.html">sra_runinfo_url</a></span><span class="op">(</span><span class="st">"PRJNA400134"</span><span class="op">)</span></span>
@@ -168,7 +250,9 @@
 <h2 id="development">Development<a class="anchor" aria-label="anchor" href="#development"></a>
 </h2>
 <p><code>README.Rmd</code> is the editable source for this document. Regenerate <code>README.md</code> with the repository <code>Makefile</code>:</p>
-<div class="sourceCode" id="cb5"><pre class="sourceCode sh"><code class="sourceCode bash"><span id="cb5-1"><a href="#cb5-1" tabindex="-1"></a><span class="fu">make</span> readme</span></code></pre></div>
+<div class="sourceCode" id="cb6"><pre class="sourceCode sh"><code class="sourceCode bash"><span id="cb6-1"><a href="#cb6-1" tabindex="-1"></a><span class="fu">make</span> readme</span>
+<span id="cb6-2"><a href="#cb6-2" tabindex="-1"></a><span class="fu">make</span> fixtures</span>
+<span id="cb6-3"><a href="#cb6-3" tabindex="-1"></a><span class="fu">make</span> rd</span></code></pre></div>
 </div>
 </div>
   </main><aside class="col-md-3"><div class="license">

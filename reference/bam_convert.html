@@ -50,7 +50,8 @@ chromosomes 1-22, X (as 23), and Y (as 24).</p>
 <span>  <span class="va">bam</span>,</span>
 <span>  binsize <span class="op">=</span> <span class="fl">5000L</span>,</span>
 <span>  rmdup <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"streaming"</span>, <span class="st">"none"</span>, <span class="st">"flag"</span><span class="op">)</span>,</span>
-<span>  con <span class="op">=</span> <span class="cn">NULL</span></span>
+<span>  con <span class="op">=</span> <span class="cn">NULL</span>,</span>
+<span>  reference <span class="op">=</span> <span class="cn">NULL</span></span>
 <span><span class="op">)</span></span></code></pre></div>
     </div>
 
@@ -90,6 +91,11 @@ been processed with Picard, sambamba, or similar tools.</p></dd>
 <dd><p>An optional open DBI connection with the duckhts extension already
 loaded. If <code>NULL</code> (default), a temporary in-memory DuckDB connection is
 created for this call.</p></dd>
+
+
+<dt id="arg-reference">reference<a class="anchor" aria-label="anchor" href="#arg-reference"></a></dt>
+<dd><p>Optional FASTA reference path for CRAM inputs. Passed to
+<code>read_bam(..., reference := ...)</code>. Leave <code>NULL</code> for BAM inputs.</p></dd>
 
 </dl></div>
     <div class="section level2">

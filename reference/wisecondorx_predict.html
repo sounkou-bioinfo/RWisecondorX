@@ -45,9 +45,19 @@ file against a reference panel built by <code><a href="wisecondorx_newref.html">
 <span>  <span class="va">ref</span>,</span>
 <span>  <span class="va">output_prefix</span>,</span>
 <span>  ref_binsize <span class="op">=</span> <span class="fl">50000L</span>,</span>
+<span>  minrefbins <span class="op">=</span> <span class="fl">150L</span>,</span>
+<span>  maskrepeats <span class="op">=</span> <span class="fl">5L</span>,</span>
 <span>  zscore <span class="op">=</span> <span class="fl">5</span>,</span>
+<span>  alpha <span class="op">=</span> <span class="fl">1e-04</span>,</span>
+<span>  beta <span class="op">=</span> <span class="cn">NULL</span>,</span>
+<span>  blacklist <span class="op">=</span> <span class="cn">NULL</span>,</span>
+<span>  gender <span class="op">=</span> <span class="cn">NULL</span>,</span>
 <span>  bed <span class="op">=</span> <span class="cn">FALSE</span>,</span>
-<span>  gender_file <span class="op">=</span> <span class="cn">NULL</span>,</span>
+<span>  plot <span class="op">=</span> <span class="cn">FALSE</span>,</span>
+<span>  regions <span class="op">=</span> <span class="cn">NULL</span>,</span>
+<span>  ylim <span class="op">=</span> <span class="cn">NULL</span>,</span>
+<span>  cairo <span class="op">=</span> <span class="cn">FALSE</span>,</span>
+<span>  seed <span class="op">=</span> <span class="cn">NULL</span>,</span>
 <span>  env_name <span class="op">=</span> <span class="st">"wisecondorx"</span>,</span>
 <span>  extra_args <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/character.html" class="external-link">character</a></span><span class="op">(</span><span class="fl">0</span><span class="op">)</span></span>
 <span><span class="op">)</span></span></code></pre></div>
@@ -72,20 +82,71 @@ files (e.g. <code>"results/sample1"</code>).</p></dd>
 
 <dt id="arg-ref-binsize">ref_binsize<a class="anchor" aria-label="anchor" href="#arg-ref-binsize"></a></dt>
 <dd><p>Reference bin size in base pairs (default 50000).
-Must match the <code>ref_binsize</code> used when building the reference.</p></dd>
+Passed to upstream <code>--binsize</code>. Must match the <code>ref_binsize</code> used when
+building the reference.</p></dd>
+
+
+<dt id="arg-minrefbins">minrefbins<a class="anchor" aria-label="anchor" href="#arg-minrefbins"></a></dt>
+<dd><p>Minimum number of sensible reference bins per target bin.
+Passed to upstream <code>--minrefbins</code>.</p></dd>
+
+
+<dt id="arg-maskrepeats">maskrepeats<a class="anchor" aria-label="anchor" href="#arg-maskrepeats"></a></dt>
+<dd><p>Number of repeat-masking cycles. Passed to upstream
+<code>--maskrepeats</code>.</p></dd>
 
 
 <dt id="arg-zscore">zscore<a class="anchor" aria-label="anchor" href="#arg-zscore"></a></dt>
-<dd><p>Z-score threshold for aberration calling (default 5).</p></dd>
+<dd><p>Z-score threshold for aberration calling. Passed to upstream
+<code>--zscore</code>.</p></dd>
+
+
+<dt id="arg-alpha">alpha<a class="anchor" aria-label="anchor" href="#arg-alpha"></a></dt>
+<dd><p>P-value cutoff for circular binary segmentation breakpoints.
+Passed to upstream <code>--alpha</code>.</p></dd>
+
+
+<dt id="arg-beta">beta<a class="anchor" aria-label="anchor" href="#arg-beta"></a></dt>
+<dd><p>Optional ratio cutoff for aberration calling. Passed to upstream
+<code>--beta</code>. When set, upstream ignores <code>zscore</code>.</p></dd>
+
+
+<dt id="arg-blacklist">blacklist<a class="anchor" aria-label="anchor" href="#arg-blacklist"></a></dt>
+<dd><p>Optional path to a headerless BED blacklist file. Passed to
+upstream <code>--blacklist</code>.</p></dd>
+
+
+<dt id="arg-gender">gender<a class="anchor" aria-label="anchor" href="#arg-gender"></a></dt>
+<dd><p>Optional forced gender, <code>"F"</code> or <code>"M"</code>. Passed to upstream
+<code>--gender</code>.</p></dd>
 
 
 <dt id="arg-bed">bed<a class="anchor" aria-label="anchor" href="#arg-bed"></a></dt>
-<dd><p>Logical; also write BED output files (default <code>FALSE</code>).</p></dd>
+<dd><p>Logical; also write BED output files. Passed to upstream <code>--bed</code>.</p></dd>
 
 
-<dt id="arg-gender-file">gender_file<a class="anchor" aria-label="anchor" href="#arg-gender-file"></a></dt>
-<dd><p>Optional path to a gender model file produced by
-<code>wisecondorx gender</code> (passed as <code>--gender</code>).</p></dd>
+<dt id="arg-plot">plot<a class="anchor" aria-label="anchor" href="#arg-plot"></a></dt>
+<dd><p>Logical; also write plot output files. Passed to upstream
+<code>--plot</code>.</p></dd>
+
+
+<dt id="arg-regions">regions<a class="anchor" aria-label="anchor" href="#arg-regions"></a></dt>
+<dd><p>Optional path to a headerless BED file with regions to mark on
+the plot. Passed to upstream <code>--regions</code>.</p></dd>
+
+
+<dt id="arg-ylim">ylim<a class="anchor" aria-label="anchor" href="#arg-ylim"></a></dt>
+<dd><p>Optional numeric vector of length 2 giving the y-axis interval,
+e.g. <code>c(-2, 2)</code>. Passed to upstream <code>--ylim</code> as <code>[a,b]</code>.</p></dd>
+
+
+<dt id="arg-cairo">cairo<a class="anchor" aria-label="anchor" href="#arg-cairo"></a></dt>
+<dd><p>Logical; use Cairo bitmap output. Passed to upstream <code>--cairo</code>.</p></dd>
+
+
+<dt id="arg-seed">seed<a class="anchor" aria-label="anchor" href="#arg-seed"></a></dt>
+<dd><p>Optional integer random seed for segmentation. Passed to
+upstream <code>--seed</code>.</p></dd>
 
 
 <dt id="arg-env-name">env_name<a class="anchor" aria-label="anchor" href="#arg-env-name"></a></dt>
@@ -95,12 +156,20 @@ Must match the <code>ref_binsize</code> used when building the reference.</p></d
 
 <dt id="arg-extra-args">extra_args<a class="anchor" aria-label="anchor" href="#arg-extra-args"></a></dt>
 <dd><p>Character vector of additional arguments passed verbatim
-to <code>wisecondorx predict</code>.</p></dd>
+after the mapped CLI flags. Keep this for forward compatibility with future
+upstream WisecondorX releases.</p></dd>
 
 </dl></div>
     <div class="section level2">
     <h2 id="value">Value<a class="anchor" aria-label="anchor" href="#value"></a></h2>
     <p><code>output_prefix</code> (invisibly).</p>
+    </div>
+    <div class="section level2">
+    <h2 id="details">Details<a class="anchor" aria-label="anchor" href="#details"></a></h2>
+    <p>This wrapper exposes the current upstream <code>wisecondorx predict</code> CLI flags
+documented in the WisecondorX README: <code>--minrefbins</code>, <code>--maskrepeats</code>,
+<code>--zscore</code>, <code>--alpha</code>, <code>--beta</code>, <code>--blacklist</code>, <code>--gender</code>, <code>--bed</code>,
+<code>--plot</code>, <code>--regions</code>, <code>--ylim</code>, <code>--cairo</code>, and <code>--seed</code>.</p>
     </div>
     <div class="section level2">
     <h2 id="see-also">See also<a class="anchor" aria-label="anchor" href="#see-also"></a></h2>
@@ -111,9 +180,23 @@ to <code>wisecondorx predict</code>.</p></dd>
     <h2 id="ref-examples">Examples<a class="anchor" aria-label="anchor" href="#ref-examples"></a></h2>
     <div class="sourceCode"><pre class="sourceCode r"><code><span class="r-in"><span><span class="kw">if</span> <span class="op">(</span><span class="cn">FALSE</span><span class="op">)</span> <span class="op">{</span> <span class="co"># \dontrun{</span></span></span>
 <span class="r-in"><span><span class="fu">wisecondorx_predict</span><span class="op">(</span></span></span>
-<span class="r-in"><span>  npz    <span class="op">=</span> <span class="st">"sample.npz"</span>,</span></span>
-<span class="r-in"><span>  ref    <span class="op">=</span> <span class="st">"reference.npz"</span>,</span></span>
-<span class="r-in"><span>  output_prefix <span class="op">=</span> <span class="st">"results/sample"</span></span></span>
+<span class="r-in"><span>  npz <span class="op">=</span> <span class="st">"sample.npz"</span>,</span></span>
+<span class="r-in"><span>  ref <span class="op">=</span> <span class="st">"reference.npz"</span>,</span></span>
+<span class="r-in"><span>  output_prefix <span class="op">=</span> <span class="st">"results/sample"</span>,</span></span>
+<span class="r-in"><span>  ref_binsize <span class="op">=</span> <span class="fl">50000L</span>,</span></span>
+<span class="r-in"><span>  minrefbins <span class="op">=</span> <span class="fl">150L</span>,</span></span>
+<span class="r-in"><span>  maskrepeats <span class="op">=</span> <span class="fl">5L</span>,</span></span>
+<span class="r-in"><span>  zscore <span class="op">=</span> <span class="fl">5</span>,</span></span>
+<span class="r-in"><span>  alpha <span class="op">=</span> <span class="fl">1e-4</span>,</span></span>
+<span class="r-in"><span>  beta <span class="op">=</span> <span class="cn">NULL</span>,</span></span>
+<span class="r-in"><span>  blacklist <span class="op">=</span> <span class="cn">NULL</span>,</span></span>
+<span class="r-in"><span>  gender <span class="op">=</span> <span class="st">"F"</span>,</span></span>
+<span class="r-in"><span>  bed <span class="op">=</span> <span class="cn">TRUE</span>,</span></span>
+<span class="r-in"><span>  plot <span class="op">=</span> <span class="cn">FALSE</span>,</span></span>
+<span class="r-in"><span>  regions <span class="op">=</span> <span class="cn">NULL</span>,</span></span>
+<span class="r-in"><span>  ylim <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="op">-</span><span class="fl">2</span>, <span class="fl">2</span><span class="op">)</span>,</span></span>
+<span class="r-in"><span>  cairo <span class="op">=</span> <span class="cn">FALSE</span>,</span></span>
+<span class="r-in"><span>  seed <span class="op">=</span> <span class="fl">1L</span></span></span>
 <span class="r-in"><span><span class="op">)</span></span></span>
 <span class="r-in"><span><span class="op">}</span> <span class="co"># }</span></span></span>
 <span class="r-in"><span></span></span>

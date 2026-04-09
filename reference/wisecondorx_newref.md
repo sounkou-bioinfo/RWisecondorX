@@ -15,6 +15,10 @@ wisecondorx_newref(
   output,
   binsize = 5000L,
   ref_binsize = 50000L,
+  nipt = FALSE,
+  refsize = 300L,
+  yfrac = NULL,
+  plotyfrac = NULL,
   cpus = 1L,
   env_name = "wisecondorx",
   extra_args = character(0)
@@ -39,8 +43,26 @@ wisecondorx_newref(
 
 - ref_binsize:
 
-  Reference bin size in base pairs (default 50000). Must be a multiple
-  of `binsize`.
+  Reference bin size in base pairs (default 50000). Passed to upstream
+  `--binsize`. Must be a multiple of `binsize`.
+
+- nipt:
+
+  Logical; pass upstream `--nipt`.
+
+- refsize:
+
+  Number of reference locations per target bin. Passed to upstream
+  `--refsize`.
+
+- yfrac:
+
+  Optional numeric Y-read fraction cutoff. Passed to upstream `--yfrac`.
+
+- plotyfrac:
+
+  Optional output path for the Y-fraction histogram and mixture-model
+  plot. Passed to upstream `--plotyfrac`.
 
 - cpus:
 
@@ -54,12 +76,19 @@ wisecondorx_newref(
 
 - extra_args:
 
-  Character vector of additional arguments passed verbatim to
-  `wisecondorx newref` (e.g. `c("--yfrac", "0.4")`).
+  Character vector of additional arguments passed verbatim after the
+  mapped CLI flags. Keep this for forward compatibility with future
+  upstream WisecondorX releases.
 
 ## Value
 
 `output` (invisibly).
+
+## Details
+
+This wrapper exposes the current upstream `wisecondorx newref` CLI flags
+documented in the WisecondorX README: `--nipt`, `--binsize`,
+`--refsize`, `--yfrac`, `--plotyfrac`, and `--cpus`.
 
 ## See also
 
@@ -70,11 +99,15 @@ wisecondorx_newref(
 
 ``` r
 if (FALSE) { # \dontrun{
-# Build a reference from 30 NIPT controls
 wisecondorx_newref(
   npz_files = list.files("controls/", "\\.npz$", full.names = TRUE),
-  output    = "reference.npz",
-  ref_binsize = 50000L
+  output = "reference.npz",
+  binsize = 5000L,
+  ref_binsize = 50000L,
+  nipt = TRUE,
+  refsize = 300L,
+  yfrac = 0.05,
+  cpus = 1L
 )
 } # }
 ```

@@ -17,7 +17,8 @@ bam_convert_npz(
   binsize = 5000L,
   rmdup = c("streaming", "none", "flag"),
   con = NULL,
-  np = NULL
+  np = NULL,
+  reference = NULL
 )
 ```
 
@@ -50,6 +51,11 @@ bam_convert_npz(
 
   Optional numpy module imported via `reticulate::import("numpy")`. If
   `NULL` (default) it is imported automatically.
+
+- reference:
+
+  Optional FASTA reference path for CRAM inputs. Passed to
+  [`bam_convert()`](https://sounkou-bioinfo.github.io/RWisecondorX/reference/bam_convert.md).
 
 ## Value
 

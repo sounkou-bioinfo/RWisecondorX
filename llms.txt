@@ -1,0 +1,160 @@
+# RWisecondorX
+
+`RWisecondorX` exposes WisecondorX-style copy number analysis workflows
+from R on top of `Rduckhts` and DuckDB.
+
+The package is intentionally split into two layers:
+
+- [`bam_convert()`](https://sounkou-bioinfo.github.io/RWisecondorX/reference/bam_convert.md)
+  runs the convert step in R/SQL and does not require Python at runtime.
+- [`bam_convert_npz()`](https://sounkou-bioinfo.github.io/RWisecondorX/reference/bam_convert_npz.md)
+  optionally uses `reticulate` plus `numpy` to write
+  WisecondorX-compatible `.npz` files.
+- [`wisecondorx_newref()`](https://sounkou-bioinfo.github.io/RWisecondorX/reference/wisecondorx_newref.md)
+  and
+  [`wisecondorx_predict()`](https://sounkou-bioinfo.github.io/RWisecondorX/reference/wisecondorx_predict.md)
+  optionally call the official `wisecondorx` CLI through `condathis`.
+
+The convert implementation is designed for exact conformance with
+upstream WisecondorX duplicate handling, including the streaming `larp`
+/ `larp2` behaviour used during bin counting.
+
+## Installation
+
+Install the development version from GitHub:
+
+``` r
+# install.packages("pak")
+pak::pak("sounkou-bioinfo/RWisecondorX")
+```
+
+`RWisecondorX` imports `Rduckhts`, `DBI`, and `duckdb`. Optional
+features use:
+
+- `reticulate` for writing `.npz` files
+- `condathis` for creating a reproducible conformance environment with
+  the official bioconda `wisecondorx` package
+
+## What The Package Covers
+
+The current workflow surface is:
+
+1.  Convert BAM/CRAM alignments to WisecondorX-style per-bin counts with
+    [`bam_convert()`](https://sounkou-bioinfo.github.io/RWisecondorX/reference/bam_convert.md).
+2.  Optionally serialise those counts to `.npz` with
+    [`bam_convert_npz()`](https://sounkou-bioinfo.github.io/RWisecondorX/reference/bam_convert_npz.md).
+3.  Optionally build a reference panel with
+    [`wisecondorx_newref()`](https://sounkou-bioinfo.github.io/RWisecondorX/reference/wisecondorx_newref.md).
+4.  Optionally run predictions with
+    [`wisecondorx_predict()`](https://sounkou-bioinfo.github.io/RWisecondorX/reference/wisecondorx_predict.md).
+
+This keeps the core counting step in R while still allowing conformance
+checks and downstream use of the official Python CLI when needed.
+
+## Convert A BAM To Bin Counts
+
+The package ships with a small chromosome 11 BAM fixture for examples
+and tests.
+
+``` r
+library(RWisecondorX)
+
+fixture_bam <- system.file(
+  "extdata",
+  "hg00106_chr11_fixture.bam",
+  package = "RWisecondorX"
+)
+
+bins <- bam_convert(
+  fixture_bam,
+  binsize = 5000L,
+  rmdup = "streaming"
+)
+
+names(Filter(Negate(is.null), bins))
+#> [1] "11"
+
+length(bins[["11"]])
+#> [1] 1198
+
+sum(bins[["11"]])
+#> [1] 981
+```
+
+The `rmdup` argument supports the three intended duplicate-handling
+modes:
+
+- `"streaming"`: exact replication of upstream WisecondorX `larp` /
+  `larp2`
+- `"none"`: no duplicate removal, corresponding to
+  `wisecondorx convert --normdup`
+- `"flag"`: use the SAM duplicate flag (`0x400`) for pre-marked BAMs
+
+## Optional NPZ And CLI Workflow
+
+When you want to continue into the original WisecondorX reference and
+prediction steps, use the optional helpers below.
+
+``` r
+# Requires reticulate + numpy
+bam_convert_npz(
+  bam = "sample.bam",
+  npz = "sample.npz",
+  binsize = 5000L,
+  rmdup = "streaming"
+)
+
+# Requires condathis; installs official bioconda wisecondorx on first use
+wisecondorx_newref(
+  npz_files = c("control1.npz", "control2.npz"),
+  output = "reference.npz",
+  binsize = 5000L,
+  ref_binsize = 50000L
+)
+
+wisecondorx_predict(
+  npz = "sample.npz",
+  ref = "reference.npz",
+  output_prefix = "results/sample",
+  ref_binsize = 50000L
+)
+```
+
+## SRA Metadata Helpers
+
+The package also includes small helpers for staging SRA run metadata
+used by conformance fixtures.
+
+``` r
+library(RWisecondorX)
+
+sra_runinfo_url("PRJNA400134")
+#> [1] "https://trace.ncbi.nlm.nih.gov/Traces/sra-db-be/runinfo?acc=PRJNA400134"
+```
+
+## Development
+
+`README.Rmd` is the editable source for this document. Regenerate
+`README.md` with the repository `Makefile`:
+
+``` sh
+make readme
+```
+
+# Package index
+
+## All functions
+
+- [`bam_convert()`](https://sounkou-bioinfo.github.io/RWisecondorX/reference/bam_convert.md)
+  : Convert BAM/CRAM to WisecondorX bin counts
+- [`bam_convert_npz()`](https://sounkou-bioinfo.github.io/RWisecondorX/reference/bam_convert_npz.md)
+  : Convert BAM/CRAM to WisecondorX NPZ format
+- [`sra_runinfo_url()`](https://sounkou-bioinfo.github.io/RWisecondorX/reference/sra_runinfo.md)
+  [`download_sra_runinfo()`](https://sounkou-bioinfo.github.io/RWisecondorX/reference/sra_runinfo.md)
+  [`read_sra_runinfo()`](https://sounkou-bioinfo.github.io/RWisecondorX/reference/sra_runinfo.md)
+  : SRA Run Metadata Utilities
+- [`wisecondorx_newref()`](https://sounkou-bioinfo.github.io/RWisecondorX/reference/wisecondorx_newref.md)
+  : Build a WisecondorX reference panel
+- [`wisecondorx_predict()`](https://sounkou-bioinfo.github.io/RWisecondorX/reference/wisecondorx_predict.md)
+  : Predict copy-number aberrations with WisecondorX
+

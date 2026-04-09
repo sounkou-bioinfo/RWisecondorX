@@ -7,11 +7,12 @@ Authors@R:
     role = c("aut", "cre")),
     person(given = "WisecondorX Authors", role = "ctb", comment = "Authors of the original WisecondorX tool implemented in Python")
     )
-Description: An 'R' port of the 'WisecondorX' tool for copy number analysis of cell-free DNA sequencing data, implemented using the 'duckhts' extension for 'DuckDB'. 
-            This package provides functions to perform copy number variation analysis using the 'WisecondorX' algorithm, leveraging the high-throughput sequencing file format support provided by 'duckhts'. 
-            The original 'WisecondorX' tool was developed in Python. This package performs conformance testing against the reference Python implementation to ensure consistency of results.
-Imports: Rduckhts(>= 0.1.3-0.0.2.9001), DBI, duckdb, utils
+Description: An 'R' implementation of the 'WisecondorX' workflow for copy number analysis of cell-free DNA sequencing data, built on the 'duckhts' extension for 'DuckDB'.
+            Reads BAM/CRAM files via 'duckhts' and replicates the 'WisecondorX' convert, newref, and predict stages in R and SQL.
+            Optional conformance testing against the official 'wisecondorx' bioconda package is available via 'condathis' and 'reticulate'; no Python installation is required at runtime.
+Imports: Rduckhts(>= 1.1.6-0.0.2), DBI, duckdb, utils
 Suggests: tinytest, condathis, reticulate
+Config/WisecondorX/bioconda-package: wisecondorx
 License: GPL (>= 3)
 Encoding: UTF-8
 Roxygen: list(markdown = TRUE)

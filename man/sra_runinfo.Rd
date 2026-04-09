@@ -40,6 +40,9 @@ in the current source checkout.}
 \item{downloader}{Function used to retrieve the URL. Defaults to
 \code{\link[utils:download.file]{utils::download.file()}}. This is injectable so tests can avoid network
 calls.}
+
+\item{path}{Path to the run metadata CSV. Defaults to the bundled file under
+\verb{inst/extdata/<accession>_runinfo.csv}.}
 }
 \value{
 \code{sra_runinfo_url()} returns a length-1 character URL.

@@ -85,6 +85,8 @@ download_sra_runinfo <- function(
 }
 
 #' @rdname sra_runinfo
+#' @param path Path to the run metadata CSV. Defaults to the bundled file under
+#'   `inst/extdata/<accession>_runinfo.csv`.
 #' @export
 read_sra_runinfo <- function(
   accession,

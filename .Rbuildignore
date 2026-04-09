@@ -13,3 +13,6 @@
 ^setup\.cfg$
 ^conda\.yml$
 ^README\.WisecondorX\.md$
+^\.pre-commit-config\.yaml$
+^RWisecondorX\.Rcheck$
+^RWisecondorX_.*\.tar\.gz$

@@ -13,44 +13,126 @@ knitr::opts_chunk$set(
 )
 ```
 
+```{r setup, include = FALSE}
+knitr::opts_chunk$set(echo = TRUE, message = FALSE, warning = FALSE)
+source("R/convert.R")
+source("R/aaa.R")
+```
+
 # RWisecondorX
 
 <!-- badges: start -->
 [![R-CMD-check](https://github.com/sounkou-bioinfo/RWisecondorX/actions/workflows/R-CMD-check.yaml/badge.svg)](https://github.com/sounkou-bioinfo/RWisecondorX/actions/workflows/R-CMD-check.yaml)
 <!-- badges: end -->
 
-The goal of RWisecondorX is to ...
+`RWisecondorX` exposes WisecondorX-style copy number analysis workflows from R on
+top of `Rduckhts` and DuckDB.
+
+The package is intentionally split into two layers:
+
+- `bam_convert()` runs the convert step in R/SQL and does not require Python at runtime.
+- `bam_convert_npz()` optionally uses `reticulate` plus `numpy` to write WisecondorX-compatible `.npz` files.
+- `wisecondorx_newref()` and `wisecondorx_predict()` optionally call the official `wisecondorx` CLI through `condathis`.
+
+The convert implementation is designed for exact conformance with upstream
+WisecondorX duplicate handling, including the streaming `larp` / `larp2`
+behaviour used during bin counting.
 
 ## Installation
 
-You can install the development version of RWisecondorX from [GitHub](https://github.com/) with:
+Install the development version from GitHub:
 
-``` r
+```r
 # install.packages("pak")
-pak::pak("sounkou-bionfo/WisecondorX")
+pak::pak("sounkou-bioinfo/RWisecondorX")
 ```
 
-## Example
+`RWisecondorX` imports `Rduckhts`, `DBI`, and `duckdb`. Optional features use:
 
-This is a basic example which shows you how to solve a common problem:
+- `reticulate` for writing `.npz` files
+- `condathis` for creating a reproducible conformance environment with the
+  official bioconda `wisecondorx` package
 
-```{r example}
-library(RWisecondorX)
-## basic example code
+## What The Package Covers
+
+The current workflow surface is:
+
+1. Convert BAM/CRAM alignments to WisecondorX-style per-bin counts with `bam_convert()`.
+2. Optionally serialise those counts to `.npz` with `bam_convert_npz()`.
+3. Optionally build a reference panel with `wisecondorx_newref()`.
+4. Optionally run predictions with `wisecondorx_predict()`.
+
+This keeps the core counting step in R while still allowing conformance checks
+and downstream use of the official Python CLI when needed.
+
+## Convert A BAM To Bin Counts
+
+The package ships with a small chromosome 11 BAM fixture for examples and tests.
+
+```{r convert-example}
+bins <- bam_convert(
+  "inst/extdata/hg00106_chr11_fixture.bam",
+  binsize = 5000L,
+  rmdup = "streaming"
+)
+
+names(Filter(Negate(is.null), bins))
+
+length(bins[["11"]])
+
+sum(bins[["11"]])
 ```
 
-What is special about using `README.Rmd` instead of just `README.md`? You can include R chunks like so:
+The `rmdup` argument supports the three intended duplicate-handling modes:
 
-```{r cars}
-summary(cars)
+- `"streaming"`: exact replication of upstream WisecondorX `larp` / `larp2`
+- `"none"`: no duplicate removal, corresponding to `wisecondorx convert --normdup`
+- `"flag"`: use the SAM duplicate flag (`0x400`) for pre-marked BAMs
+
+## Optional NPZ And CLI Workflow
+
+When you want to continue into the original WisecondorX reference and prediction
+steps, use the optional helpers below.
+
+```r
+# Requires reticulate + numpy
+bam_convert_npz(
+  bam = "sample.bam",
+  npz = "sample.npz",
+  binsize = 5000L,
+  rmdup = "streaming"
+)
+
+# Requires condathis; installs official bioconda wisecondorx on first use
+wisecondorx_newref(
+  npz_files = c("control1.npz", "control2.npz"),
+  output = "reference.npz",
+  binsize = 5000L,
+  ref_binsize = 50000L
+)
+
+wisecondorx_predict(
+  npz = "sample.npz",
+  ref = "reference.npz",
+  output_prefix = "results/sample",
+  ref_binsize = 50000L
+)
 ```
 
-You'll still need to render `README.Rmd` regularly, to keep `README.md` up-to-date. `devtools::build_readme()` is handy for this.
+## SRA Metadata Helpers
 
-You can also embed plots, for example:
+The package also includes small helpers for staging SRA run metadata used by
+conformance fixtures.
 
-```{r pressure, echo = FALSE}
-plot(pressure)
+```{r sra-example}
+sra_runinfo_url("PRJNA400134")
 ```
 
-In that case, don't forget to commit and push the resulting figure files, so they display on GitHub and CRAN.
+## Development
+
+`README.Rmd` is the editable source for this document. Regenerate `README.md`
+with the repository `Makefile`:
+
+```sh
+make readme
+```

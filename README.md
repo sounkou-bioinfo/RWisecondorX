@@ -60,8 +60,16 @@ The package ships with a small chromosome 11 BAM fixture for examples
 and tests.
 
 ``` r
+library(RWisecondorX)
+
+fixture_bam <- system.file(
+  "extdata",
+  "hg00106_chr11_fixture.bam",
+  package = "RWisecondorX"
+)
+
 bins <- bam_convert(
-  "inst/extdata/hg00106_chr11_fixture.bam",
+  fixture_bam,
   binsize = 5000L,
   rmdup = "streaming"
 )
@@ -121,6 +129,8 @@ The package also includes small helpers for staging SRA run metadata
 used by conformance fixtures.
 
 ``` r
+library(RWisecondorX)
+
 sra_runinfo_url("PRJNA400134")
 #> [1] "https://trace.ncbi.nlm.nih.gov/Traces/sra-db-be/runinfo?acc=PRJNA400134"
 ```

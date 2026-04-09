@@ -15,8 +15,6 @@ knitr::opts_chunk$set(
 
 ```{r setup, include = FALSE}
 knitr::opts_chunk$set(echo = TRUE, message = FALSE, warning = FALSE)
-source("R/convert.R")
-source("R/aaa.R")
 ```
 
 # RWisecondorX
@@ -70,8 +68,16 @@ and downstream use of the official Python CLI when needed.
 The package ships with a small chromosome 11 BAM fixture for examples and tests.
 
 ```{r convert-example}
+library(RWisecondorX)
+
+fixture_bam <- system.file(
+  "extdata",
+  "hg00106_chr11_fixture.bam",
+  package = "RWisecondorX"
+)
+
 bins <- bam_convert(
-  "inst/extdata/hg00106_chr11_fixture.bam",
+  fixture_bam,
   binsize = 5000L,
   rmdup = "streaming"
 )
@@ -125,6 +131,8 @@ The package also includes small helpers for staging SRA run metadata used by
 conformance fixtures.
 
 ```{r sra-example}
+library(RWisecondorX)
+
 sra_runinfo_url("PRJNA400134")
 ```
 

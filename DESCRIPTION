@@ -13,6 +13,7 @@ Description: An 'R' implementation of the 'WisecondorX' workflow for copy number
 Imports: Rduckhts(>= 1.1.6-0.0.2), DBI, duckdb, utils
 Suggests: tinytest, condathis, reticulate
 Config/WisecondorX/bioconda-package: wisecondorx
+Remotes: RGenomicsETL/duckhts/r/Rduckhts@develop
 License: GPL (>= 3)
 Encoding: UTF-8
 Roxygen: list(markdown = TRUE)

@@ -12,10 +12,10 @@ Description: An 'R' implementation of the 'WisecondorX' workflow for copy number
             Optional conformance testing against the official 'wisecondorx' bioconda package is available via 'condathis' and 'reticulate'; no Python installation is required at runtime.
 Imports: Rduckhts(>= 1.1.6-0.0.2), DBI, duckdb, utils
 Suggests: tinytest, condathis, reticulate
+Additional_repositories: https://rgenomicsetl.r-universe.dev
 Config/WisecondorX/bioconda-package: wisecondorx
 License: GPL (>= 3)
 Encoding: UTF-8
 Roxygen: list(markdown = TRUE)
 RoxygenNote: 7.3.3
-Remotes: RGenomicsETL/duckhts/r/Rduckhts@develop
 URL: https://sounkou-bioinfo.github.io/RWisecondorX/

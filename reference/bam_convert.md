@@ -15,6 +15,7 @@ bam_convert(
   require_flags = 0L,
   exclude_flags = 0L,
   rmdup = c("streaming", "flag", "none"),
+  separate_strands = FALSE,
   con = NULL,
   reference = NULL
 )
@@ -57,6 +58,14 @@ bam_convert(
   `"flag"` drops reads with SAM flag `0x400`. `"none"` keeps all reads
   that pass the other filters.
 
+- separate_strands:
+
+  Logical; when `TRUE`, returns per-strand counts (forward `+` and
+  reverse `-`). The return value changes to a list of two named lists
+  (`fwd` and `rev`), each structured like the default return. Used by
+  `nipter_bin_bam(separate_strands = TRUE)` for the NIPTeR
+  SeparatedStrands object. Default `FALSE`.
+
 - con:
 
   Optional open DBI connection with duckhts already loaded. If `NULL`
@@ -68,10 +77,13 @@ bam_convert(
 
 ## Value
 
-A named list with one integer vector per chromosome key (`"1"`– `"22"`,
-`"23"` for X, `"24"` for Y). Each vector contains per-bin read counts
-(bin 0 = positions 0 to `binsize - 1`). Chromosomes absent from the BAM
-are `NULL`.
+When `separate_strands = FALSE` (default): a named list with one integer
+vector per chromosome key (`"1"`–`"22"`, `"23"` for X, `"24"` for Y).
+Each vector contains per-bin read counts (bin 0 = positions 0 to
+`binsize - 1`). Chromosomes absent from the BAM are `NULL`.
+
+When `separate_strands = TRUE`: a list with two elements, `fwd` and
+`rev`, each structured like the default return.
 
 ## Details
 

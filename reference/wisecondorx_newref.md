@@ -14,7 +14,7 @@ wisecondorx_newref(
   npz_files,
   output,
   binsize = 5000L,
-  ref_binsize = 50000L,
+  ref_binsize = 100000L,
   nipt = FALSE,
   refsize = 300L,
   yfrac = NULL,
@@ -43,7 +43,7 @@ wisecondorx_newref(
 
 - ref_binsize:
 
-  Reference bin size in base pairs (default 50000). Passed to upstream
+  Reference bin size in base pairs (default 100000). Passed to upstream
   `--binsize`. Must be a multiple of `binsize`.
 
 - nipt:
@@ -103,7 +103,7 @@ wisecondorx_newref(
   npz_files = list.files("controls/", "\\.npz$", full.names = TRUE),
   output = "reference.npz",
   binsize = 5000L,
-  ref_binsize = 50000L,
+  ref_binsize = 100000L,
   nipt = TRUE,
   refsize = 300L,
   yfrac = 0.05,

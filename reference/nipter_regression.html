@@ -22,6 +22,7 @@ prediction residuals."></head><body>
 
     <div id="navbar" class="collapse navbar-collapse ms-3">
       <ul class="navbar-nav me-auto"><li class="active nav-item"><a class="nav-link" href="../reference/index.html">Reference</a></li>
+<li class="nav-item"><a class="nav-link" href="../news/index.html">Changelog</a></li>
       </ul><ul class="navbar-nav"><li class="nav-item"><form class="form-inline" role="search">
  <input class="form-control" type="search" name="search-input" id="search-input" autocomplete="off" aria-label="Search site" placeholder="Search for" data-search-index="../search.json"></form></li>
       </ul></div>
@@ -137,11 +138,12 @@ theoretical CV? Default <code>FALSE</code>.</p></dd>
 </dl></div>
     <div class="section level2">
     <h2 id="details">Details<a class="anchor" aria-label="anchor" href="#details"></a></h2>
-    <p>Currently only supports <code>CombinedStrands</code> samples. The
-<code>SeparatedStrands</code> variant (which doubles the predictor pool to
-forward/reverse per chromosome) will be added when
-<code>separate_strands = TRUE</code> support is implemented in
-<code><a href="nipter_bin_bam.html">nipter_bin_bam</a></code>.</p>
+    <p>For <code>SeparatedStrands</code> samples the predictor pool is doubled (each
+autosomal chromosome contributes both a forward and reverse fraction),
+and complementary-strand exclusion within each model prevents selecting
+both strands of the same chromosome as predictors in the same model.
+Across models, only the exact predictor string is excluded; the
+complementary strand remains available.</p>
 <p>The algorithm:</p><ol><li><p>Split the control group 60/40 into train and test sets.</p></li>
 <li><p>Compute chromosomal fractions for all samples.</p></li>
 <li><p>For each of <code>n_models</code> models, greedily select <code>n_predictors</code>

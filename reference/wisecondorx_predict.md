@@ -12,7 +12,6 @@ wisecondorx_predict(
   npz,
   ref,
   output_prefix,
-  ref_binsize = 50000L,
   minrefbins = 150L,
   maskrepeats = 5L,
   zscore = 5,
@@ -26,6 +25,7 @@ wisecondorx_predict(
   ylim = NULL,
   cairo = FALSE,
   seed = NULL,
+  add_plot_title = FALSE,
   env_name = "wisecondorx",
   extra_args = character(0)
 )
@@ -47,12 +47,6 @@ wisecondorx_predict(
 
   Output prefix for all `wisecondorx predict` output files (e.g.
   `"results/sample1"`).
-
-- ref_binsize:
-
-  Reference bin size in base pairs (default 50000). Passed to upstream
-  `--binsize`. Must match the `ref_binsize` used when building the
-  reference.
 
 - minrefbins:
 
@@ -114,6 +108,12 @@ wisecondorx_predict(
   Optional integer random seed for segmentation. Passed to upstream
   `--seed`.
 
+- add_plot_title:
+
+  Logical; when `TRUE`, adds the output basename as the plot title.
+  Passed to upstream `--add-plot-title`. Only effective when
+  `plot = TRUE`.
+
 - env_name:
 
   Name of the conda environment containing `wisecondorx` (default
@@ -134,8 +134,8 @@ wisecondorx_predict(
 This wrapper exposes the current upstream `wisecondorx predict` CLI
 flags documented in the WisecondorX README: `--minrefbins`,
 `--maskrepeats`, `--zscore`, `--alpha`, `--beta`, `--blacklist`,
-`--gender`, `--bed`, `--plot`, `--regions`, `--ylim`, `--cairo`, and
-`--seed`.
+`--gender`, `--bed`, `--plot`, `--add-plot-title`, `--regions`,
+`--ylim`, `--cairo`, and `--seed`.
 
 ## See also
 
@@ -150,7 +150,6 @@ wisecondorx_predict(
   npz = "sample.npz",
   ref = "reference.npz",
   output_prefix = "results/sample",
-  ref_binsize = 50000L,
   minrefbins = 150L,
   maskrepeats = 5L,
   zscore = 5,
@@ -159,7 +158,8 @@ wisecondorx_predict(
   blacklist = NULL,
   gender = "F",
   bed = TRUE,
-  plot = FALSE,
+  plot = TRUE,
+  add_plot_title = TRUE,
   regions = NULL,
   ylim = c(-2, 2),
   cairo = FALSE,

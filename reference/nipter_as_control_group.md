@@ -30,10 +30,8 @@ An object of class `c("NIPTeRControlGroup", <strand_type>)`.
 
 ## Details
 
-All samples must share the same strand type (currently only
-`"CombinedStrands"` is supported; `"SeparatedStrands"` will be added
-when the regression layer is ported). Duplicate sample names are
-silently removed.
+All samples must share the same strand type (`"CombinedStrands"` or
+`"SeparatedStrands"`). Duplicate sample names are silently removed.
 
 ## See also
 

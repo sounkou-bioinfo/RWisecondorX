@@ -26,6 +26,7 @@ parameters."></head><body>
 
     <div id="navbar" class="collapse navbar-collapse ms-3">
       <ul class="navbar-nav me-auto"><li class="active nav-item"><a class="nav-link" href="../reference/index.html">Reference</a></li>
+<li class="nav-item"><a class="nav-link" href="../news/index.html">Changelog</a></li>
       </ul><ul class="navbar-nav"><li class="nav-item"><form class="form-inline" role="search">
  <input class="form-control" type="search" name="search-input" id="search-input" autocomplete="off" aria-label="Search site" placeholder="Search for" data-search-index="../search.json"></form></li>
       </ul></div>
@@ -103,7 +104,9 @@ deduplication.</p></dd>
 
 
 <dt id="arg-separate-strands">separate_strands<a class="anchor" aria-label="anchor" href="#arg-separate-strands"></a></dt>
-<dd><p>Not yet implemented. Set <code>FALSE</code> (default).</p></dd>
+<dd><p>Logical; when <code>TRUE</code>, produces a
+<code>SeparatedStrands</code> object with independent forward/reverse count matrices.
+Default <code>FALSE</code> (<code>CombinedStrands</code>).</p></dd>
 
 
 <dt id="arg-con">con<a class="anchor" aria-label="anchor" href="#arg-con"></a></dt>
@@ -116,25 +119,30 @@ deduplication.</p></dd>
 </dl></div>
     <div class="section level2">
     <h2 id="value">Value<a class="anchor" aria-label="anchor" href="#value"></a></h2>
-    <p>An object of class <code>NIPTeRSample</code>: a named list with
-<code>autosomal_chromosome_reads</code> (a list of one 22-row integer matrix, rows
-named <code>"1"</code>–<code>"22"</code>, columns are bins), <code>sex_chromosome_reads</code> (a list of
-one 2-row integer matrix, rows named <code>"X"</code> and <code>"Y"</code>),
-<code>correction_status_autosomal</code> (<code>"Uncorrected"</code>),
-<code>correction_status_sex</code> (<code>"Uncorrected"</code>), and <code>sample_name</code>.</p>
+    <p>An object of class <code>c("NIPTeRSample", &lt;strand_type&gt;)</code>:</p>
+<p><strong><code>CombinedStrands</code></strong> (default): <code>autosomal_chromosome_reads</code> is a
+list of one 22-row integer matrix (rows <code>"1"</code>–<code>"22"</code>);
+<code>sex_chromosome_reads</code> is a list of one 2-row matrix (rows <code>"X"</code>, <code>"Y"</code>).</p>
+<p><strong><code>SeparatedStrands</code></strong> (<code>separate_strands = TRUE</code>):
+<code>autosomal_chromosome_reads</code> is a list of two matrices — element 1 is
+forward (rows <code>"1F"</code>–<code>"22F"</code>), element 2 is reverse (rows <code>"1R"</code>–<code>"22R"</code>);
+<code>sex_chromosome_reads</code> similarly contains forward (<code>"XF"</code>, <code>"YF"</code>) and
+reverse (<code>"XR"</code>, <code>"YR"</code>) matrices.</p>
     </div>
     <div class="section level2">
     <h2 id="details">Details<a class="anchor" aria-label="anchor" href="#details"></a></h2>
     <p>The result is reshaped into a <code>NIPTeRSample</code> object whose structure
 parallels NIPTeR's <code>NIPTSample</code>: autosomal reads as a chromosome-by-bin
 matrix and sex chromosome reads as a separate two-row matrix.</p>
-<p>Strand separation (<code>separate_strands = TRUE</code>) is not yet implemented; it
-requires a forward/reverse split in the SQL layer and will be added when the
-NIPTeR regression layer is ported.</p>
+<p>When <code>separate_strands = TRUE</code>, forward (<code>+</code>) and reverse (<code>-</code>) reads are
+counted independently, producing two matrices per chromosome set (class
+<code>"SeparatedStrands"</code>). This doubles the predictor pool for
+<code><a href="nipter_regression.html">nipter_regression()</a></code> — see NIPTeR documentation for details.</p>
     </div>
     <div class="section level2">
     <h2 id="see-also">See also<a class="anchor" aria-label="anchor" href="#see-also"></a></h2>
-    <div class="dont-index"><p><code><a href="bam_convert.html">bam_convert()</a></code>, <code><a href="nipter_bin_bam_bed.html">nipter_bin_bam_bed()</a></code>, <code><a href="nipter_gc_correct.html">nipter_gc_correct()</a></code></p></div>
+    <div class="dont-index"><p><code><a href="bam_convert.html">bam_convert()</a></code>, <code><a href="nipter_bin_bam_bed.html">nipter_bin_bam_bed()</a></code>, <code><a href="nipter_gc_correct.html">nipter_gc_correct()</a></code>,
+<code><a href="nipter_regression.html">nipter_regression()</a></code></p></div>
     </div>
 
     <div class="section level2">
@@ -146,6 +154,9 @@ NIPTeR regression layer is ported.</p>
 <span class="r-in"><span><span class="co"># Common NIPT pipeline: MAPQ &gt;= 40, exclude duplicate-flagged reads</span></span></span>
 <span class="r-in"><span><span class="va">sample</span> <span class="op">&lt;-</span> <span class="fu">nipter_bin_bam</span><span class="op">(</span><span class="st">"sample.dm.bam"</span>, binsize <span class="op">=</span> <span class="fl">50000L</span>,</span></span>
 <span class="r-in"><span>                         mapq <span class="op">=</span> <span class="fl">40L</span>, exclude_flags <span class="op">=</span> <span class="fl">1024L</span><span class="op">)</span></span></span>
+<span class="r-in"><span></span></span>
+<span class="r-in"><span><span class="co"># SeparatedStrands for regression with doubled predictor pool</span></span></span>
+<span class="r-in"><span><span class="va">sample_ss</span> <span class="op">&lt;-</span> <span class="fu">nipter_bin_bam</span><span class="op">(</span><span class="st">"sample.bam"</span>, separate_strands <span class="op">=</span> <span class="cn">TRUE</span><span class="op">)</span></span></span>
 <span class="r-in"><span></span></span>
 <span class="r-in"><span><span class="va">sample</span><span class="op">$</span><span class="va">autosomal_chromosome_reads</span><span class="op">[[</span><span class="fl">1</span><span class="op">]</span><span class="op">]</span><span class="op">[</span><span class="st">"21"</span>, <span class="op">]</span>   <span class="co"># chr21 bin counts</span></span></span>
 <span class="r-in"><span><span class="op">}</span> <span class="co"># }</span></span></span>

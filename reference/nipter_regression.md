@@ -96,11 +96,12 @@ A list of class `"NIPTeRRegression"` with elements:
 
 ## Details
 
-Currently only supports `CombinedStrands` samples. The
-`SeparatedStrands` variant (which doubles the predictor pool to
-forward/reverse per chromosome) will be added when
-`separate_strands = TRUE` support is implemented in
-[`nipter_bin_bam`](https://sounkou-bioinfo.github.io/RWisecondorX/reference/nipter_bin_bam.md).
+For `SeparatedStrands` samples the predictor pool is doubled (each
+autosomal chromosome contributes both a forward and reverse fraction),
+and complementary-strand exclusion within each model prevents selecting
+both strands of the same chromosome as predictors in the same model.
+Across models, only the exact predictor string is excluded; the
+complementary strand remains available.
 
 The algorithm:
 

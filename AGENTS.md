@@ -38,7 +38,8 @@ Design priorities:
 [`bam_convert()`](https://sounkou-bioinfo.github.io/RWisecondorX/reference/bam_convert.md):
 DuckDB/SQL read-counting core. Supports `binsize`, `mapq`,
 `require_flags` (samtools `-f`), `exclude_flags` (samtools `-F`),
-`rmdup` (`"streaming"` / `"flag"` / `"none"`), CRAM via `reference`.
+`rmdup` (`"streaming"` / `"flag"` / `"none"`), `separate_strands`
+(returns list of forward/reverse data frames), CRAM via `reference`.
 Achieves exact bin-for-bin conformance with WisecondorX on
 HG00106.chrom11 (25,115 non-zero bins, 0 mismatches). -
 [`bam_convert_bed()`](https://sounkou-bioinfo.github.io/RWisecondorX/reference/bam_convert_bed.md):
@@ -58,8 +59,12 @@ package. - `R/npz.R`:
 
 **NIPTeR binning layer — `R/nipter_bin.R`** -
 [`nipter_bin_bam()`](https://sounkou-bioinfo.github.io/RWisecondorX/reference/nipter_bin_bam.md):
-produces `NIPTeRSample` objects (class
-`c("NIPTeRSample", "CombinedStrands")`). Exposes `mapq`,
+produces `NIPTeRSample` objects. With `separate_strands = FALSE`
+(default), class is `c("NIPTeRSample", "CombinedStrands")`; with
+`separate_strands = TRUE`, class is
+`c("NIPTeRSample", "SeparatedStrands")` with
+`autosomal_chromosome_reads` as a list of two matrices (forward/reverse,
+rownames `"1F".."22F"` / `"1R".."22R"`). Exposes `mapq`,
 `require_flags`, `exclude_flags`, `rmdup` for pre-filtering matching
 real-world NIPT pipelines (e.g. `mapq=40L, exclude_flags=1024L`). -
 [`nipter_bin_bam_bed()`](https://sounkou-bioinfo.github.io/RWisecondorX/reference/nipter_bin_bam_bed.md):
@@ -87,6 +92,8 @@ Johansson) listed as `cph`. NIPTeR added to `Suggests`.
 **NIPTeR statistical layer**
 
 Each file is strictly separate; never mix NIPTeR and WisecondorX code.
+All statistical functions support both CombinedStrands and
+SeparatedStrands samples.
 
 - `R/nipter_control.R` —
   [`nipter_as_control_group()`](https://sounkou-bioinfo.github.io/RWisecondorX/reference/nipter_as_control_group.md):
@@ -97,23 +104,30 @@ Each file is strictly separate; never mix NIPTeR and WisecondorX code.
   control group.
   [`nipter_match_control_group()`](https://sounkou-bioinfo.github.io/RWisecondorX/reference/nipter_match_control_group.md):
   selects the best-fit control samples for a test sample by
-  sum-of-squares chromosomal fraction distance.
+  sum-of-squares chromosomal fraction distance. Internal helpers
+  `.sample_chr_fractions()` (44-element for SeparatedStrands, 22 for
+  Combined) and `.sample_chr_fractions_collapsed()` (always 22-element)
+  handle strand dispatch.
 - `R/nipter_gc.R` —
   [`nipter_gc_correct()`](https://sounkou-bioinfo.github.io/RWisecondorX/reference/nipter_gc_correct.md):
   LOESS and bin-weight GC correction. GC content derived from the FASTA
   reference via `rduckhts_fasta_nuc()` — **no bundled correction
-  tables** (unlike the original NIPTeR `sysdata.rda`). Supports both
-  single samples and control groups. Sex chromosome correction via
-  nearest-neighbour (LOESS) or same-bucket weights (bin-weight).
+  tables** (unlike the original NIPTeR `sysdata.rda`). SeparatedStrands:
+  LOESS fitted on `Reduce("+", auto_list)` summed counts, corrections
+  applied independently to each strand matrix via
+  [`lapply()`](https://rdrr.io/r/base/lapply.html). Sex chromosome
+  correction via nearest-neighbour (LOESS) or same-bucket weights
+  (bin-weight).
 - `R/nipter_chi.R` —
   [`nipter_chi_correct()`](https://sounkou-bioinfo.github.io/RWisecondorX/reference/nipter_chi_correct.md):
   chi-squared overdispersion correction applied simultaneously to sample
-  and control group. Uses normalised chi-squared threshold (default
-  3.5). Sex chromosome correction uses mean autosomal correction factor
-  per bin position.
+  and control group. SeparatedStrands: chi computed on summed strand
+  counts, correction applied per-strand via
+  [`lapply()`](https://rdrr.io/r/base/lapply.html).
 - `R/nipter_score.R` —
   [`nipter_z_score()`](https://sounkou-bioinfo.github.io/RWisecondorX/reference/nipter_z_score.md):
-  chromosomal fraction Z-score with Shapiro-Wilk normality test.
+  chromosomal fraction Z-score with Shapiro-Wilk normality test. Uses
+  collapsed fractions for SeparatedStrands.
   [`nipter_ncv_score()`](https://sounkou-bioinfo.github.io/RWisecondorX/reference/nipter_ncv_score.md):
   normalised chromosome value with brute-force denominator search using
   [`utils::combn()`](https://rdrr.io/r/utils/combn.html) (replaces
@@ -122,25 +136,20 @@ Each file is strictly separate; never mix NIPTeR and WisecondorX code.
 - `R/nipter_regression.R` —
   [`nipter_regression()`](https://sounkou-bioinfo.github.io/RWisecondorX/reference/nipter_regression.md):
   forward stepwise regression Z-score with train/test split, practical
-  vs theoretical CV selection. Currently CombinedStrands only;
-  SeparatedStrands requires `separate_strands = TRUE` support.
-- `inst/tinytest/test_nipter_stats.R` — 69 assertions covering all
-  statistical functions.
+  vs theoretical CV selection. Supports both CombinedStrands and
+  SeparatedStrands. SeparatedStrands doubles the predictor pool (44
+  candidates: `"1F".."22F","1R".."22R"`) with complementary exclusion
+  (selecting `"5F"` excludes both `"5F"` and `"5R"` from the same
+  model).
+- `inst/tinytest/test_nipter_stats.R` — 105 assertions covering all
+  statistical functions including SeparatedStrands variants.
 
 ### Open architectural questions
 
-- **`separate_strands = TRUE`**: currently stubbed with
-  [`stop()`](https://rdrr.io/r/base/stop.html) in
-  [`nipter_bin_bam()`](https://sounkou-bioinfo.github.io/RWisecondorX/reference/nipter_bin_bam.md).
-  Requires `GROUP BY rname, bin, strand` in the SQL layer and returning
-  two matrices (`forward_reads_matrix` and `reverse_reads_matrix`).
-  Needed for the SeparatedStrands variant of
-  [`nipter_regression()`](https://sounkou-bioinfo.github.io/RWisecondorX/reference/nipter_regression.md),
-  which is already implemented structurally but gated on the input
-  class.
-- **Gender/sex prediction**: investigate whether to use NIPTeR’s
-  Y-fraction method, WisecondorX’s `--yfrac` approach, or a unified
-  strategy.
+- **Gender/sex prediction**: WisecondorX uses `sklearn.GaussianMixture`
+  on Y-read fractions; NIPTeR has no gender prediction. Investigate
+  native R gender prediction using `mclust::Mclust()` as the R
+  equivalent.
 - **DNACopy replacement**: the segmentation step in
   `wisecondorx_predict` uses DNACopy internally; evaluate whether to
   expose or replace it.
@@ -149,6 +158,9 @@ Each file is strictly separate; never mix NIPTeR and WisecondorX code.
   (all 24 chroms, no unmapped reads, no same-position collisions) would
   allow `NIPTER_CONFORMANCE_BAM` to be populated automatically in CI
   without a real patient BAM.
+- **[`nipter_bin_bam_bed()`](https://sounkou-bioinfo.github.io/RWisecondorX/reference/nipter_bin_bam_bed.md)
+  SeparatedStrands output**: currently flattens to CombinedStrands for
+  BED output. May need updating if stranded BED output is desired.
 
 ------------------------------------------------------------------------
 

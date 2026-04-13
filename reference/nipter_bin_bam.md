@@ -60,7 +60,9 @@ nipter_bin_bam(
 
 - separate_strands:
 
-  Not yet implemented. Set `FALSE` (default).
+  Logical; when `TRUE`, produces a `SeparatedStrands` object with
+  independent forward/reverse count matrices. Default `FALSE`
+  (`CombinedStrands`).
 
 - con:
 
@@ -72,12 +74,17 @@ nipter_bin_bam(
 
 ## Value
 
-An object of class `NIPTeRSample`: a named list with
-`autosomal_chromosome_reads` (a list of one 22-row integer matrix, rows
-named `"1"`–`"22"`, columns are bins), `sex_chromosome_reads` (a list of
-one 2-row integer matrix, rows named `"X"` and `"Y"`),
-`correction_status_autosomal` (`"Uncorrected"`), `correction_status_sex`
-(`"Uncorrected"`), and `sample_name`.
+An object of class `c("NIPTeRSample", <strand_type>)`:
+
+**`CombinedStrands`** (default): `autosomal_chromosome_reads` is a list
+of one 22-row integer matrix (rows `"1"`–`"22"`); `sex_chromosome_reads`
+is a list of one 2-row matrix (rows `"X"`, `"Y"`).
+
+**`SeparatedStrands`** (`separate_strands = TRUE`):
+`autosomal_chromosome_reads` is a list of two matrices — element 1 is
+forward (rows `"1F"`–`"22F"`), element 2 is reverse (rows
+`"1R"`–`"22R"`); `sex_chromosome_reads` similarly contains forward
+(`"XF"`, `"YF"`) and reverse (`"XR"`, `"YR"`) matrices.
 
 ## Details
 
@@ -85,15 +92,18 @@ The result is reshaped into a `NIPTeRSample` object whose structure
 parallels NIPTeR's `NIPTSample`: autosomal reads as a chromosome-by-bin
 matrix and sex chromosome reads as a separate two-row matrix.
 
-Strand separation (`separate_strands = TRUE`) is not yet implemented; it
-requires a forward/reverse split in the SQL layer and will be added when
-the NIPTeR regression layer is ported.
+When `separate_strands = TRUE`, forward (`+`) and reverse (`-`) reads
+are counted independently, producing two matrices per chromosome set
+(class `"SeparatedStrands"`). This doubles the predictor pool for
+[`nipter_regression()`](https://sounkou-bioinfo.github.io/RWisecondorX/reference/nipter_regression.md)
+— see NIPTeR documentation for details.
 
 ## See also
 
 [`bam_convert()`](https://sounkou-bioinfo.github.io/RWisecondorX/reference/bam_convert.md),
 [`nipter_bin_bam_bed()`](https://sounkou-bioinfo.github.io/RWisecondorX/reference/nipter_bin_bam_bed.md),
-[`nipter_gc_correct()`](https://sounkou-bioinfo.github.io/RWisecondorX/reference/nipter_gc_correct.md)
+[`nipter_gc_correct()`](https://sounkou-bioinfo.github.io/RWisecondorX/reference/nipter_gc_correct.md),
+[`nipter_regression()`](https://sounkou-bioinfo.github.io/RWisecondorX/reference/nipter_regression.md)
 
 ## Examples
 
@@ -105,6 +115,9 @@ sample <- nipter_bin_bam("sample.bam", binsize = 50000L)
 # Common NIPT pipeline: MAPQ >= 40, exclude duplicate-flagged reads
 sample <- nipter_bin_bam("sample.dm.bam", binsize = 50000L,
                          mapq = 40L, exclude_flags = 1024L)
+
+# SeparatedStrands for regression with doubled predictor pool
+sample_ss <- nipter_bin_bam("sample.bam", separate_strands = TRUE)
 
 sample$autosomal_chromosome_reads[[1]]["21", ]   # chr21 bin counts
 } # }

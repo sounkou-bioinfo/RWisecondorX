@@ -22,6 +22,7 @@ for chromosomes 1-22 and the sex chromosomes (X mapped to key "23", Y to
 
     <div id="navbar" class="collapse navbar-collapse ms-3">
       <ul class="navbar-nav me-auto"><li class="active nav-item"><a class="nav-link" href="../reference/index.html">Reference</a></li>
+<li class="nav-item"><a class="nav-link" href="../news/index.html">Changelog</a></li>
       </ul><ul class="navbar-nav"><li class="nav-item"><form class="form-inline" role="search">
  <input class="form-control" type="search" name="search-input" id="search-input" autocomplete="off" aria-label="Search site" placeholder="Search for" data-search-index="../search.json"></form></li>
       </ul></div>
@@ -53,6 +54,7 @@ for chromosomes 1-22 and the sex chromosomes (X mapped to key <code>"23"</code>,
 <span>  require_flags <span class="op">=</span> <span class="fl">0L</span>,</span>
 <span>  exclude_flags <span class="op">=</span> <span class="fl">0L</span>,</span>
 <span>  rmdup <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"streaming"</span>, <span class="st">"flag"</span>, <span class="st">"none"</span><span class="op">)</span>,</span>
+<span>  separate_strands <span class="op">=</span> <span class="cn">FALSE</span>,</span>
 <span>  con <span class="op">=</span> <span class="cn">NULL</span>,</span>
 <span>  reference <span class="op">=</span> <span class="cn">NULL</span></span>
 <span><span class="op">)</span></span></code></pre></div>
@@ -97,6 +99,14 @@ WisecondorX larp/larp2 algorithm (also excludes improper pairs).
 pass the other filters.</p></dd>
 
 
+<dt id="arg-separate-strands">separate_strands<a class="anchor" aria-label="anchor" href="#arg-separate-strands"></a></dt>
+<dd><p>Logical; when <code>TRUE</code>, returns per-strand counts
+(forward <code>+</code> and reverse <code>-</code>). The return value changes to a list of two
+named lists (<code>fwd</code> and <code>rev</code>), each structured like the default return.
+Used by <code>nipter_bin_bam(separate_strands = TRUE)</code> for the NIPTeR
+SeparatedStrands object. Default <code>FALSE</code>.</p></dd>
+
+
 <dt id="arg-con">con<a class="anchor" aria-label="anchor" href="#arg-con"></a></dt>
 <dd><p>Optional open DBI connection with duckhts already loaded. If
 <code>NULL</code> (default) a temporary in-memory DuckDB connection is created.</p></dd>
@@ -108,10 +118,12 @@ pass the other filters.</p></dd>
 </dl></div>
     <div class="section level2">
     <h2 id="value">Value<a class="anchor" aria-label="anchor" href="#value"></a></h2>
-    <p>A named list with one integer vector per chromosome key (<code>"1"</code>–
-<code>"22"</code>, <code>"23"</code> for X, <code>"24"</code> for Y). Each vector contains per-bin read
-counts (bin 0 = positions 0 to <code>binsize - 1</code>). Chromosomes absent from
-the BAM are <code>NULL</code>.</p>
+    <p>When <code>separate_strands = FALSE</code> (default): a named list with one
+integer vector per chromosome key (<code>"1"</code>–<code>"22"</code>, <code>"23"</code> for X, <code>"24"</code> for
+Y). Each vector contains per-bin read counts (bin 0 = positions 0 to
+<code>binsize - 1</code>). Chromosomes absent from the BAM are <code>NULL</code>.</p>
+<p>When <code>separate_strands = TRUE</code>: a list with two elements, <code>fwd</code> and <code>rev</code>,
+each structured like the default return.</p>
     </div>
     <div class="section level2">
     <h2 id="details">Details<a class="anchor" aria-label="anchor" href="#details"></a></h2>

@@ -8,8 +8,9 @@ bam_convert(
   bam,
   binsize = 5000L,
   mapq = 1L,
+  require_flags = 0L,
+  exclude_flags = 0L,
   rmdup = c("streaming", "flag", "none"),
-  filter_improper_pairs = TRUE,
   con = NULL,
   reference = NULL
 )
@@ -17,60 +18,73 @@ bam_convert(
 \arguments{
 \item{bam}{Path to an indexed BAM or CRAM file.}
 
-\item{binsize}{Bin size in base pairs. Default 5000 (WisecondorX); use
-50000 for NIPTeR-style workflows.}
+\item{binsize}{Bin size in base pairs. Default \code{5000L} (WisecondorX); use
+\code{50000L} for NIPTeR-style workflows.}
 
-\item{mapq}{Minimum mapping quality to retain a read. Default \code{1L}
-(WisecondorX). Set to \code{0L} to disable MAPQ filtering (NIPTeR).}
+\item{mapq}{Minimum mapping quality. Default \code{1L} (WisecondorX / samtools
+default). Set to \code{0L} to retain all reads regardless of MAPQ (NIPTeR).}
 
-\item{rmdup}{Duplicate removal strategy:
-\code{"streaming"} — WisecondorX larp/larp2 consecutive-position dedup
-(default; not meaningful when \code{filter_improper_pairs = FALSE});
-\code{"flag"} — exclude reads with SAM flag \code{0x400} (pre-marked by Picard /
-sambamba); \code{"none"} — no duplicate removal.}
+\item{require_flags}{Integer bitmask. Only reads for which
+\code{(FLAG & require_flags) == require_flags} are retained. \code{0L} (default)
+imposes no requirement. Example: \code{require_flags = 0x2L} keeps only
+properly paired reads.}
 
-\item{filter_improper_pairs}{When \code{TRUE} (default, WisecondorX behaviour)
-paired reads that are not properly paired (\code{FLAG & 0x2 == 0}) are
-excluded. Set to \code{FALSE} to include all mapped reads regardless of pair
-status (NIPTeR behaviour).}
+\item{exclude_flags}{Integer bitmask. Reads for which
+\code{(FLAG & exclude_flags) != 0} are dropped. \code{0L} (default) drops nothing.
+Example: \code{exclude_flags = 0xF04L} drops unmapped, secondary, QC-fail and
+supplementary reads (common samtools pre-filter).}
 
-\item{con}{An optional open DBI connection with the duckhts extension already
-loaded. If \code{NULL} (default), a temporary in-memory DuckDB connection is
-created for this call.}
+\item{rmdup}{Duplicate removal strategy. \code{"streaming"} (default) applies the
+WisecondorX larp/larp2 algorithm (also excludes improper pairs).
+\code{"flag"} drops reads with SAM flag \code{0x400}. \code{"none"} keeps all reads that
+pass the other filters.}
+
+\item{con}{Optional open DBI connection with duckhts already loaded. If
+\code{NULL} (default) a temporary in-memory DuckDB connection is created.}
 
 \item{reference}{Optional FASTA reference path for CRAM inputs.}
 }
 \value{
-A named list with one integer vector per chromosome key (\code{"1"}–\code{"22"},
-\code{"23"} for X, \code{"24"} for Y). Each vector contains per-bin read counts
-(bin 0 = positions 0 to binsize-1). Chromosomes absent from the BAM are
-\code{NULL}.
+A named list with one integer vector per chromosome key (\code{"1"}–
+\code{"22"}, \code{"23"} for X, \code{"24"} for Y). Each vector contains per-bin read
+counts (bin 0 = positions 0 to \code{binsize - 1}). Chromosomes absent from
+the BAM are \code{NULL}.
 }
 \description{
 Core read-counting engine shared by the WisecondorX and NIPTeR layers.
 Reads aligned reads from a BAM or CRAM file and returns per-bin read counts
-for chromosomes 1-22 and the sex chromosomes (X mapped to key "23", Y to "24").
+for chromosomes 1-22 and the sex chromosomes (X mapped to key \code{"23"}, Y to
+\code{"24"}).
 }
 \details{
-Filter parameters let callers replicate the exact behaviour of both tools.
-WisecondorX defaults: \code{mapq = 1}, \code{rmdup = "streaming"},
-\code{filter_improper_pairs = TRUE}.  NIPTeR defaults: \code{mapq = 0},
-\code{rmdup = "none"}, \code{filter_improper_pairs = FALSE}.
+Read filtering mirrors the \verb{samtools view} convention: \code{mapq} sets the
+minimum mapping quality; \code{require_flags} is a bitmask of flags that must
+\strong{all} be set (equivalent to \verb{samtools view -f}); \code{exclude_flags} is a
+bitmask of flags that must \strong{all} be clear (equivalent to
+\verb{samtools view -F}).  Use the duckhts UDF \code{sam_flag_bits(flag)} to inspect
+named flag fields, or \code{sam_flag_has(flag, bit)} to test individual bits.
 
-When \code{rmdup = "streaming"} the WisecondorX larp/larp2 state machine is
-reproduced exactly: improper pairs are invisible to the dedup logic (they
-do not update larp2), unpaired reads update larp but not larp2, and larp
-is never reset between chromosomes.  Bin assignment uses truncating integer
-division matching Python's \code{int(pos / binsize)}.
+\code{rmdup} controls duplicate removal independently of the flag filters:
+\code{"streaming"} applies the WisecondorX larp/larp2 consecutive-position state
+machine and also enforces the WisecondorX improper-pair rule (paired reads
+that are not properly paired are excluded from both counting and the dedup
+state — this is intrinsic to the algorithm, not a flag option); \code{"flag"}
+additionally excludes reads with SAM flag \code{0x400} set (Picard / sambamba
+pre-marked duplicates); \code{"none"} applies no deduplication.
 }
 \examples{
 \dontrun{
 # WisecondorX defaults
-bins <- bam_convert("sample.bam", binsize = 5000L, rmdup = "streaming")
+bins <- bam_convert("sample.bam")
 
-# NIPTeR defaults
+# NIPTeR defaults — all mapped reads, no dedup, 50 kb bins
 bins <- bam_convert("sample.bam", binsize = 50000L, mapq = 0L,
-                    rmdup = "none", filter_improper_pairs = FALSE)
+                    rmdup = "none")
+
+# Pre-filtered BAM: skip unmapped + secondary + supplementary, flag dedup
+bins <- bam_convert("sample.bam",
+                    exclude_flags = bitwOr(0x4L, bitwOr(0x100L, 0x800L)),
+                    rmdup = "flag")
 }
 
 }

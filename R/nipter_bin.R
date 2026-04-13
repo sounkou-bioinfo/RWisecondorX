@@ -64,14 +64,15 @@ nipter_bin_bam <- function(bam,
   }
   binsize <- as.integer(binsize)
 
-  # NIPTeR counts all mapped reads: mapq = 0, no improper-pair filter.
+  # NIPTeR counts all mapped reads: mapq = 0, no flag filters.
   bins <- bam_convert(bam,
-                      binsize               = binsize,
-                      mapq                  = 0L,
-                      rmdup                 = rmdup,
-                      filter_improper_pairs = FALSE,
-                      con                   = con,
-                      reference             = reference)
+                      binsize       = binsize,
+                      mapq          = 0L,
+                      require_flags = 0L,
+                      exclude_flags = 0L,
+                      rmdup         = rmdup,
+                      con           = con,
+                      reference     = reference)
 
   name <- sub("\\.cram$|\\.bam$", "", basename(bam), ignore.case = TRUE)
   .bins_to_nipter_sample(bins, binsize, name)

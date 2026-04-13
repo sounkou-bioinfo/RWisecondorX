@@ -60,9 +60,9 @@ mixed_none <- bam_convert(mixed_bam, binsize = 5000L, rmdup = "none")
 mixed_streaming <- bam_convert(mixed_bam, binsize = 5000L, rmdup = "streaming")
 mixed_flag <- bam_convert(mixed_bam, binsize = 5000L, rmdup = "flag")
 
-expect_identical(sum(mixed_none[["11"]]), 8L, info = "mixed fixture total with rmdup=none")
+expect_identical(sum(mixed_none[["11"]]), 10L, info = "mixed fixture total with rmdup=none")
 expect_identical(sum(mixed_streaming[["11"]]), 5L, info = "mixed fixture total with rmdup=streaming")
-expect_identical(sum(mixed_flag[["11"]]), 6L, info = "mixed fixture total with rmdup=flag")
+expect_identical(sum(mixed_flag[["11"]]), 8L, info = "mixed fixture total with rmdup=flag")
 
 expect_identical(as.integer(mixed_none[["11"]][1:3]), c(4L, 2L, 2L),
                  info = "mixed fixture bins for rmdup=none")

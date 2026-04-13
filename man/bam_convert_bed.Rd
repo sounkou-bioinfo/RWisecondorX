@@ -8,6 +8,9 @@ bam_convert_bed(
   bam,
   bed,
   binsize = 5000L,
+  mapq = 1L,
+  require_flags = 0L,
+  exclude_flags = 0L,
   rmdup = c("streaming", "none", "flag"),
   con = NULL,
   reference = NULL,
@@ -21,6 +24,14 @@ bam_convert_bed(
 The tabix index is written to \code{paste0(bed, ".tbi")}.}
 
 \item{binsize}{Bin size in base pairs (default 5000).}
+
+\item{mapq}{Minimum mapping quality (default \code{1L}).}
+
+\item{require_flags}{Integer bitmask; only reads with all bits set are kept
+(samtools \code{-f}). Default \code{0L} (no requirement).}
+
+\item{exclude_flags}{Integer bitmask; reads with any bit set are dropped
+(samtools \code{-F}). Default \code{0L} (nothing dropped).}
 
 \item{rmdup}{Duplicate-removal strategy passed to \code{\link[=bam_convert]{bam_convert()}}.}
 

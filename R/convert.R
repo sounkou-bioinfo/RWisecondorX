@@ -2,63 +2,76 @@
 #'
 #' Core read-counting engine shared by the WisecondorX and NIPTeR layers.
 #' Reads aligned reads from a BAM or CRAM file and returns per-bin read counts
-#' for chromosomes 1-22 and the sex chromosomes (X mapped to key "23", Y to "24").
+#' for chromosomes 1-22 and the sex chromosomes (X mapped to key `"23"`, Y to
+#' `"24"`).
 #'
-#' Filter parameters let callers replicate the exact behaviour of both tools.
-#' WisecondorX defaults: `mapq = 1`, `rmdup = "streaming"`,
-#' `filter_improper_pairs = TRUE`.  NIPTeR defaults: `mapq = 0`,
-#' `rmdup = "none"`, `filter_improper_pairs = FALSE`.
+#' Read filtering mirrors the `samtools view` convention: `mapq` sets the
+#' minimum mapping quality; `require_flags` is a bitmask of flags that must
+#' **all** be set (equivalent to `samtools view -f`); `exclude_flags` is a
+#' bitmask of flags that must **all** be clear (equivalent to
+#' `samtools view -F`).  Use the duckhts UDF `sam_flag_bits(flag)` to inspect
+#' named flag fields, or `sam_flag_has(flag, bit)` to test individual bits.
 #'
-#' When `rmdup = "streaming"` the WisecondorX larp/larp2 state machine is
-#' reproduced exactly: improper pairs are invisible to the dedup logic (they
-#' do not update larp2), unpaired reads update larp but not larp2, and larp
-#' is never reset between chromosomes.  Bin assignment uses truncating integer
-#' division matching Python's `int(pos / binsize)`.
+#' `rmdup` controls duplicate removal independently of the flag filters:
+#' `"streaming"` applies the WisecondorX larp/larp2 consecutive-position state
+#' machine and also enforces the WisecondorX improper-pair rule (paired reads
+#' that are not properly paired are excluded from both counting and the dedup
+#' state — this is intrinsic to the algorithm, not a flag option); `"flag"`
+#' additionally excludes reads with SAM flag `0x400` set (Picard / sambamba
+#' pre-marked duplicates); `"none"` applies no deduplication.
 #'
 #' @param bam Path to an indexed BAM or CRAM file.
-#' @param binsize Bin size in base pairs. Default 5000 (WisecondorX); use
-#'   50000 for NIPTeR-style workflows.
-#' @param mapq Minimum mapping quality to retain a read. Default `1L`
-#'   (WisecondorX). Set to `0L` to disable MAPQ filtering (NIPTeR).
-#' @param rmdup Duplicate removal strategy:
-#'   `"streaming"` — WisecondorX larp/larp2 consecutive-position dedup
-#'   (default; not meaningful when `filter_improper_pairs = FALSE`);
-#'   `"flag"` — exclude reads with SAM flag `0x400` (pre-marked by Picard /
-#'   sambamba); `"none"` — no duplicate removal.
-#' @param filter_improper_pairs When `TRUE` (default, WisecondorX behaviour)
-#'   paired reads that are not properly paired (`FLAG & 0x2 == 0`) are
-#'   excluded. Set to `FALSE` to include all mapped reads regardless of pair
-#'   status (NIPTeR behaviour).
-#' @param con An optional open DBI connection with the duckhts extension already
-#'   loaded. If `NULL` (default), a temporary in-memory DuckDB connection is
-#'   created for this call.
+#' @param binsize Bin size in base pairs. Default `5000L` (WisecondorX); use
+#'   `50000L` for NIPTeR-style workflows.
+#' @param mapq Minimum mapping quality. Default `1L` (WisecondorX / samtools
+#'   default). Set to `0L` to retain all reads regardless of MAPQ (NIPTeR).
+#' @param require_flags Integer bitmask. Only reads for which
+#'   `(FLAG & require_flags) == require_flags` are retained. `0L` (default)
+#'   imposes no requirement. Example: `require_flags = 0x2L` keeps only
+#'   properly paired reads.
+#' @param exclude_flags Integer bitmask. Reads for which
+#'   `(FLAG & exclude_flags) != 0` are dropped. `0L` (default) drops nothing.
+#'   Example: `exclude_flags = 0xF04L` drops unmapped, secondary, QC-fail and
+#'   supplementary reads (common samtools pre-filter).
+#' @param rmdup Duplicate removal strategy. `"streaming"` (default) applies the
+#'   WisecondorX larp/larp2 algorithm (also excludes improper pairs).
+#'   `"flag"` drops reads with SAM flag `0x400`. `"none"` keeps all reads that
+#'   pass the other filters.
+#' @param con Optional open DBI connection with duckhts already loaded. If
+#'   `NULL` (default) a temporary in-memory DuckDB connection is created.
 #' @param reference Optional FASTA reference path for CRAM inputs.
 #'
-#' @return A named list with one integer vector per chromosome key (`"1"`–`"22"`,
-#'   `"23"` for X, `"24"` for Y). Each vector contains per-bin read counts
-#'   (bin 0 = positions 0 to binsize-1). Chromosomes absent from the BAM are
-#'   `NULL`.
+#' @return A named list with one integer vector per chromosome key (`"1"`–
+#'   `"22"`, `"23"` for X, `"24"` for Y). Each vector contains per-bin read
+#'   counts (bin 0 = positions 0 to `binsize - 1`). Chromosomes absent from
+#'   the BAM are `NULL`.
 #'
 #' @seealso [bam_convert_bed()], [bam_convert_npz()], `nipter_bin_bam()`
 #'
 #' @examples
 #' \dontrun{
 #' # WisecondorX defaults
-#' bins <- bam_convert("sample.bam", binsize = 5000L, rmdup = "streaming")
+#' bins <- bam_convert("sample.bam")
 #'
-#' # NIPTeR defaults
+#' # NIPTeR defaults — all mapped reads, no dedup, 50 kb bins
 #' bins <- bam_convert("sample.bam", binsize = 50000L, mapq = 0L,
-#'                     rmdup = "none", filter_improper_pairs = FALSE)
+#'                     rmdup = "none")
+#'
+#' # Pre-filtered BAM: skip unmapped + secondary + supplementary, flag dedup
+#' bins <- bam_convert("sample.bam",
+#'                     exclude_flags = bitwOr(0x4L, bitwOr(0x100L, 0x800L)),
+#'                     rmdup = "flag")
 #' }
 #'
 #' @export
 bam_convert <- function(bam,
-                        binsize               = 5000L,
-                        mapq                  = 1L,
-                        rmdup                 = c("streaming", "flag", "none"),
-                        filter_improper_pairs = TRUE,
-                        con                   = NULL,
-                        reference             = NULL) {
+                        binsize       = 5000L,
+                        mapq          = 1L,
+                        require_flags = 0L,
+                        exclude_flags = 0L,
+                        rmdup         = c("streaming", "flag", "none"),
+                        con           = NULL,
+                        reference     = NULL) {
   rmdup <- match.arg(rmdup)
   stopifnot(is.character(bam), length(bam) == 1L, nzchar(bam))
   stopifnot(file.exists(bam))
@@ -66,11 +79,14 @@ bam_convert <- function(bam,
     stopifnot(is.character(reference), length(reference) == 1L, nzchar(reference))
     stopifnot(file.exists(reference))
   }
-  stopifnot(is.numeric(binsize), length(binsize) == 1L, binsize >= 1L)
-  stopifnot(is.numeric(mapq),    length(mapq)    == 1L, mapq    >= 0L)
-  stopifnot(is.logical(filter_improper_pairs), length(filter_improper_pairs) == 1L)
-  binsize <- as.integer(binsize)
-  mapq    <- as.integer(mapq)
+  stopifnot(is.numeric(binsize),       length(binsize)       == 1L, binsize       >= 1L)
+  stopifnot(is.numeric(mapq),          length(mapq)          == 1L, mapq          >= 0L)
+  stopifnot(is.numeric(require_flags), length(require_flags) == 1L, require_flags >= 0L)
+  stopifnot(is.numeric(exclude_flags), length(exclude_flags) == 1L, exclude_flags >= 0L)
+  binsize       <- as.integer(binsize)
+  mapq          <- as.integer(mapq)
+  require_flags <- as.integer(require_flags)
+  exclude_flags <- as.integer(exclude_flags)
 
   own_con <- is.null(con)
   if (own_con) {
@@ -84,9 +100,8 @@ bam_convert <- function(bam,
     on.exit(DBI::dbDisconnect(con, shutdown = TRUE), add = TRUE)
   }
 
-  sql <- .convert_sql(bam, binsize, mapq, rmdup,
-                      filter_improper_pairs = filter_improper_pairs,
-                      reference = reference)
+  sql <- .convert_sql(bam, binsize, mapq, require_flags, exclude_flags,
+                      rmdup, reference = reference)
   rows <- DBI::dbGetQuery(con, sql)
 
   .rows_to_bins(rows, binsize)
@@ -114,6 +129,11 @@ bam_convert <- function(bam,
 #' @param bed Path for the output `.bed.gz` file (created or overwritten).
 #'   The tabix index is written to `paste0(bed, ".tbi")`.
 #' @param binsize Bin size in base pairs (default 5000).
+#' @param mapq Minimum mapping quality (default `1L`).
+#' @param require_flags Integer bitmask; only reads with all bits set are kept
+#'   (samtools `-f`). Default `0L` (no requirement).
+#' @param exclude_flags Integer bitmask; reads with any bit set are dropped
+#'   (samtools `-F`). Default `0L` (nothing dropped).
 #' @param rmdup Duplicate-removal strategy passed to [bam_convert()].
 #' @param con Optional open DBI connection with duckhts already loaded.
 #'   If `NULL` (default), a temporary in-memory DuckDB connection is created.
@@ -133,11 +153,14 @@ bam_convert <- function(bam,
 #' @export
 bam_convert_bed <- function(bam,
                             bed,
-                            binsize   = 5000L,
-                            rmdup     = c("streaming", "none", "flag"),
-                            con       = NULL,
-                            reference = NULL,
-                            index     = TRUE) {
+                            binsize       = 5000L,
+                            mapq          = 1L,
+                            require_flags = 0L,
+                            exclude_flags = 0L,
+                            rmdup         = c("streaming", "none", "flag"),
+                            con           = NULL,
+                            reference     = NULL,
+                            index         = TRUE) {
   rmdup <- match.arg(rmdup)
   stopifnot(is.character(bam), length(bam) == 1L, nzchar(bam))
   stopifnot(file.exists(bam))
@@ -146,9 +169,15 @@ bam_convert_bed <- function(bam,
     stopifnot(is.character(reference), length(reference) == 1L, nzchar(reference))
     stopifnot(file.exists(reference))
   }
-  stopifnot(is.numeric(binsize), length(binsize) == 1L, binsize >= 1L)
+  stopifnot(is.numeric(binsize),       length(binsize)       == 1L, binsize       >= 1L)
+  stopifnot(is.numeric(mapq),          length(mapq)          == 1L, mapq          >= 0L)
+  stopifnot(is.numeric(require_flags), length(require_flags) == 1L, require_flags >= 0L)
+  stopifnot(is.numeric(exclude_flags), length(exclude_flags) == 1L, exclude_flags >= 0L)
   stopifnot(is.logical(index), length(index) == 1L)
-  binsize <- as.integer(binsize)
+  binsize       <- as.integer(binsize)
+  mapq          <- as.integer(mapq)
+  require_flags <- as.integer(require_flags)
+  exclude_flags <- as.integer(exclude_flags)
 
   # Manage connection lifecycle here so the same con is used for bam_convert,
   # rduckhts_bgzip, and rduckhts_tabix_index.
@@ -167,8 +196,9 @@ bam_convert_bed <- function(bam,
     on.exit(DBI::dbDisconnect(con, shutdown = TRUE), add = TRUE)
   }
 
-  bins <- bam_convert(bam, binsize = binsize, rmdup = rmdup, con = con,
-                      reference = reference)
+  bins <- bam_convert(bam, binsize = binsize, mapq = mapq,
+                      require_flags = require_flags, exclude_flags = exclude_flags,
+                      rmdup = rmdup, con = con, reference = reference)
 
   frames <- vector("list", 24L)
   for (i in seq_len(24L)) {
@@ -227,18 +257,20 @@ bam_convert_bed <- function(bam,
   "Y" = "24", "y" = "24"
 )
 
-.convert_sql <- function(bam_path, binsize, mapq, rmdup,
-                         filter_improper_pairs = TRUE,
-                         reference = NULL) {
+.convert_sql <- function(bam_path, binsize, mapq, require_flags, exclude_flags,
+                         rmdup, reference = NULL) {
   read_bam_call <- .read_bam_call(bam_path, reference = reference)
 
-  # Optional proper-pair filter (WisecondorX behaviour).
-  # When FALSE all mapped reads are included regardless of pair status (NIPTeR).
-  pair_clause <- if (isTRUE(filter_improper_pairs)) {
-    "AND NOT ((flag & 1) != 0 AND (flag & 2) = 0)"
-  } else {
-    ""
-  }
+  # User-supplied flag filters (samtools -f / -F style).
+  req_clause <- if (require_flags > 0L)
+    sprintf("AND (flag & %d) = %d", require_flags, require_flags) else ""
+  exc_clause <- if (exclude_flags > 0L)
+    sprintf("AND (flag & %d) = 0", exclude_flags) else ""
+
+  # Improper-pair filter: intrinsic to WisecondorX streaming dedup algorithm.
+  # Applied only when rmdup = "streaming"; NOT a user flag option.
+  improper_clause <- if (rmdup == "streaming")
+    "AND NOT ((flag & 1) != 0 AND (flag & 2) = 0)" else ""
 
   # rmdup strategy
   dedup_where <- switch(rmdup,
@@ -262,6 +294,8 @@ WITH raw AS (
     FROM %s
     WHERE rname IS NOT NULL
       AND mapq >= %d
+      %s
+      %s
       %s
 ),
 with_lag AS (
@@ -292,7 +326,7 @@ ORDER BY
         END,
     '[^0-9]', '', 'g') AS INTEGER),
     bin
-", read_bam_call, mapq, pair_clause, dedup_where, binsize)
+", read_bam_call, mapq, req_clause, exc_clause, improper_clause, dedup_where, binsize)
 }
 
 .read_bam_call <- function(bam_path, reference = NULL) {

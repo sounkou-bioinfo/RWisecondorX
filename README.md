@@ -8,12 +8,15 @@
 [![R-CMD-check](https://github.com/sounkou-bioinfo/RWisecondorX/actions/workflows/R-CMD-check.yaml/badge.svg)](https://github.com/sounkou-bioinfo/RWisecondorX/actions/workflows/R-CMD-check.yaml)
 <!-- badges: end -->
 
-`RWisecondorX` is an R port of
+`RWisecondorX` is an R toolkit for copy number analysis and trisomy
+prediction in non-invasive prenatal testing (NIPT), built on top of
+`Rduckhts` and DuckDB. It ports both
 [WisecondorX](https://github.com/CenterForMedicalGeneticsGhent/WisecondorX)
-built on top of `Rduckhts` and DuckDB. It follows the
-[rewrites.bio](https://rewrites.bio) principles: exact emulation of
-upstream outputs, full credit to the original authors, and transparency
-about AI assistance.
+(CNV detection) and [NIPTeR](https://github.com/molgenis/NIPTeR)
+(trisomy prediction via Z-scores, NCV, regression, and chi-squared
+correction), following the [rewrites.bio](https://rewrites.bio)
+principles: exact emulation of upstream outputs, full credit to the
+original authors, and transparency about AI assistance.
 
 The core convert step runs entirely in R/SQL via `Rduckhts` with no
 Python dependency. `bam_convert()` returns per-bin read counts in
@@ -23,6 +26,12 @@ serialises them to a WisecondorX-compatible `.npz` via `reticulate`. The
 convert implementation exactly replicates the upstream `larp` / `larp2`
 streaming deduplication behaviour, achieving bin-for-bin agreement with
 the Python implementation.
+
+The NIPTeR statistical layer provides GC correction (via on-the-fly
+FASTA computation, not bundled tables), chi-squared overdispersion
+correction, chromosomal fraction Z-scores, normalised chromosome values
+(NCV), and forward stepwise regression — all operating on `NIPTeRSample`
+objects produced by `nipter_bin_bam()`.
 
 For pipelines that need the full upstream toolchain, thin `condathis`
 wrappers cover every stage: `wisecondorx_convert()`,
@@ -179,6 +188,109 @@ wisecondorx_predict(
   cairo        = FALSE,
   seed         = 1L
 )
+```
+
+## NIPTeR-Style Trisomy Prediction
+
+`RWisecondorX` also ports the statistical analysis layer from
+[NIPTeR](https://github.com/molgenis/NIPTeR) (de Weerd et al.),
+replacing `Rsamtools` with `Rduckhts` and bundled `sysdata.rda` tables
+with on-the-fly computation via `rduckhts_fasta_nuc()`. The analysis
+pipeline follows NIPTeR’s workflow: bin samples, build a control group,
+correct for GC bias and overdispersion, then compute Z-scores or NCV
+values for trisomy prediction.
+
+### Binning
+
+`nipter_bin_bam()` produces `NIPTeRSample` objects compatible with all
+downstream functions. Pre-filtering flags mirror `samtools view -f`/`-F`
+conventions, so real-world NIPT pipelines that mark duplicates with
+Picard can pass `exclude_flags = 1024L` directly.
+
+``` r
+samples <- lapply(bam_files, nipter_bin_bam, binsize = 50000L)
+```
+
+### Control Group Construction
+
+A control group is the reference cohort against which test samples are
+scored. `nipter_as_control_group()` validates and deduplicates the input
+samples. `nipter_diagnose_control_group()` reports per-chromosome
+Z-scores and Shapiro-Wilk normality p-values across the group, useful
+for identifying outlier samples before scoring. When working with a
+large cohort, `nipter_match_control_group()` selects the
+closest-matching subset for a given test sample based on chromosomal
+fraction distance.
+
+``` r
+cg <- nipter_as_control_group(samples)
+diag <- nipter_diagnose_control_group(cg)
+matched_cg <- nipter_match_control_group(test_sample, cg, n_controls = 50L)
+```
+
+### GC Correction
+
+`nipter_gc_correct()` adjusts bin counts for GC-content bias. GC
+percentages are computed per bin from the reference FASTA via
+`rduckhts_fasta_nuc()` rather than from static bundled tables. Two
+methods are available: LOESS regression (default, matching NIPTeR) and
+bin-weight normalisation. The function accepts either a single sample or
+an entire control group.
+
+``` r
+cg <- nipter_gc_correct(cg, fasta = "hg38.fa", method = "loess")
+test_sample <- nipter_gc_correct(test_sample, fasta = "hg38.fa")
+```
+
+### Chi-Squared Correction
+
+`nipter_chi_correct()` identifies overdispersed bins across the control
+group using a normalised chi-squared test and downweights them. The
+correction is applied simultaneously to both the test sample and control
+group, maintaining consistency for downstream scoring.
+
+``` r
+corrected <- nipter_chi_correct(test_sample, cg, chi_cutoff = 3.5)
+test_sample <- corrected$sample
+cg <- corrected$control_group
+```
+
+### Scoring
+
+`nipter_z_score()` computes the chromosomal fraction Z-score for a focus
+chromosome, testing how far the sample deviates from the control
+distribution. A Z-score above 3 is the conventional threshold for
+trisomy. Each result includes a Shapiro-Wilk p-value for the control
+distribution so that normality violations are visible.
+
+``` r
+z21 <- nipter_z_score(test_sample, cg, chromo_focus = 21)
+z21$sample_z_score
+z21$control_statistics
+```
+
+`nipter_ncv_score()` computes the normalised chromosome value, which
+searches for the denominator chromosome set that minimises control-group
+variance before computing the Z-score. This is more robust than the
+standard Z-score when the control group is small or the chromosomal
+fraction has high variance.
+
+``` r
+ncv21 <- nipter_ncv_score(test_sample, cg, chromo_focus = 21)
+ncv21$sample_ncv_score
+ncv21$denominators
+```
+
+`nipter_regression()` uses forward stepwise linear regression to predict
+the focus chromosome’s fraction from other chromosomes, then scores the
+residual. It builds multiple models with a train/test split and selects
+the CV (practical vs theoretical) that gives the more conservative
+estimate.
+
+``` r
+reg21 <- nipter_regression(test_sample, cg, chromo_focus = 21)
+reg21$models[[1]]$z_score
+reg21$models[[1]]$predictors
 ```
 
 ## SRA Metadata Helpers

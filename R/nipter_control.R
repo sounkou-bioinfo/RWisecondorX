@@ -337,53 +337,76 @@ nipter_control_group_from_beds <- function(bed_dir,
     on.exit(DBI::dbDisconnect(con, shutdown = TRUE), add = TRUE)
   }
 
-  # Register all files as a single multi-reader table.
-  # rduckhts_tabix_multi adds a `filename` column automatically.
-  tbl <- paste0(".nipter_cg_beds_", as.integer(proc.time()[[3L]] * 1e6))
-  Rduckhts::rduckhts_tabix_multi(con, tbl, files,
-                                 header_names = c("chrom", "start", "end",
-                                                  "count", "corrected_count"),
-                                 column_types = c("VARCHAR", "INTEGER",
-                                                  "INTEGER", "INTEGER",
-                                                  "DOUBLE"),
-                                 overwrite = TRUE)
-  on.exit(DBI::dbExecute(con, sprintf("DROP TABLE IF EXISTS %s", tbl)),
-          add = TRUE)
+  # Register all files as a single multi-reader DuckDB table.
+  # rduckhts_tabix_multi() builds UNION ALL BY NAME of per-file read_tabix()
+  # queries and adds a `filename` column identifying the source.  The tabix
+  # reader returns all data columns as VARCHAR (column0..column4 for a
+  # 5-column BED), so we must NOT pass column_types here — the "NA" strings
+  # written by write.table() would fail a DOUBLE cast.  Cast in the SELECT
+  # below with TRY_CAST, mirroring the pattern in bed_reader.R.
+  tbl <- paste0("nipter_cg_beds_", as.integer(proc.time()[[3L]] * 1e6))
+  Rduckhts::rduckhts_tabix_multi(con, tbl, files, overwrite = TRUE)
+  on.exit(
+    tryCatch(DBI::dbExecute(con, sprintf("DROP TABLE IF EXISTS \"%s\"", tbl)),
+             error = function(e) NULL),
+    add = TRUE
+  )
 
-  # Infer binsize
+  # Columns from read_tabix() without header_names: column0..column4 (VARCHAR).
+  # column0 = chrom, column1 = start, column2 = end,
+  # column3 = count, column4 = corrected_count ("NA" for uncorrected bins).
+  #
+  # Row order across files is non-deterministic (UNION ALL does not guarantee
+  # order). This is safe because matrix assignment uses position-indexed access:
+  #   auto_mat[chr_row, bin_idx[sel] + 1L] <- count
+  # Each bin_idx is derived from start_pos, not from the position of the row
+  # in the data frame. Inter-file row interleaving does not affect correctness.
+  rows <- DBI::dbGetQuery(con, sprintf(
+    'SELECT
+       filename,
+       column0                       AS chrom,
+       CAST(column1 AS INTEGER)      AS start_pos,
+       CAST(column2 AS INTEGER)      AS end_pos,
+       CAST(column3 AS INTEGER)      AS count,
+       TRY_CAST(column4 AS DOUBLE)   AS corrected_count
+     FROM "%s"', tbl
+  ))
+
+  if (nrow(rows) == 0L) {
+    stop("All BED files in '", bed_dir, "' appear to be empty.", call. = FALSE)
+  }
+
+  # Infer binsize from first row if not supplied
   if (is.null(binsize)) {
-    first <- DBI::dbGetQuery(con, sprintf(
-      "SELECT (end - start) AS bs FROM %s LIMIT 1", tbl
-    ))
-    binsize <- as.integer(first$bs[1L])
+    binsize <- as.integer(rows$end_pos[1L] - rows$start_pos[1L])
   }
   binsize <- as.integer(binsize)
 
-  # Pull all data with file path for sample-name derivation
-  rows <- DBI::dbGetQuery(con, sprintf(
-    "SELECT filename, chrom, start, end, count,
-            TRY_CAST(corrected_count AS DOUBLE) AS corrected_count
-     FROM %s", tbl
-  ))
-
-  # Derive sample name from file path (strip dir + extension)
+  # Derive sample name from file path (strip directory + extension)
   rows$sample_name <- sub("\\.bed(\\.gz)?$|\\.tsv(\\.bgz)?$", "",
                           basename(rows$filename), ignore.case = TRUE)
+
+  # Compute the global maximum bin index so all sample matrices share the same
+  # column width.  Narrower chromosomes are zero-padded on the right.
+  bin_idx_all <- as.integer(rows$start_pos / binsize)
+  n_bins_global <- max(bin_idx_all) + 1L
 
   sample_names <- unique(rows$sample_name)
   samples <- lapply(sample_names, function(nm) {
     sub_rows <- rows[rows$sample_name == nm, , drop = FALSE]
-    bed_to_nipter_sample_from_rows(sub_rows, nm, binsize)
+    .bed_rows_to_nipter_combined(sub_rows, nm, binsize, n_bins_global)
   })
 
   nipter_as_control_group(samples, description = description)
 }
 
 
-# Internal helper: build a NIPTeRSample from a data frame with columns
-# chrom, start, end, count, corrected_count (5-col CombinedStrands format).
-# Mirrors .bed_to_nipter_combined() but takes an already-fetched data frame.
-bed_to_nipter_sample_from_rows <- function(rows, name, binsize) {
+# Internal helper: build a NIPTeRSample from a data frame of rows already
+# fetched from the multi-reader table.
+# Columns: chrom, start_pos, end_pos, count, corrected_count (all typed).
+# n_bins_global: shared column width so all samples in a control group have
+#   identical matrix dimensions (narrower chromosomes are zero-padded).
+.bed_rows_to_nipter_combined <- function(rows, name, binsize, n_bins_global) {
   auto_keys  <- as.character(1:22)
   sex_labels <- c("X", "Y")
   sex_keys   <- c("23", "24")
@@ -392,8 +415,8 @@ bed_to_nipter_sample_from_rows <- function(rows, name, binsize) {
   chrom[chrom == "X" | chrom == "x"] <- "23"
   chrom[chrom == "Y" | chrom == "y"] <- "24"
 
-  bin_idx <- as.integer(rows$start / binsize)
-  n_bins  <- max(bin_idx) + 1L
+  bin_idx <- as.integer(rows$start_pos / binsize)
+  n_bins  <- n_bins_global
 
   col_names <- as.character(seq_len(n_bins))
 

@@ -74,7 +74,7 @@ nipter_gc_precompute <- function(fasta, binsize = 50000L, out, con = NULL) {
   write.table(df, tmp, sep = "\t", quote = FALSE, row.names = FALSE,
               col.names = FALSE, na = "NA")
 
-  Rduckhts::rduckhts_bgzip(con, tmp, out, override = TRUE)
+  Rduckhts::rduckhts_bgzip(con, tmp, out, overwrite = TRUE)
   Rduckhts::rduckhts_tabix_index(con, out, preset = "bed", threads = 1L)
 
   message("GC table written to ", out, " (", nrow(df), " bins)")

@@ -60,7 +60,8 @@ and circular binary segmentation (CBS).</p>
 <span>  blacklist <span class="op">=</span> <span class="cn">NULL</span>,</span>
 <span>  gender <span class="op">=</span> <span class="cn">NULL</span>,</span>
 <span>  seed <span class="op">=</span> <span class="cn">NULL</span>,</span>
-<span>  parallel <span class="op">=</span> <span class="cn">FALSE</span></span>
+<span>  parallel <span class="op">=</span> <span class="cn">TRUE</span>,</span>
+<span>  cpus <span class="op">=</span> <span class="fl">1L</span></span>
 <span><span class="op">)</span></span></code></pre></div>
     </div>
 
@@ -127,8 +128,14 @@ regions to mask.</p></dd>
 
 
 <dt id="arg-parallel">parallel<a class="anchor" aria-label="anchor" href="#arg-parallel"></a></dt>
-<dd><p>Logical; if <code>TRUE</code> and <code>ParDNAcopy</code> is available, use
-<code>parSegment()</code> for parallelized CBS. Default <code>FALSE</code>.</p></dd>
+<dd><p>Logical; use <code><a href="https://rdrr.io/pkg/ParDNAcopy/man/parSegment.html" class="external-link">ParDNAcopy::parSegment()</a></code> for CBS when
+available. Default <code>TRUE</code>. Falls back to <code><a href="https://rdrr.io/pkg/DNAcopy/man/segment.html" class="external-link">DNAcopy::segment()</a></code> with a
+message if ParDNAcopy is not installed.</p></dd>
+
+
+<dt id="arg-cpus">cpus<a class="anchor" aria-label="anchor" href="#arg-cpus"></a></dt>
+<dd><p>Integer; number of threads for parallel CBS (<code>parSegment</code>) and
+any other OpenMP-accelerated steps. Default <code>1L</code>.</p></dd>
 
 </dl></div>
     <div class="section level2">

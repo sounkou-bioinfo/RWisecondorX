@@ -24,12 +24,18 @@
   : Write NIPTeR-style bin counts to a bgzipped BED file
 - [`nipter_chi_correct()`](https://sounkou-bioinfo.github.io/RWisecondorX/reference/nipter_chi_correct.md)
   : Chi-squared correction for overdispersed bins
+- [`nipter_control_group_from_beds()`](https://sounkou-bioinfo.github.io/RWisecondorX/reference/nipter_control_group_from_beds.md)
+  : Load a NIPTeR control group from a directory of TSV.bgz files
 - [`nipter_diagnose_control_group()`](https://sounkou-bioinfo.github.io/RWisecondorX/reference/nipter_diagnose_control_group.md)
   : Diagnose a NIPTeR control group
 - [`nipter_gc_correct()`](https://sounkou-bioinfo.github.io/RWisecondorX/reference/nipter_gc_correct.md)
   : GC-correct a NIPTeR sample or control group
+- [`nipter_gc_precompute()`](https://sounkou-bioinfo.github.io/RWisecondorX/reference/nipter_gc_precompute.md)
+  : Pre-compute and save per-bin GC content to a TSV.bgz file
 - [`nipter_match_control_group()`](https://sounkou-bioinfo.github.io/RWisecondorX/reference/nipter_match_control_group.md)
   : Select best-matching controls for a sample
+- [`nipter_match_matrix()`](https://sounkou-bioinfo.github.io/RWisecondorX/reference/nipter_match_matrix.md)
+  : Compute the full pairwise SSD matrix for a control group
 - [`nipter_ncv_score()`](https://sounkou-bioinfo.github.io/RWisecondorX/reference/nipter_ncv_score.md)
   : Normalised Chromosome Value (NCV) score
 - [`nipter_predict_sex()`](https://sounkou-bioinfo.github.io/RWisecondorX/reference/nipter_predict_sex.md)

@@ -14,7 +14,8 @@ ratios. Exact port of upstream `CBS.R` logic.
   alpha,
   binsize,
   seed,
-  parallel = FALSE
+  parallel = TRUE,
+  cpus = 1L
 )
 ```
 
@@ -46,7 +47,13 @@ ratios. Exact port of upstream `CBS.R` logic.
 
 - parallel:
 
-  Logical; use ParDNAcopy if available.
+  Logical; use ParDNAcopy when available (default `TRUE`). Falls back to
+  DNAcopy::segment() if ParDNAcopy is not installed.
+
+- cpus:
+
+  Integer; number of threads passed to `parSegment()`. Only used when
+  `parallel = TRUE` and ParDNAcopy is available.
 
 ## Value
 

@@ -22,7 +22,8 @@ rwisecondorx_predict(
   blacklist = NULL,
   gender = NULL,
   seed = NULL,
-  parallel = FALSE
+  parallel = TRUE,
+  cpus = 1L
 )
 ```
 
@@ -88,8 +89,16 @@ rwisecondorx_predict(
 
 - parallel:
 
-  Logical; if `TRUE` and `ParDNAcopy` is available, use `parSegment()`
-  for parallelized CBS. Default `FALSE`.
+  Logical; use
+  [`ParDNAcopy::parSegment()`](https://rdrr.io/pkg/ParDNAcopy/man/parSegment.html)
+  for CBS when available. Default `TRUE`. Falls back to
+  [`DNAcopy::segment()`](https://rdrr.io/pkg/DNAcopy/man/segment.html)
+  with a message if ParDNAcopy is not installed.
+
+- cpus:
+
+  Integer; number of threads for parallel CBS (`parSegment`) and any
+  other OpenMP-accelerated steps. Default `1L`.
 
 ## Value
 

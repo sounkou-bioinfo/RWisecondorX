@@ -73,11 +73,11 @@
 <li>
 <code>R/nipter_regression.R</code> — <code><a href="reference/nipter_regression.html">nipter_regression()</a></code>: forward stepwise regression Z-score with train/test split, practical vs theoretical CV selection. Supports both CombinedStrands and SeparatedStrands. SeparatedStrands doubles the predictor pool (44 candidates: <code>"1F".."22F","1R".."22R"</code>) with complementary exclusion (selecting <code>"5F"</code> excludes both <code>"5F"</code> and <code>"5R"</code> from the same model).</li>
 <li>
-<code>R/nipter_sex.R</code> — <code><a href="reference/nipter_sex_model.html">nipter_sex_model()</a></code>: 2-component GMM sex prediction via <code><a href="https://mclust-org.github.io/mclust/reference/Mclust.html" class="external-link">mclust::Mclust()</a></code>, supporting <code>"y_fraction"</code> and <code>"xy_fraction"</code> methods. <code><a href="reference/nipter_predict_sex.html">nipter_predict_sex()</a></code>: classifies a sample as male/female using one or more models with majority-vote consensus. Internal <code>.mclust_fit()</code> wrapper evaluates in mclust namespace to work around <code>mclustBIC()</code> not being namespace-qualified in upstream mclust.</li>
+<code>R/nipter_sex.R</code> — <code><a href="reference/nipter_sex_model.html">nipter_sex_model()</a></code>: 2-component GMM sex prediction via <code><a href="https://mclust-org.github.io/mclust/reference/Mclust.html" class="external-link">mclust::Mclust()</a></code>, supporting <code>"y_fraction"</code> and <code>"xy_fraction"</code> methods. <code><a href="reference/nipter_sex_model_y_unique.html">nipter_sex_model_y_unique()</a></code>: 2-component GMM on Y-unique region read ratios (BAM-level, uses <code><a href="reference/nipter_y_unique_ratio.html">nipter_y_unique_ratio()</a></code>). <code><a href="reference/nipter_y_unique_ratio.html">nipter_y_unique_ratio()</a></code>: counts reads overlapping 7 Y-chromosome unique gene regions via DuckDB/duckhts index-based region queries and returns ratio to total nuclear reads. <code><a href="reference/nipter_predict_sex.html">nipter_predict_sex()</a></code>: classifies a sample as male/female using one or more models with majority-vote consensus; <code>y_unique_ratio</code> parameter enables the Y-unique model in the vote. Internal <code>.mclust_fit()</code> wrapper evaluates in mclust namespace to work around <code>mclustBIC()</code> not being namespace-qualified in upstream mclust.</li>
 <li>
 <code>inst/tinytest/test_nipter_stats.R</code> — 105 assertions covering all statistical functions including SeparatedStrands variants.</li>
 <li>
-<code>inst/tinytest/test_nipter_sex.R</code> — 26 assertions covering sex model building, classification accuracy, prediction, consensus, and edge cases.</li>
+<code>inst/tinytest/test_nipter_sex.R</code> — 45 assertions covering sex model building, Y-unique model, 3-model consensus, classification accuracy, prediction, and edge cases.</li>
 </ul></div>
 <div class="section level3">
 <h3 id="open-architectural-questions">Open architectural questions<a class="anchor" aria-label="anchor" href="#open-architectural-questions"></a></h3>
@@ -85,8 +85,6 @@
 <strong>Sex-stratified NCV for X/Y chromosomes</strong>: The user’s clinical pipeline computes sex-stratified NCV denominators for X and Y (separate models for males vs females). Not yet implemented.</li>
 <li>
 <strong>Sex-stratified regression for X/Y</strong>: Forward stepwise <code><a href="https://rdrr.io/r/stats/lm.html" class="external-link">lm()</a></code> models for X and Y fractions, stratified by predicted sex. Not yet implemented.</li>
-<li>
-<strong>Y-unique ratio model</strong>: The user’s pipeline uses <code>YUniqueRatioFiltered</code> from samtools idxstats as a third sex prediction feature. Would require an <code>idxstats</code>-like function in duckhts/Rduckhts.</li>
 <li>
 <strong>DNACopy replacement</strong>: the segmentation step in <code>wisecondorx_predict</code> uses DNACopy internally; evaluate whether to expose or replace it.</li>
 <li>
@@ -120,7 +118,7 @@
 <li>
 <code>inst/tinytest/</code> — unit tests (one file per feature family).</li>
 <li>
-<code>inst/extdata/</code> — synthetic BAM/CRAM fixtures.</li>
+<code>inst/extdata/</code> — synthetic BAM/CRAM fixtures and bundled reference data (<code>grch37_Y_UniqueRegions.txt</code>).</li>
 <li>The WisecondorX upstream algorithm reference is <code>../../duckhts/.sync/WisecondorX/</code>.</li>
 <li>The NIPTeR upstream algorithm reference is <code>../../duckhts/.sync/NIPTeR/</code>.</li>
 <li>The WisecondorX conformance script is <code>../../duckhts/scripts/wisecondorx_convert_conformance.py</code>.</li>

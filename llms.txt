@@ -357,6 +357,10 @@ roxygen2 comments, and `make fixtures` to rebuild the bundled test data.
   : Regression-based Z-score for trisomy prediction
 - [`nipter_sex_model()`](https://sounkou-bioinfo.github.io/RWisecondorX/reference/nipter_sex_model.md)
   : Build a sex prediction model from a NIPTeR control group
+- [`nipter_sex_model_y_unique()`](https://sounkou-bioinfo.github.io/RWisecondorX/reference/nipter_sex_model_y_unique.md)
+  : Build a sex prediction model from Y-unique ratios
+- [`nipter_y_unique_ratio()`](https://sounkou-bioinfo.github.io/RWisecondorX/reference/nipter_y_unique_ratio.md)
+  : Compute Y-unique region read ratio from a BAM file
 - [`nipter_z_score()`](https://sounkou-bioinfo.github.io/RWisecondorX/reference/nipter_z_score.md)
   : Chromosomal Z-score
 - [`sra_runinfo_url()`](https://sounkou-bioinfo.github.io/RWisecondorX/reference/sra_runinfo.md)

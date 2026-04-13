@@ -146,16 +146,24 @@ SeparatedStrands samples.
   2-component GMM sex prediction via
   [`mclust::Mclust()`](https://mclust-org.github.io/mclust/reference/Mclust.html),
   supporting `"y_fraction"` and `"xy_fraction"` methods.
+  [`nipter_sex_model_y_unique()`](https://sounkou-bioinfo.github.io/RWisecondorX/reference/nipter_sex_model_y_unique.md):
+  2-component GMM on Y-unique region read ratios (BAM-level, uses
+  [`nipter_y_unique_ratio()`](https://sounkou-bioinfo.github.io/RWisecondorX/reference/nipter_y_unique_ratio.md)).
+  [`nipter_y_unique_ratio()`](https://sounkou-bioinfo.github.io/RWisecondorX/reference/nipter_y_unique_ratio.md):
+  counts reads overlapping 7 Y-chromosome unique gene regions via
+  DuckDB/duckhts index-based region queries and returns ratio to total
+  nuclear reads.
   [`nipter_predict_sex()`](https://sounkou-bioinfo.github.io/RWisecondorX/reference/nipter_predict_sex.md):
   classifies a sample as male/female using one or more models with
-  majority-vote consensus. Internal `.mclust_fit()` wrapper evaluates in
-  mclust namespace to work around `mclustBIC()` not being
+  majority-vote consensus; `y_unique_ratio` parameter enables the
+  Y-unique model in the vote. Internal `.mclust_fit()` wrapper evaluates
+  in mclust namespace to work around `mclustBIC()` not being
   namespace-qualified in upstream mclust.
 - `inst/tinytest/test_nipter_stats.R` — 105 assertions covering all
   statistical functions including SeparatedStrands variants.
-- `inst/tinytest/test_nipter_sex.R` — 26 assertions covering sex model
-  building, classification accuracy, prediction, consensus, and edge
-  cases.
+- `inst/tinytest/test_nipter_sex.R` — 45 assertions covering sex model
+  building, Y-unique model, 3-model consensus, classification accuracy,
+  prediction, and edge cases.
 
 ### Open architectural questions
 
@@ -165,10 +173,6 @@ SeparatedStrands samples.
 - **Sex-stratified regression for X/Y**: Forward stepwise
   [`lm()`](https://rdrr.io/r/stats/lm.html) models for X and Y
   fractions, stratified by predicted sex. Not yet implemented.
-- **Y-unique ratio model**: The user’s pipeline uses
-  `YUniqueRatioFiltered` from samtools idxstats as a third sex
-  prediction feature. Would require an `idxstats`-like function in
-  duckhts/Rduckhts.
 - **DNACopy replacement**: the segmentation step in
   `wisecondorx_predict` uses DNACopy internally; evaluate whether to
   expose or replace it.
@@ -197,7 +201,8 @@ SeparatedStrands samples.
 - `R/npz.R` — NPZ output.
 - `R/aaa.R` — SRA metadata helpers.
 - `inst/tinytest/` — unit tests (one file per feature family).
-- `inst/extdata/` — synthetic BAM/CRAM fixtures.
+- `inst/extdata/` — synthetic BAM/CRAM fixtures and bundled reference
+  data (`grch37_Y_UniqueRegions.txt`).
 - The WisecondorX upstream algorithm reference is
   `../../duckhts/.sync/WisecondorX/`.
 - The NIPTeR upstream algorithm reference is

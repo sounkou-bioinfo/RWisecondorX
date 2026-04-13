@@ -44,7 +44,7 @@ determines the consensus call.</p>
 
     <div class="section level2">
     <h2 id="ref-usage">Usage<a class="anchor" aria-label="anchor" href="#ref-usage"></a></h2>
-    <div class="sourceCode"><pre class="sourceCode r"><code><span><span class="fu">nipter_predict_sex</span><span class="op">(</span><span class="va">sample</span>, <span class="va">...</span><span class="op">)</span></span></code></pre></div>
+    <div class="sourceCode"><pre class="sourceCode r"><code><span><span class="fu">nipter_predict_sex</span><span class="op">(</span><span class="va">sample</span>, <span class="va">...</span>, y_unique_ratio <span class="op">=</span> <span class="cn">NULL</span><span class="op">)</span></span></code></pre></div>
     </div>
 
     <div class="section level2">
@@ -58,6 +58,14 @@ determines the consensus call.</p>
 <dt id="arg--">...<a class="anchor" aria-label="anchor" href="#arg--"></a></dt>
 <dd><p>One or more <code>NIPTeRSexModel</code> objects, or a single list
 of models.</p></dd>
+
+
+<dt id="arg-y-unique-ratio">y_unique_ratio<a class="anchor" aria-label="anchor" href="#arg-y-unique-ratio"></a></dt>
+<dd><p>Optional numeric scalar; a pre-computed Y-unique
+ratio (from <code><a href="nipter_y_unique_ratio.html">nipter_y_unique_ratio</a></code>) for the sample. This
+is only used when one of the models has <code>method = "y_unique"</code>.
+If a <code>"y_unique"</code> model is present and this argument is
+<code>NULL</code>, that model is skipped with a warning.</p></dd>
 
 </dl></div>
     <div class="section level2">
@@ -85,6 +93,9 @@ when multiple models).</p></dd>
 classified using <code>predict(model$model, newdata = ...)</code>. The
 classification is mapped to <code>"male"</code>/<code>"female"</code> using the
 model's <code>male_cluster</code>.</p>
+<p>For <code>"y_unique"</code> models, the <code>y_unique_ratio</code> argument is
+used as the input feature instead of chromosome fractions derived from
+binned read counts.</p>
 <p>With multiple models, the consensus is the label that appears most
 frequently (majority vote). In case of a tie, <code>"female"</code> is
 returned (conservative default for NIPT, as false-male calls could mask
@@ -92,7 +103,8 @@ sex chromosome aneuploidies).</p>
     </div>
     <div class="section level2">
     <h2 id="see-also">See also<a class="anchor" aria-label="anchor" href="#see-also"></a></h2>
-    <div class="dont-index"><p><code><a href="nipter_sex_model.html">nipter_sex_model()</a></code></p></div>
+    <div class="dont-index"><p><code><a href="nipter_sex_model.html">nipter_sex_model()</a></code>, <code><a href="nipter_sex_model_y_unique.html">nipter_sex_model_y_unique()</a></code>,
+<code><a href="nipter_y_unique_ratio.html">nipter_y_unique_ratio()</a></code></p></div>
     </div>
 
     <div class="section level2">
@@ -102,8 +114,10 @@ sex chromosome aneuploidies).</p>
 <span class="r-in"><span><span class="va">pred</span> <span class="op">&lt;-</span> <span class="fu">nipter_predict_sex</span><span class="op">(</span><span class="va">test_sample</span>, <span class="va">sex_model</span><span class="op">)</span></span></span>
 <span class="r-in"><span><span class="va">pred</span><span class="op">$</span><span class="va">prediction</span></span></span>
 <span class="r-in"><span></span></span>
-<span class="r-in"><span><span class="co"># Consensus from two models (majority vote)</span></span></span>
-<span class="r-in"><span><span class="va">pred</span> <span class="op">&lt;-</span> <span class="fu">nipter_predict_sex</span><span class="op">(</span><span class="va">test_sample</span>, <span class="va">model_y</span>, <span class="va">model_xy</span><span class="op">)</span></span></span>
+<span class="r-in"><span><span class="co"># Consensus from three models (majority vote)</span></span></span>
+<span class="r-in"><span><span class="va">yr</span> <span class="op">&lt;-</span> <span class="fu"><a href="nipter_y_unique_ratio.html">nipter_y_unique_ratio</a></span><span class="op">(</span><span class="st">"sample.bam"</span><span class="op">)</span></span></span>
+<span class="r-in"><span><span class="va">pred</span> <span class="op">&lt;-</span> <span class="fu">nipter_predict_sex</span><span class="op">(</span><span class="va">test_sample</span>, <span class="va">model_y</span>, <span class="va">model_xy</span>, <span class="va">model_yu</span>,</span></span>
+<span class="r-in"><span>                           y_unique_ratio <span class="op">=</span> <span class="va">yr</span><span class="op">$</span><span class="va">ratio</span><span class="op">)</span></span></span>
 <span class="r-in"><span><span class="va">pred</span><span class="op">$</span><span class="va">prediction</span></span></span>
 <span class="r-in"><span><span class="op">}</span> <span class="co"># }</span></span></span>
 <span class="r-in"><span></span></span>

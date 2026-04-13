@@ -57,7 +57,7 @@
 <h3 id="completed">Completed<a class="anchor" aria-label="anchor" href="#completed"></a></h3>
 <p><strong>Shared binning engine — <code>R/convert.R</code></strong> - <code><a href="reference/bam_convert.html">bam_convert()</a></code>: DuckDB/SQL read-counting core. Supports <code>binsize</code>, <code>mapq</code>, <code>require_flags</code> (samtools <code>-f</code>), <code>exclude_flags</code> (samtools <code>-F</code>), <code>rmdup</code> (<code>"streaming"</code> / <code>"flag"</code> / <code>"none"</code>), <code>separate_strands</code> (returns list of forward/reverse data frames), CRAM via <code>reference</code>. Achieves exact bin-for-bin conformance with WisecondorX on HG00106.chrom11 (25,115 non-zero bins, 0 mismatches). - <code><a href="reference/bam_convert_bed.html">bam_convert_bed()</a></code>: bgzipped + tabix-indexed 4-column BED output (<code>chrom</code>, <code>start</code>, <code>end</code>, <code>count</code>). Uses <code><a href="https://rgenomicsetl.r-universe.dev/Rduckhts/reference/rduckhts_bgzip.html" class="external-link">Rduckhts::rduckhts_bgzip()</a></code> and <code>rduckhts_tabix_index()</code> — no external tools.</p>
 <p><strong>WisecondorX layer</strong> - <code>R/wisecondorx_cli.R</code>: <code><a href="reference/wisecondorx_convert.html">wisecondorx_convert()</a></code>, <code><a href="reference/wisecondorx_newref.html">wisecondorx_newref()</a></code>, <code><a href="reference/wisecondorx_predict.html">wisecondorx_predict()</a></code> — thin <code>condathis</code> wrappers delegating to the official bioconda package. - <code>R/npz.R</code>: <code><a href="reference/bam_convert_npz.html">bam_convert_npz()</a></code> — WisecondorX-compatible NPZ output via <code>reticulate</code>.</p>
-<p><strong>NIPTeR binning layer — <code>R/nipter_bin.R</code></strong> - <code><a href="reference/nipter_bin_bam.html">nipter_bin_bam()</a></code>: produces <code>NIPTeRSample</code> objects. With <code>separate_strands = FALSE</code> (default), class is <code>c("NIPTeRSample", "CombinedStrands")</code>; with <code>separate_strands = TRUE</code>, class is <code>c("NIPTeRSample", "SeparatedStrands")</code> with <code>autosomal_chromosome_reads</code> as a list of two matrices (forward/reverse, rownames <code>"1F".."22F"</code> / <code>"1R".."22R"</code>). Exposes <code>mapq</code>, <code>require_flags</code>, <code>exclude_flags</code>, <code>rmdup</code> for pre-filtering matching real-world NIPT pipelines (e.g. <code>mapq=40L, exclude_flags=1024L</code>). - <code><a href="reference/nipter_bin_bam_bed.html">nipter_bin_bam_bed()</a></code>: 5-column BED (<code>chrom</code>, <code>start</code>, <code>end</code>, <code>count</code>, <code>corrected_count</code>). <code>corrected_count</code> is <code>NA</code> until GC correction is ported; column is present so downstream tools can rely on the schema now.</p>
+<p><strong>NIPTeR binning layer — <code>R/nipter_bin.R</code></strong> - <code><a href="reference/nipter_bin_bam.html">nipter_bin_bam()</a></code>: produces <code>NIPTeRSample</code> objects. With <code>separate_strands = FALSE</code> (default), class is <code>c("NIPTeRSample", "CombinedStrands")</code>; with <code>separate_strands = TRUE</code>, class is <code>c("NIPTeRSample", "SeparatedStrands")</code> with <code>autosomal_chromosome_reads</code> as a list of two matrices (forward/reverse, rownames <code>"1F".."22F"</code> / <code>"1R".."22R"</code>). Exposes <code>mapq</code>, <code>require_flags</code>, <code>exclude_flags</code>, <code>rmdup</code> for pre-filtering matching real-world NIPT pipelines (e.g. <code>mapq=40L, exclude_flags=1024L</code>). - <code><a href="reference/nipter_bin_bam_bed.html">nipter_bin_bam_bed()</a></code>: BED output with <code>separate_strands</code> support. When <code>FALSE</code> (default): 5-column BED (<code>chrom</code>, <code>start</code>, <code>end</code>, <code>count</code>, <code>corrected_count</code>). When <code>TRUE</code>: 7-column BED adding <code>count_fwd</code> and <code>count_rev</code> columns.</p>
 <p><strong>Tests</strong> - <code>inst/tinytest/test_fixtures.R</code> (41 assertions): synthetic BAM/CRAM fixtures, all three <code>rmdup</code> modes, CRAM reference round-trip. - <code>inst/tinytest/test_nipter.R</code> (47 assertions): <code>NIPTeRSample</code> structure, matrix dimensions and rownames, MAPQ filter, <code>exclude_flags=1024</code> dedup, BED.gz output shape, optional bin-for-bin conformance against <code><a href="https://rdrr.io/pkg/NIPTeR/man/bin_bam_sample.html" class="external-link">NIPTeR::bin_bam_sample()</a></code> via <code>NIPTER_CONFORMANCE_BAM</code> env var. - <code>inst/tinytest/test_cli_args.R</code>: CLI argument builder unit tests. - <code>inst/tinytest/test_npz.R</code>: NPZ round-trip tests. - <code>inst/tinytest/test_integration.R</code>: WisecondorX bin-for-bin conformance via condathis. - <code>inst/tinytest/test_sra_metadata.R</code>: SRA URL helpers.</p>
 <p><strong>Infrastructure</strong> - <code>R/aaa.R</code>: SRA metadata helpers. - <code>scripts/make_fixtures.sh</code>: reproducible synthetic BAM/CRAM fixture generation. - <code>DESCRIPTION</code>: NIPTeR authors (Dirk de Weerd, Lennart Johansson) listed as <code>cph</code>. NIPTeR added to <code>Suggests</code>.</p>
 <p><strong>NIPTeR statistical layer</strong></p>
@@ -73,18 +73,24 @@
 <li>
 <code>R/nipter_regression.R</code> — <code><a href="reference/nipter_regression.html">nipter_regression()</a></code>: forward stepwise regression Z-score with train/test split, practical vs theoretical CV selection. Supports both CombinedStrands and SeparatedStrands. SeparatedStrands doubles the predictor pool (44 candidates: <code>"1F".."22F","1R".."22R"</code>) with complementary exclusion (selecting <code>"5F"</code> excludes both <code>"5F"</code> and <code>"5R"</code> from the same model).</li>
 <li>
+<code>R/nipter_sex.R</code> — <code><a href="reference/nipter_sex_model.html">nipter_sex_model()</a></code>: 2-component GMM sex prediction via <code><a href="https://mclust-org.github.io/mclust/reference/Mclust.html" class="external-link">mclust::Mclust()</a></code>, supporting <code>"y_fraction"</code> and <code>"xy_fraction"</code> methods. <code><a href="reference/nipter_predict_sex.html">nipter_predict_sex()</a></code>: classifies a sample as male/female using one or more models with majority-vote consensus. Internal <code>.mclust_fit()</code> wrapper evaluates in mclust namespace to work around <code>mclustBIC()</code> not being namespace-qualified in upstream mclust.</li>
+<li>
 <code>inst/tinytest/test_nipter_stats.R</code> — 105 assertions covering all statistical functions including SeparatedStrands variants.</li>
+<li>
+<code>inst/tinytest/test_nipter_sex.R</code> — 26 assertions covering sex model building, classification accuracy, prediction, consensus, and edge cases.</li>
 </ul></div>
 <div class="section level3">
 <h3 id="open-architectural-questions">Open architectural questions<a class="anchor" aria-label="anchor" href="#open-architectural-questions"></a></h3>
 <ul><li>
-<strong>Gender/sex prediction</strong>: WisecondorX uses <code>sklearn.GaussianMixture</code> on Y-read fractions; NIPTeR has no gender prediction. Investigate native R gender prediction using <code>mclust::Mclust()</code> as the R equivalent.</li>
+<strong>Sex-stratified NCV for X/Y chromosomes</strong>: The user’s clinical pipeline computes sex-stratified NCV denominators for X and Y (separate models for males vs females). Not yet implemented.</li>
+<li>
+<strong>Sex-stratified regression for X/Y</strong>: Forward stepwise <code><a href="https://rdrr.io/r/stats/lm.html" class="external-link">lm()</a></code> models for X and Y fractions, stratified by predicted sex. Not yet implemented.</li>
+<li>
+<strong>Y-unique ratio model</strong>: The user’s pipeline uses <code>YUniqueRatioFiltered</code> from samtools idxstats as a third sex prediction feature. Would require an <code>idxstats</code>-like function in duckhts/Rduckhts.</li>
 <li>
 <strong>DNACopy replacement</strong>: the segmentation step in <code>wisecondorx_predict</code> uses DNACopy internally; evaluate whether to expose or replace it.</li>
 <li>
 <strong>Multi-chromosome NIPTeR conformance fixture</strong>: <code>make fixtures</code> currently produces a chr11-only BAM. A multi-chromosome synthetic BAM (all 24 chroms, no unmapped reads, no same-position collisions) would allow <code>NIPTER_CONFORMANCE_BAM</code> to be populated automatically in CI without a real patient BAM.</li>
-<li>
-<strong><code><a href="reference/nipter_bin_bam_bed.html">nipter_bin_bam_bed()</a></code> SeparatedStrands output</strong>: currently flattens to CombinedStrands for BED output. May need updating if stranded BED output is desired.</li>
 </ul><hr></div>
 </div>
 <div class="section level2">
@@ -104,6 +110,8 @@
 <li>
 <code>R/nipter_regression.R</code> — forward stepwise regression Z-score.</li>
 <li>
+<code>R/nipter_sex.R</code> — sex prediction via Gaussian mixture models (mclust).</li>
+<li>
 <code>R/wisecondorx_cli.R</code> — CLI wrappers.</li>
 <li>
 <code>R/npz.R</code> — NPZ output.</li>
@@ -122,7 +130,8 @@
 <h2 id="interoperable-file-formats">Interoperable File Formats<a class="anchor" aria-label="anchor" href="#interoperable-file-formats"></a></h2>
 <p>The BED.gz format is the language-agnostic handoff between binning and downstream analysis:</p>
 <ul><li>4-column WisecondorX BED: <code>chrom</code>, <code>start</code>, <code>end</code>, <code>count</code> (written by <code><a href="reference/bam_convert_bed.html">bam_convert_bed()</a></code>).</li>
-<li>5-column NIPTeR BED: <code>chrom</code>, <code>start</code>, <code>end</code>, <code>count</code>, <code>corrected_count</code> (written by <code><a href="reference/nipter_bin_bam_bed.html">nipter_bin_bam_bed()</a></code>).</li>
+<li>5-column NIPTeR BED (CombinedStrands): <code>chrom</code>, <code>start</code>, <code>end</code>, <code>count</code>, <code>corrected_count</code> (written by <code><a href="reference/nipter_bin_bam_bed.html">nipter_bin_bam_bed()</a></code>).</li>
+<li>7-column NIPTeR BED (SeparatedStrands): <code>chrom</code>, <code>start</code>, <code>end</code>, <code>count</code>, <code>count_fwd</code>, <code>count_rev</code>, <code>corrected_count</code> (written by <code>nipter_bin_bam_bed(separate_strands = TRUE)</code>).</li>
 <li>Coordinates are 0-based half-open intervals (BED convention). Chromosomes use no <code>chr</code> prefix.</li>
 <li>All files are bgzipped (BGZF) and tabix-indexed via <code><a href="https://rgenomicsetl.r-universe.dev/Rduckhts/reference/rduckhts_bgzip.html" class="external-link">Rduckhts::rduckhts_bgzip()</a></code> and <code><a href="https://rgenomicsetl.r-universe.dev/Rduckhts/reference/rduckhts_tabix_index.html" class="external-link">Rduckhts::rduckhts_tabix_index()</a></code>. Do not use <code><a href="https://rdrr.io/r/base/connections.html" class="external-link">gzfile()</a></code> or external tools.</li>
 </ul><hr></div>

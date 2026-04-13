@@ -24,8 +24,12 @@
   : Select best-matching controls for a sample
 - [`nipter_ncv_score()`](https://sounkou-bioinfo.github.io/RWisecondorX/reference/nipter_ncv_score.md)
   : Normalised Chromosome Value (NCV) score
+- [`nipter_predict_sex()`](https://sounkou-bioinfo.github.io/RWisecondorX/reference/nipter_predict_sex.md)
+  : Predict fetal sex for a NIPTeR sample
 - [`nipter_regression()`](https://sounkou-bioinfo.github.io/RWisecondorX/reference/nipter_regression.md)
   : Regression-based Z-score for trisomy prediction
+- [`nipter_sex_model()`](https://sounkou-bioinfo.github.io/RWisecondorX/reference/nipter_sex_model.md)
+  : Build a sex prediction model from a NIPTeR control group
 - [`nipter_z_score()`](https://sounkou-bioinfo.github.io/RWisecondorX/reference/nipter_z_score.md)
   : Chromosomal Z-score
 - [`sra_runinfo_url()`](https://sounkou-bioinfo.github.io/RWisecondorX/reference/sra_runinfo.md)

@@ -34,6 +34,18 @@
     <div class="section level2">
 <h2 class="pkg-version" data-toc-text="development version" id="rwisecondorx-development-version">RWisecondorX (development version)<a class="anchor" aria-label="anchor" href="#rwisecondorx-development-version"></a></h2>
 <div class="section level3">
+<h3 id="sex-prediction-via-gaussian-mixture-models-development-version">Sex prediction via Gaussian mixture models<a class="anchor" aria-label="anchor" href="#sex-prediction-via-gaussian-mixture-models-development-version"></a></h3>
+<ul><li><p>New <code><a href="../reference/nipter_sex_model.html">nipter_sex_model()</a></code> fits a 2-component GMM on sex chromosome fractions from a <code>NIPTeRControlGroup</code> using <code><a href="https://mclust-org.github.io/mclust/reference/Mclust.html" class="external-link">mclust::Mclust()</a></code>. Supports <code>"y_fraction"</code> (univariate on Y-chromosome fraction) and <code>"xy_fraction"</code> (bivariate on X + Y fractions) methods. The male cluster is identified as the component with higher median Y fraction.</p></li>
+<li><p>New <code><a href="../reference/nipter_predict_sex.html">nipter_predict_sex()</a></code> classifies a <code>NIPTeRSample</code> as male or female given one or more <code>NIPTeRSexModel</code> objects. Multiple models use majority vote consensus (tie defaults to “female” — conservative for NIPT).</p></li>
+<li><p><code>mclust</code> added to <code>Suggests</code> in DESCRIPTION.</p></li>
+</ul></div>
+<div class="section level3">
+<h3 id="nipter_bin_bam_bed-separatedstrands-output-development-version">
+<code>nipter_bin_bam_bed()</code> SeparatedStrands output<a class="anchor" aria-label="anchor" href="#nipter_bin_bam_bed-separatedstrands-output-development-version"></a></h3>
+<ul><li>
+<code><a href="../reference/nipter_bin_bam_bed.html">nipter_bin_bam_bed()</a></code> gains a <code>separate_strands</code> parameter. When <code>TRUE</code>, outputs a 7-column BED (<code>chrom</code>, <code>start</code>, <code>end</code>, <code>count</code>, <code>count_fwd</code>, <code>count_rev</code>, <code>corrected_count</code>) where <code>count = count_fwd + count_rev</code>. When <code>FALSE</code> (default), the 5-column BED format is unchanged.</li>
+</ul></div>
+<div class="section level3">
 <h3 id="separatedstrands-support-development-version">SeparatedStrands support<a class="anchor" aria-label="anchor" href="#separatedstrands-support-development-version"></a></h3>
 <ul><li><p><code><a href="../reference/bam_convert.html">bam_convert()</a></code> gains a <code>separate_strands</code> parameter. When <code>TRUE</code>, returns a list with <code>fwd</code> (forward strand) and <code>rev</code> (reverse strand) data frames.</p></li>
 <li><p><code><a href="../reference/nipter_bin_bam.html">nipter_bin_bam()</a></code> gains <code>separate_strands = TRUE</code> support, producing <code>NIPTeRSample</code> objects with class <code>c("NIPTeRSample", "SeparatedStrands")</code>. Autosomal chromosome reads are stored as a list of two matrices (forward and reverse) with rownames <code>"1F".."22F"</code> and <code>"1R".."22R"</code>.</p></li>

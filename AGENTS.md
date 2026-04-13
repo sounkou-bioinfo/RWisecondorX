@@ -68,9 +68,9 @@ rownames `"1F".."22F"` / `"1R".."22R"`). Exposes `mapq`,
 `require_flags`, `exclude_flags`, `rmdup` for pre-filtering matching
 real-world NIPT pipelines (e.g. `mapq=40L, exclude_flags=1024L`). -
 [`nipter_bin_bam_bed()`](https://sounkou-bioinfo.github.io/RWisecondorX/reference/nipter_bin_bam_bed.md):
-5-column BED (`chrom`, `start`, `end`, `count`, `corrected_count`).
-`corrected_count` is `NA` until GC correction is ported; column is
-present so downstream tools can rely on the schema now.
+BED output with `separate_strands` support. When `FALSE` (default):
+5-column BED (`chrom`, `start`, `end`, `count`, `corrected_count`). When
+`TRUE`: 7-column BED adding `count_fwd` and `count_rev` columns.
 
 **Tests** - `inst/tinytest/test_fixtures.R` (41 assertions): synthetic
 BAM/CRAM fixtures, all three `rmdup` modes, CRAM reference round-trip. -
@@ -141,15 +141,34 @@ SeparatedStrands samples.
   candidates: `"1F".."22F","1R".."22R"`) with complementary exclusion
   (selecting `"5F"` excludes both `"5F"` and `"5R"` from the same
   model).
+- `R/nipter_sex.R` —
+  [`nipter_sex_model()`](https://sounkou-bioinfo.github.io/RWisecondorX/reference/nipter_sex_model.md):
+  2-component GMM sex prediction via
+  [`mclust::Mclust()`](https://mclust-org.github.io/mclust/reference/Mclust.html),
+  supporting `"y_fraction"` and `"xy_fraction"` methods.
+  [`nipter_predict_sex()`](https://sounkou-bioinfo.github.io/RWisecondorX/reference/nipter_predict_sex.md):
+  classifies a sample as male/female using one or more models with
+  majority-vote consensus. Internal `.mclust_fit()` wrapper evaluates in
+  mclust namespace to work around `mclustBIC()` not being
+  namespace-qualified in upstream mclust.
 - `inst/tinytest/test_nipter_stats.R` — 105 assertions covering all
   statistical functions including SeparatedStrands variants.
+- `inst/tinytest/test_nipter_sex.R` — 26 assertions covering sex model
+  building, classification accuracy, prediction, consensus, and edge
+  cases.
 
 ### Open architectural questions
 
-- **Gender/sex prediction**: WisecondorX uses `sklearn.GaussianMixture`
-  on Y-read fractions; NIPTeR has no gender prediction. Investigate
-  native R gender prediction using `mclust::Mclust()` as the R
-  equivalent.
+- **Sex-stratified NCV for X/Y chromosomes**: The user’s clinical
+  pipeline computes sex-stratified NCV denominators for X and Y
+  (separate models for males vs females). Not yet implemented.
+- **Sex-stratified regression for X/Y**: Forward stepwise
+  [`lm()`](https://rdrr.io/r/stats/lm.html) models for X and Y
+  fractions, stratified by predicted sex. Not yet implemented.
+- **Y-unique ratio model**: The user’s pipeline uses
+  `YUniqueRatioFiltered` from samtools idxstats as a third sex
+  prediction feature. Would require an `idxstats`-like function in
+  duckhts/Rduckhts.
 - **DNACopy replacement**: the segmentation step in
   `wisecondorx_predict` uses DNACopy internally; evaluate whether to
   expose or replace it.
@@ -158,9 +177,6 @@ SeparatedStrands samples.
   (all 24 chroms, no unmapped reads, no same-position collisions) would
   allow `NIPTER_CONFORMANCE_BAM` to be populated automatically in CI
   without a real patient BAM.
-- **[`nipter_bin_bam_bed()`](https://sounkou-bioinfo.github.io/RWisecondorX/reference/nipter_bin_bam_bed.md)
-  SeparatedStrands output**: currently flattens to CombinedStrands for
-  BED output. May need updating if stranded BED output is desired.
 
 ------------------------------------------------------------------------
 
@@ -175,6 +191,8 @@ SeparatedStrands samples.
 - `R/nipter_control.R` — control group construction, diagnostics, and
   matching.
 - `R/nipter_regression.R` — forward stepwise regression Z-score.
+- `R/nipter_sex.R` — sex prediction via Gaussian mixture models
+  (mclust).
 - `R/wisecondorx_cli.R` — CLI wrappers.
 - `R/npz.R` — NPZ output.
 - `R/aaa.R` — SRA metadata helpers.
@@ -197,9 +215,12 @@ downstream analysis:
 
 - 4-column WisecondorX BED: `chrom`, `start`, `end`, `count` (written by
   [`bam_convert_bed()`](https://sounkou-bioinfo.github.io/RWisecondorX/reference/bam_convert_bed.md)).
-- 5-column NIPTeR BED: `chrom`, `start`, `end`, `count`,
-  `corrected_count` (written by
+- 5-column NIPTeR BED (CombinedStrands): `chrom`, `start`, `end`,
+  `count`, `corrected_count` (written by
   [`nipter_bin_bam_bed()`](https://sounkou-bioinfo.github.io/RWisecondorX/reference/nipter_bin_bam_bed.md)).
+- 7-column NIPTeR BED (SeparatedStrands): `chrom`, `start`, `end`,
+  `count`, `count_fwd`, `count_rev`, `corrected_count` (written by
+  `nipter_bin_bam_bed(separate_strands = TRUE)`).
 - Coordinates are 0-based half-open intervals (BED convention).
   Chromosomes use no `chr` prefix.
 - All files are bgzipped (BGZF) and tabix-indexed via

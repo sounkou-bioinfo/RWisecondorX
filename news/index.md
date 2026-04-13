@@ -2,6 +2,33 @@
 
 ## RWisecondorX (development version)
 
+### Sex prediction via Gaussian mixture models
+
+- New
+  [`nipter_sex_model()`](https://sounkou-bioinfo.github.io/RWisecondorX/reference/nipter_sex_model.md)
+  fits a 2-component GMM on sex chromosome fractions from a
+  `NIPTeRControlGroup` using
+  [`mclust::Mclust()`](https://mclust-org.github.io/mclust/reference/Mclust.html).
+  Supports `"y_fraction"` (univariate on Y-chromosome fraction) and
+  `"xy_fraction"` (bivariate on X + Y fractions) methods. The male
+  cluster is identified as the component with higher median Y fraction.
+
+- New
+  [`nipter_predict_sex()`](https://sounkou-bioinfo.github.io/RWisecondorX/reference/nipter_predict_sex.md)
+  classifies a `NIPTeRSample` as male or female given one or more
+  `NIPTeRSexModel` objects. Multiple models use majority vote consensus
+  (tie defaults to “female” — conservative for NIPT).
+
+- `mclust` added to `Suggests` in DESCRIPTION.
+
+### `nipter_bin_bam_bed()` SeparatedStrands output
+
+- [`nipter_bin_bam_bed()`](https://sounkou-bioinfo.github.io/RWisecondorX/reference/nipter_bin_bam_bed.md)
+  gains a `separate_strands` parameter. When `TRUE`, outputs a 7-column
+  BED (`chrom`, `start`, `end`, `count`, `count_fwd`, `count_rev`,
+  `corrected_count`) where `count = count_fwd + count_rev`. When `FALSE`
+  (default), the 5-column BED format is unchanged.
+
 ### SeparatedStrands support
 
 - [`bam_convert()`](https://sounkou-bioinfo.github.io/RWisecondorX/reference/bam_convert.md)

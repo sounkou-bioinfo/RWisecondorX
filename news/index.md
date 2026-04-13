@@ -2,6 +2,143 @@
 
 ## RWisecondorX (development version)
 
+### Native WisecondorX implementation
+
+- New
+  [`rwisecondorx_newref()`](https://sounkou-bioinfo.github.io/RWisecondorX/reference/rwisecondorx_newref.md)
+  — pure-R/Rcpp implementation of the WisecondorX `newref` pipeline.
+  Takes a list of binned samples (from
+  [`bam_convert()`](https://sounkou-bioinfo.github.io/RWisecondorX/reference/bam_convert.md))
+  and builds a PCA-based reference: gender model training (2-component
+  GMM on Y-fractions), global bin masking, per-partition
+  normalize/PCA/filter/KNN reference building, and null ratio
+  computation. Supports NIPT mode, custom Y-fraction cutoff, and
+  multi-threaded KNN via OpenMP.
+
+- New
+  [`rwisecondorx_predict()`](https://sounkou-bioinfo.github.io/RWisecondorX/reference/rwisecondorx_predict.md)
+  — pure-R implementation of the WisecondorX `predict` pipeline.
+  Coverage normalization, PCA projection, iterative within-sample
+  normalization with aberration masking, gonosomal normalization, result
+  inflation, log-transformation, optional blacklist masking, CBS
+  segmentation (via DNAcopy or ParDNAcopy), segment Z-scoring, and
+  aberration calling. Supports both Z-score and beta/ratio calling
+  modes.
+
+- New `rwisecondorx_write_bins_bed()`,
+  `rwisecondorx_write_segments_bed()`,
+  `rwisecondorx_write_aberrations_bed()`, and
+  `rwisecondorx_write_statistics()` for writing prediction results to
+  BED and statistics files.
+
+- New
+  [`scale_sample()`](https://sounkou-bioinfo.github.io/RWisecondorX/reference/scale_sample.md)
+  for rescaling binned samples between different bin sizes (e.g. 5kb →
+  100kb).
+
+- `R/rwisecondorx_utils.R` — shared utilities including
+  [`.train_gender_model()`](https://sounkou-bioinfo.github.io/RWisecondorX/reference/dot-train_gender_model.md)
+  (with mclust NULL fallback for zero-variance Y-fractions in all-female
+  cohorts),
+  [`.gender_correct()`](https://sounkou-bioinfo.github.io/RWisecondorX/reference/dot-gender_correct.md),
+  [`.get_mask()`](https://sounkou-bioinfo.github.io/RWisecondorX/reference/dot-get_mask.md),
+  [`.normalize_and_mask()`](https://sounkou-bioinfo.github.io/RWisecondorX/reference/dot-normalize_and_mask.md),
+  [`.train_pca()`](https://sounkou-bioinfo.github.io/RWisecondorX/reference/dot-train_pca.md),
+  [`.project_pc()`](https://sounkou-bioinfo.github.io/RWisecondorX/reference/dot-project_pc.md),
+  [`.predict_gender()`](https://sounkou-bioinfo.github.io/RWisecondorX/reference/dot-predict_gender.md).
+
+- `R/rwisecondorx_cbs.R` —
+  [`.exec_cbs()`](https://sounkou-bioinfo.github.io/RWisecondorX/reference/dot-exec_cbs.md)
+  wrapper around DNAcopy’s `segment()` with the upstream WisecondorX
+  conventions (0→NA, 0 weights→1e-99, split segments at large NA gaps,
+  recalculate weighted means). Supports ParDNAcopy for parallel
+  segmentation.
+
+### Rcpp acceleration for KNN reference building
+
+- New `src/knn_reference.cpp` implementing `knn_reference_cpp()` and
+  `null_ratios_cpp()` in C++ with OpenMP parallelization. Replaces the
+  O(n_bins² × n_samples) pure-R double for-loop with compiled code. The
+  KNN reference-finding step that previously took minutes now completes
+  in seconds.
+
+- `Rcpp` added to `Imports` and `LinkingTo` in DESCRIPTION. OpenMP flags
+  in `src/Makevars` and `src/Makevars.win`.
+
+### Fix: KNN index semantics in predict normalization
+
+- Fixed a correctness bug in
+  [`.normalize_once()`](https://sounkou-bioinfo.github.io/RWisecondorX/reference/dot-normalize_once.md)
+  where global KNN indexes (stored by `knn_reference_cpp()`) were used
+  directly to index into `chr_data`, the leave-one-chromosome-out
+  subset. Global index `g` is now correctly mapped to local space: `g`
+  if before the excluded chromosome, `g - n_chr` if after. This bug
+  caused reference bins to be looked up at wrong positions during
+  within-sample normalization.
+
+- Note: upstream WisecondorX has the inverse issue — it stores LOCAL
+  indexes during `newref` but uses them as GLOBAL indexes in the
+  `null_ratio` computation. Our implementation stores GLOBAL indexes and
+  now correctly handles both predict (local conversion) and null_ratio
+  (global direct use).
+
+### Fix: null ratio column count mismatch
+
+- Fixed
+  [`rwisecondorx_predict()`](https://sounkou-bioinfo.github.io/RWisecondorX/reference/rwisecondorx_predict.md)
+  crash when the autosomal sub-reference (“A”) and gonosomal
+  sub-reference (“F”) have different numbers of null-ratio columns (due
+  to different sample counts per partition). Both are now truncated to
+  `min(ncol(aut), ncol(gon))` before
+  [`rbind()`](https://rdrr.io/r/base/cbind.html).
+
+### Fix: mclust GMM on zero-variance Y-fractions
+
+- [`.train_gender_model()`](https://sounkou-bioinfo.github.io/RWisecondorX/reference/dot-train_gender_model.md)
+  now handles the case where all female samples have exactly 0.0
+  Y-fraction (no Y reads). `mclust::Mclust(..., G=2)` returns `NULL` in
+  this scenario; the fix falls back to a gap-based cutoff:
+  `min(nonzero_y_fractions) / 2`.
+
+### Synthetic cohort generator
+
+- New
+  [`generate_cohort()`](https://sounkou-bioinfo.github.io/RWisecondorX/reference/generate_cohort.md)
+  creates synthetic BAM files for testing using “compressed” chromosome
+  lengths (100bp per bin instead of 100kb). Produces identical bin COUNT
+  structure to GRCh37 at 100kb resolution with ~435KB BAMs. Supports
+  injecting trisomy signal (extra reads on target chromosome).
+
+- New `COMPRESSED_BINSIZE` constant (100L) exported for use with
+  `bam_convert(binsize = COMPRESSED_BINSIZE)`.
+
+- `inst/scripts/make_cohort.R` — CLI wrapper for cohort generation.
+
+### Test infrastructure cleanup
+
+- All test files now use
+  [`library(RWisecondorX)`](https://sounkou-bioinfo.github.io/RWisecondorX/)
+  instead of [`source()`](https://rdrr.io/r/base/source.html) hacks to
+  load R code directly. This is required because functions call compiled
+  C++ code (`knn_reference_cpp`, `null_ratios_cpp`) which is only
+  available in an installed package.
+
+- Fixed `tinytest` assertion: `expect_message(..., pattern = NA)` does
+  NOT mean “expect no messages” — it fails if no message is emitted.
+  Replaced with `expect_silent()`.
+
+- New `inst/tinytest/test_rwisecondorx.R` — 76 assertions covering
+  reference building (gender model, masking, PCA, KNN indexes, null
+  ratios), prediction (normalization, CBS, aberration calling), and
+  trisomy detection sensitivity.
+
+- New `inst/tinytest/test_cohort_pipeline.R` — 31 assertions for
+  end-to-end pipeline: cohort generation → binning → reference building
+  → prediction → trisomy detection. Tests that trisomy 21, 18, and 13
+  are detected as gains and euploid samples produce no aberrations.
+
+- Total test count: 345 assertions, all passing.
+
 ### Y-unique region ratio for sex prediction
 
 - New

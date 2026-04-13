@@ -2,12 +2,16 @@
 
 ## All functions
 
+- [`COMPRESSED_BINSIZE`](https://sounkou-bioinfo.github.io/RWisecondorX/reference/COMPRESSED_BINSIZE.md)
+  : Compressed bin size for synthetic cohort BAMs
 - [`bam_convert()`](https://sounkou-bioinfo.github.io/RWisecondorX/reference/bam_convert.md)
   : Count reads per bin from a BAM or CRAM file
 - [`bam_convert_bed()`](https://sounkou-bioinfo.github.io/RWisecondorX/reference/bam_convert_bed.md)
   : Convert BAM/CRAM to a bgzipped BED bin-count file
 - [`bam_convert_npz()`](https://sounkou-bioinfo.github.io/RWisecondorX/reference/bam_convert_npz.md)
   : Convert BAM/CRAM to WisecondorX NPZ format
+- [`generate_cohort()`](https://sounkou-bioinfo.github.io/RWisecondorX/reference/generate_cohort.md)
+  : Generate a synthetic BAM cohort for testing
 - [`nipter_as_control_group()`](https://sounkou-bioinfo.github.io/RWisecondorX/reference/nipter_as_control_group.md)
   : Build a NIPTeR control group from a list of binned samples
 - [`nipter_bin_bam()`](https://sounkou-bioinfo.github.io/RWisecondorX/reference/nipter_bin_bam.md)
@@ -36,6 +40,12 @@
   : Compute Y-unique region read ratio from a BAM file
 - [`nipter_z_score()`](https://sounkou-bioinfo.github.io/RWisecondorX/reference/nipter_z_score.md)
   : Chromosomal Z-score
+- [`rwisecondorx_newref()`](https://sounkou-bioinfo.github.io/RWisecondorX/reference/rwisecondorx_newref.md)
+  : Build a WisecondorX reference from binned samples
+- [`rwisecondorx_predict()`](https://sounkou-bioinfo.github.io/RWisecondorX/reference/rwisecondorx_predict.md)
+  : Predict copy number aberrations using WisecondorX
+- [`scale_sample()`](https://sounkou-bioinfo.github.io/RWisecondorX/reference/scale_sample.md)
+  : Scale a binned sample to a new bin size
 - [`sra_runinfo_url()`](https://sounkou-bioinfo.github.io/RWisecondorX/reference/sra_runinfo.md)
   [`download_sra_runinfo()`](https://sounkou-bioinfo.github.io/RWisecondorX/reference/sra_runinfo.md)
   [`read_sra_runinfo()`](https://sounkou-bioinfo.github.io/RWisecondorX/reference/sra_runinfo.md)
@@ -46,3 +56,5 @@
   : Build a WisecondorX reference panel
 - [`wisecondorx_predict()`](https://sounkou-bioinfo.github.io/RWisecondorX/reference/wisecondorx_predict.md)
   : Predict copy-number aberrations with WisecondorX
+- [`write_wisecondorx_output()`](https://sounkou-bioinfo.github.io/RWisecondorX/reference/write_wisecondorx_output.md)
+  : Write prediction output files

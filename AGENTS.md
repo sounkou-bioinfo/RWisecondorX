@@ -91,6 +91,33 @@ The NIPTeR port follows the same rewrites.bio principles as the WisecondorX port
 - `NIPTeRSample` objects use the same list structure as NIPTeR's `NIPTSample` (`autosomal_chromosome_reads`, `sex_chromosome_reads`, correction status fields, `sample_name`).
 - Strand separation (`separate_strands = TRUE`) is stubbed with an informative error; it requires a forward/reverse SQL split and will be added with the regression layer.
 
+### Known issues in NIPTeR's scanBam approach
+
+Two bugs in the original `bin_bam_sample()` affect conformance testing and real-world correctness:
+
+**1. Split length mismatch on BAMs with unmapped reads.**
+```r
+# NIPTeR source — bin_sample.R
+splitted_reads <- split(x = reads, f = droplevels(strands[strands != "*"]))
+```
+`strands[strands != "*"]` drops unmapped-read entries, producing a factor of length `N − U` (U = unmapped reads). But `reads` is not subsetted and has length `N`. R's `split()` requires `length(f) == length(x)`, so this silently misbehaves or errors on any BAM that contains unmapped reads. In practice NIPTeR users pre-filter with `samtools view -F 4` before calling `bin_bam_sample()`, making the bug latent.
+
+**2. Implicit positional deduplication via `unique()`.**
+```r
+# NIPTeR source — bin_sample.R / bin_reads()
+reads <- sapply(X = unique(reads_data_frame[min_read:max_read]),
+                FUN = getbins, bin_size = bin_size)
+bins <- tabulate(reads, nbins = n_bins)
+```
+`unique()` is applied to positions *per chromosome per strand* before bin assignment. This means two reads sharing the same start position are counted once, not twice — an implicit, flag-ignorant deduplication. The resulting bin counts are unique-start-position counts, not read counts. This is not equivalent to `-F 1024` (SAM duplicate flag) deduplication: a PCR duplicate at a unique position survives, while two distinct reads at the same position are silently merged.
+
+**Consequence for conformance testing.**
+Exact bin-for-bin match between our output and NIPTeR is only achievable on BAMs where:
+- No unmapped reads are present (avoids bug 1), and
+- No two reads share the same start position on the same chromosome+strand (avoids the `unique()` discrepancy with `rmdup = "none"`).
+
+The `NIPTER_CONFORMANCE_BAM` env var should point to a coordinate-sorted, pre-filtered BAM (e.g. `samtools view -F 4 -b in.bam`) for reliable conformance runs. Our `rmdup = "none"` mode is the closest analogue to NIPTeR's default, but counts each read independently rather than unique positions.
+
 ## Agent Working Instructions
 
 Always read the existing implementation before changing it:

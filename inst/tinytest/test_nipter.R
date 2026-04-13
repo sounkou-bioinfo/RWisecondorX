@@ -130,10 +130,25 @@ expect_identical(lengths(strsplit(lines, "\t")), rep(5L, 5L),
 # ---------------------------------------------------------------------------
 # Conformance against NIPTeR::bin_bam_sample()
 #
-# NIPTeR's bin_bam_sample() requires a coordinate-sorted BAM with reads
-# spanning chr1-22, X, Y in header order.  The bundled chr11-only fixture
-# cannot be used here.  Set NIPTER_CONFORMANCE_BAM to a path to a real
-# whole-genome (or multi-chromosome) BAM to enable this section.
+# NIPTeR's bin_bam_sample() has two known bugs that constrain the conformance
+# target:
+#
+#   1. Split length mismatch: split(reads, droplevels(strands[strands != "*"]))
+#      drops unmapped-read entries from the factor but not from reads, so it
+#      silently misbehaves on any BAM that contains unmapped reads.
+#
+#   2. Implicit positional dedup: bin_reads() calls unique() on positions per
+#      chromosome per strand before binning.  Two reads at the same start
+#      position are counted once, not twice — an implicit, flag-ignorant
+#      deduplication that is NOT equivalent to -F 1024.
+#
+# For a meaningful bin-for-bin comparison the conformance BAM must therefore:
+#   - Contain no unmapped reads  (avoids bug 1; pre-filter with -F 4)
+#   - Have no two reads sharing the same start position per strand  (avoids
+#     the unique() discrepancy when using rmdup = "none")
+#
+# The bundled chr11-only fixture fails on both counts.
+# Set NIPTER_CONFORMANCE_BAM to a suitably pre-filtered whole-genome BAM.
 # ---------------------------------------------------------------------------
 
 if (!requireNamespace("NIPTeR", quietly = TRUE)) {

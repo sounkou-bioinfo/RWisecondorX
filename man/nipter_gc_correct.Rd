@@ -6,11 +6,12 @@
 \usage{
 nipter_gc_correct(
   object,
-  fasta,
+  fasta = NULL,
   method = c("loess", "bin"),
   span = 0.75,
   include_sex = FALSE,
   binsize = 50000L,
+  gc_table = NULL,
   con = NULL
 )
 }
@@ -18,7 +19,7 @@ nipter_gc_correct(
 \item{object}{A \code{NIPTeRSample} or \code{NIPTeRControlGroup}.}
 
 \item{fasta}{Path to an indexed reference FASTA file (.fa/.fasta with
-.fai index).}
+.fai index). Ignored when \code{gc_table} is supplied.}
 
 \item{method}{GC correction method: \code{"loess"} (default) or
 \code{"bin"} (bin-weight).}
@@ -30,7 +31,13 @@ nipter_gc_correct(
 Default \code{FALSE}.}
 
 \item{binsize}{Bin size used when binning the sample (default 50000L).
-Must match the binsize of the sample.}
+Must match the binsize of the sample. Ignored when \code{gc_table} is a
+list (bin size is already encoded in the vector lengths).}
+
+\item{gc_table}{Pre-computed GC table. Either a path to a TSV.bgz file (from
+\code{\link{nipter_gc_precompute}}) or the in-memory named list returned by
+a previous \code{.get_gc_table()} call. When \code{NULL} (default), GC
+content is computed from \code{fasta}.}
 
 \item{con}{Optional open DBI connection with duckhts loaded. If \code{NULL},
 a temporary connection is created.}
@@ -41,12 +48,21 @@ status is updated from \code{"Uncorrected"} to \code{"GC corrected"}.
 }
 \description{
 Adjusts bin counts for GC-content bias using either LOESS regression or
-bin-weight normalisation. GC content per bin is computed on-the-fly from the
-reference FASTA via \code{\link[Rduckhts]{rduckhts_fasta_nuc}} rather than
-from bundled precomputed tables (as the original NIPTeR does with
-\code{sysdata.rda}).
+bin-weight normalisation.
 }
 \details{
+GC content can be supplied in three ways via the \code{gc_table} parameter:
+\describe{
+\item{Pre-computed file}{Path to a TSV.bgz produced by
+\code{\link{nipter_gc_precompute}}. Fastest for large cohorts — compute
+once, reuse for every sample.}
+\item{In-memory list}{Named list of numeric vectors (one per chromosome)
+as returned by \code{.get_gc_table()}. Useful when chaining corrections
+within a session.}
+\item{FASTA path via \code{fasta}}{Compute GC on-the-fly for every call.
+Convenient for single-sample use; slow for many samples.}
+}
+
 \strong{LOESS method} (default): Fits a LOESS curve of read counts vs GC
 percentage across all autosomal bins with known GC and non-zero reads.
 Each bin is then scaled by \code{median(counts) / fitted(loess)}, so that
@@ -63,16 +79,17 @@ or the same GC bucket weights (bin-weight method).
 }
 \examples{
 \dontrun{
-sample <- nipter_bin_bam("sample.bam")
+# One-shot: compute GC and correct in one call
 corrected <- nipter_gc_correct(sample, fasta = "hg38.fa")
 
-# Correct an entire control group
-cg <- nipter_as_control_group(samples)
-cg_corrected <- nipter_gc_correct(cg, fasta = "hg38.fa")
+# Recommended for cohorts: precompute once, reuse
+nipter_gc_precompute("hg38.fa", binsize = 50000L, out = "hg38_gc_50k.tsv.bgz")
+cg <- nipter_gc_correct(cg, gc_table = "hg38_gc_50k.tsv.bgz")
+test_sample <- nipter_gc_correct(test_sample, gc_table = "hg38_gc_50k.tsv.bgz")
 }
 
 }
 \seealso{
-\code{\link[=nipter_bin_bam]{nipter_bin_bam()}}, \code{\link[=nipter_chi_correct]{nipter_chi_correct()}},
+\code{\link[=nipter_gc_precompute]{nipter_gc_precompute()}}, \code{\link[=nipter_bin_bam]{nipter_bin_bam()}}, \code{\link[=nipter_chi_correct]{nipter_chi_correct()}},
 \code{\link[=nipter_as_control_group]{nipter_as_control_group()}}
 }

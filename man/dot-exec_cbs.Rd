@@ -11,7 +11,8 @@
   alpha,
   binsize,
   seed,
-  parallel = FALSE
+  parallel = TRUE,
+  cpus = 1L
 )
 }
 \arguments{
@@ -27,7 +28,11 @@
 
 \item{seed}{Optional RNG seed.}
 
-\item{parallel}{Logical; use ParDNAcopy if available.}
+\item{parallel}{Logical; use ParDNAcopy when available (default \code{TRUE}).
+Falls back to DNAcopy::segment() if ParDNAcopy is not installed.}
+
+\item{cpus}{Integer; number of threads passed to \code{parSegment()}. Only
+used when \code{parallel = TRUE} and ParDNAcopy is available.}
 }
 \value{
 Data frame with columns \code{chr} (integer, 1-based), \code{start} (integer,

@@ -17,7 +17,8 @@ rwisecondorx_predict(
   blacklist = NULL,
   gender = NULL,
   seed = NULL,
-  parallel = FALSE
+  parallel = TRUE,
+  cpus = 1L
 )
 }
 \arguments{
@@ -55,8 +56,12 @@ regions to mask.}
 
 \item{seed}{Optional integer; RNG seed for CBS reproducibility.}
 
-\item{parallel}{Logical; if \code{TRUE} and \code{ParDNAcopy} is available, use
-\code{parSegment()} for parallelized CBS. Default \code{FALSE}.}
+\item{parallel}{Logical; use \code{ParDNAcopy::parSegment()} for CBS when
+available. Default \code{TRUE}. Falls back to \code{DNAcopy::segment()} with a
+message if ParDNAcopy is not installed.}
+
+\item{cpus}{Integer; number of threads for parallel CBS (\code{parSegment}) and
+any other OpenMP-accelerated steps. Default \code{1L}.}
 }
 \value{
 A list with class \code{"WisecondorXPrediction"} containing:

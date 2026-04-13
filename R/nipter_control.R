@@ -152,9 +152,10 @@ nipter_diagnose_control_group <- function(control_group) {
 #' Select best-matching controls for a sample
 #'
 #' Ranks control samples by similarity of chromosomal fractions to a test
-#' sample. Uses sum-of-squared differences of control-chromosome fractions
+#' sample. Uses sum-of-squared differences of collapsed chromosomal fractions
 #' (chromosomes 1-12, 14-17, 19-20, 22 by default — excluding trisomy
-#' chromosomes 13, 18, 21).
+#' chromosomes 13, 18, 21). The distance computation is accelerated by an
+#' Rcpp+OpenMP kernel.
 #'
 #' @param sample A \code{NIPTeRSample} object to match against.
 #' @param control_group A \code{NIPTeRControlGroup} object.
@@ -167,11 +168,13 @@ nipter_diagnose_control_group <- function(control_group) {
 #' @param include_chromosomes Integer vector of chromosomes to include. If
 #'   \code{NULL} (default), uses all autosomal chromosomes minus
 #'   \code{exclude_chromosomes}.
+#' @param cpus Integer; number of OpenMP threads for the SSD computation.
+#'   Default \code{1L}.
 #'
 #' @return A \code{NIPTeRControlGroup} (if \code{mode = "subset"}) or a named
 #'   numeric vector of sum-of-squares distances (if \code{mode = "report"}).
 #'
-#' @seealso [nipter_as_control_group()]
+#' @seealso [nipter_as_control_group()], [nipter_match_matrix()]
 #'
 #' @export
 nipter_match_control_group <- function(sample,
@@ -179,34 +182,29 @@ nipter_match_control_group <- function(sample,
                                        n,
                                        mode = c("subset", "report"),
                                        exclude_chromosomes = c(13L, 18L, 21L),
-                                       include_chromosomes = NULL) {
+                                       include_chromosomes = NULL,
+                                       cpus = 1L) {
   mode <- match.arg(mode)
   stopifnot(inherits(sample, "NIPTeRSample"))
   stopifnot(inherits(control_group, "NIPTeRControlGroup"))
   stopifnot(is.numeric(n), length(n) == 1L, n >= 1L)
+  cpus <- as.integer(cpus)
 
-  # Determine comparison chromosomes
+  # Determine comparison chromosomes (0-based row indices for Rcpp)
   if (is.null(include_chromosomes)) {
     compare_chroms <- setdiff(1:22, exclude_chromosomes)
   } else {
     compare_chroms <- as.integer(include_chromosomes)
   }
-  compare_keys <- as.character(compare_chroms)
+  compare_idx <- as.integer(compare_chroms) - 1L  # 0-based for Rcpp
 
-  # Get sample fractions (collapsed to 22-row for SeparatedStrands)
-  sample_frac <- .sample_chr_fractions_collapsed(sample)[compare_keys]
+  # Pre-extract the full 22×N fractions matrix once
+  fracs_mat  <- .control_group_fractions_collapsed(control_group)   # 22 × N
+  names_vec  <- colnames(fracs_mat)
+  query_frac <- .sample_chr_fractions_collapsed(sample)              # 22-element
 
-  # Get control fractions and compute SSD
-  n_controls <- length(control_group$samples)
-  names_vec  <- character(n_controls)
-  scores     <- numeric(n_controls)
-
-  for (i in seq_len(n_controls)) {
-    ctrl <- control_group$samples[[i]]
-    names_vec[i] <- ctrl$sample_name
-    ctrl_frac    <- .sample_chr_fractions_collapsed(ctrl)[compare_keys]
-    scores[i]    <- sum((sample_frac - ctrl_frac)^2)
-  }
+  # Rcpp kernel: one query vs N controls (OpenMP-parallelized)
+  scores <- nipter_ssd_scores_cpp(fracs_mat, query_frac, compare_idx, cpus)
   names(scores) <- names_vec
 
   # Sort ascending (most similar first)
@@ -224,6 +222,228 @@ nipter_match_control_group <- function(sample,
     control_group$samples[keep_idx],
     description = sprintf("Fitted to %s", sample$sample_name)
   )
+}
+
+
+#' Compute the full pairwise SSD matrix for a control group
+#'
+#' Returns the symmetric N×N matrix of sum-of-squared-differences between all
+#' pairs of control samples' chromosomal fractions. The diagonal is zero.
+#' Row means of this matrix are the per-sample "matching score" used for QC
+#' in the production matching loop (see \emph{Details}).
+#'
+#' @param control_group A \code{NIPTeRControlGroup} object.
+#' @param exclude_chromosomes Integer vector of chromosomes to exclude from the
+#'   distance calculation (default \code{c(13, 18, 21)}).
+#' @param include_chromosomes Integer vector of chromosomes to include. If
+#'   \code{NULL} (default), uses all autosomal chromosomes minus
+#'   \code{exclude_chromosomes}.
+#' @param cpus Integer; OpenMP threads. Default \code{1L}.
+#'
+#' @return A numeric N×N matrix with sample names as row and column names.
+#'
+#' @details
+#' The production NIPT pipeline uses this matrix to identify outlier controls
+#' before scoring: each sample's mean SSD against all others is computed, and
+#' samples with mean SSD more than 3 SD above the group mean are iteratively
+#' removed. This function replaces the \code{lapply} over \code{match_control_group}
+#' calls in \code{CoverageProjectionSCA_Reports.R} with a single vectorized
+#' Rcpp kernel.
+#'
+#' @seealso [nipter_match_control_group()]
+#'
+#' @export
+nipter_match_matrix <- function(control_group,
+                                exclude_chromosomes = c(13L, 18L, 21L),
+                                include_chromosomes = NULL,
+                                cpus = 1L) {
+  stopifnot(inherits(control_group, "NIPTeRControlGroup"))
+  cpus <- as.integer(cpus)
+
+  if (is.null(include_chromosomes)) {
+    compare_chroms <- setdiff(1:22, exclude_chromosomes)
+  } else {
+    compare_chroms <- as.integer(include_chromosomes)
+  }
+  compare_idx <- as.integer(compare_chroms) - 1L  # 0-based for Rcpp
+
+  fracs_mat <- .control_group_fractions_collapsed(control_group)  # 22 × N
+  ssd_mat   <- nipter_ssd_matrix_cpp(fracs_mat, compare_idx, cpus)
+
+  nm <- vapply(control_group$samples, function(s) s$sample_name, character(1L))
+  rownames(ssd_mat) <- nm
+  colnames(ssd_mat) <- nm
+  ssd_mat
+}
+
+
+#' Load a NIPTeR control group from a directory of TSV.bgz files
+#'
+#' Reads all \code{.bed.gz} (or \code{.tsv.bgz}) files in \code{bed_dir} using
+#' \code{rduckhts_tabix_multi()} — a single multi-file DuckDB scan — and
+#' constructs a \code{NIPTeRControlGroup} from the results. This is much faster
+#' than \code{lapply(files, bed_to_nipter_sample)} for large cohorts because all
+#' files are read in one pass.
+#'
+#' @param bed_dir Character; directory containing one \code{.bed.gz} or
+#'   \code{.tsv.bgz} file per control sample, each produced by
+#'   \code{\link{nipter_bin_bam_bed}}.
+#' @param pattern Glob pattern for file discovery (default
+#'   \code{"*.bed.gz"}).
+#' @param binsize Optional integer; bin size in base pairs. If \code{NULL}
+#'   (default), inferred from the first row of the first file.
+#' @param description Label for the resulting control group (default
+#'   \code{"General control group"}).
+#' @param con Optional open DBI connection with duckhts loaded.
+#'
+#' @return A \code{NIPTeRControlGroup}.
+#'
+#' @seealso [nipter_bin_bam_bed()], [nipter_as_control_group()],
+#'   [bed_to_nipter_sample()]
+#'
+#' @examples
+#' \dontrun{
+#' # Bin all controls to BED once
+#' for (bam in bam_files) {
+#'   nipter_bin_bam_bed(bam, file.path("controls/", sub(".bam$", ".bed.gz", basename(bam))))
+#' }
+#' # Load them all at once
+#' cg <- nipter_control_group_from_beds("controls/")
+#' }
+#'
+#' @export
+nipter_control_group_from_beds <- function(bed_dir,
+                                           pattern     = "*.bed.gz",
+                                           binsize     = NULL,
+                                           description = "General control group",
+                                           con         = NULL) {
+  stopifnot(is.character(bed_dir), length(bed_dir) == 1L,
+            nzchar(bed_dir), dir.exists(bed_dir))
+
+  files <- Sys.glob(file.path(bed_dir, pattern))
+  if (length(files) == 0L) {
+    stop("No files matching '", pattern, "' found in '", bed_dir, "'.",
+         call. = FALSE)
+  }
+
+  own_con <- is.null(con)
+  if (own_con) {
+    if (!requireNamespace("Rduckhts", quietly = TRUE)) {
+      stop("Rduckhts is required.", call. = FALSE)
+    }
+    drv <- duckdb::duckdb(config = list(allow_unsigned_extensions = "true"))
+    con <- DBI::dbConnect(drv)
+    Rduckhts::rduckhts_load(con)
+    on.exit(DBI::dbDisconnect(con, shutdown = TRUE), add = TRUE)
+  }
+
+  # Register all files as a single multi-reader table.
+  # rduckhts_tabix_multi adds a `filename` column automatically.
+  tbl <- paste0(".nipter_cg_beds_", as.integer(proc.time()[[3L]] * 1e6))
+  Rduckhts::rduckhts_tabix_multi(con, tbl, files,
+                                 header_names = c("chrom", "start", "end",
+                                                  "count", "corrected_count"),
+                                 column_types = c("VARCHAR", "INTEGER",
+                                                  "INTEGER", "INTEGER",
+                                                  "DOUBLE"),
+                                 overwrite = TRUE)
+  on.exit(DBI::dbExecute(con, sprintf("DROP TABLE IF EXISTS %s", tbl)),
+          add = TRUE)
+
+  # Infer binsize
+  if (is.null(binsize)) {
+    first <- DBI::dbGetQuery(con, sprintf(
+      "SELECT (end - start) AS bs FROM %s LIMIT 1", tbl
+    ))
+    binsize <- as.integer(first$bs[1L])
+  }
+  binsize <- as.integer(binsize)
+
+  # Pull all data with file path for sample-name derivation
+  rows <- DBI::dbGetQuery(con, sprintf(
+    "SELECT filename, chrom, start, end, count,
+            TRY_CAST(corrected_count AS DOUBLE) AS corrected_count
+     FROM %s", tbl
+  ))
+
+  # Derive sample name from file path (strip dir + extension)
+  rows$sample_name <- sub("\\.bed(\\.gz)?$|\\.tsv(\\.bgz)?$", "",
+                          basename(rows$filename), ignore.case = TRUE)
+
+  sample_names <- unique(rows$sample_name)
+  samples <- lapply(sample_names, function(nm) {
+    sub_rows <- rows[rows$sample_name == nm, , drop = FALSE]
+    bed_to_nipter_sample_from_rows(sub_rows, nm, binsize)
+  })
+
+  nipter_as_control_group(samples, description = description)
+}
+
+
+# Internal helper: build a NIPTeRSample from a data frame with columns
+# chrom, start, end, count, corrected_count (5-col CombinedStrands format).
+# Mirrors .bed_to_nipter_combined() but takes an already-fetched data frame.
+bed_to_nipter_sample_from_rows <- function(rows, name, binsize) {
+  auto_keys  <- as.character(1:22)
+  sex_labels <- c("X", "Y")
+  sex_keys   <- c("23", "24")
+
+  chrom <- sub("^[Cc][Hh][Rr]", "", rows$chrom)
+  chrom[chrom == "X" | chrom == "x"] <- "23"
+  chrom[chrom == "Y" | chrom == "y"] <- "24"
+
+  bin_idx <- as.integer(rows$start / binsize)
+  n_bins  <- max(bin_idx) + 1L
+
+  col_names <- as.character(seq_len(n_bins))
+
+  auto_mat <- matrix(0L, nrow = 22L, ncol = n_bins,
+                     dimnames = list(auto_keys, col_names))
+  sex_mat  <- matrix(0L, nrow = 2L, ncol = n_bins,
+                     dimnames = list(sex_labels, col_names))
+
+  for (i in seq_along(auto_keys)) {
+    sel <- which(chrom == auto_keys[i])
+    if (length(sel) > 0L)
+      auto_mat[i, bin_idx[sel] + 1L] <- as.integer(rows$count[sel])
+  }
+  for (i in seq_along(sex_keys)) {
+    sel <- which(chrom == sex_keys[i])
+    if (length(sel) > 0L)
+      sex_mat[i, bin_idx[sel] + 1L] <- as.integer(rows$count[sel])
+  }
+
+  obj <- structure(
+    list(autosomal_chromosome_reads  = list(auto_mat),
+         sex_chromosome_reads        = list(sex_mat),
+         correction_status_autosomal = "Uncorrected",
+         correction_status_sex       = "Uncorrected",
+         sample_name                 = name),
+    class = c("NIPTeRSample", "CombinedStrands")
+  )
+
+  if (!all(is.na(rows$corrected_count))) {
+    corr_auto <- matrix(0, nrow = 22L, ncol = n_bins,
+                        dimnames = list(auto_keys, col_names))
+    corr_sex  <- matrix(0, nrow = 2L, ncol = n_bins,
+                        dimnames = list(sex_labels, col_names))
+    for (i in seq_along(auto_keys)) {
+      sel <- which(chrom == auto_keys[i])
+      if (length(sel) > 0L)
+        corr_auto[i, bin_idx[sel] + 1L] <- rows$corrected_count[sel]
+    }
+    for (i in seq_along(sex_keys)) {
+      sel <- which(chrom == sex_keys[i])
+      if (length(sel) > 0L)
+        corr_sex[i, bin_idx[sel] + 1L] <- rows$corrected_count[sel]
+    }
+    obj$autosomal_chromosome_reads  <- list(corr_auto)
+    obj$sex_chromosome_reads        <- list(corr_sex)
+    obj$correction_status_autosomal <- "GC Corrected"
+    obj$correction_status_sex       <- "GC Corrected"
+  }
+
+  obj
 }
 
 

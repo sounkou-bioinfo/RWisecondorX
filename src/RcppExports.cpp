@@ -40,10 +40,39 @@ BEGIN_RCPP
     return rcpp_result_gen;
 END_RCPP
 }
+// nipter_ssd_scores_cpp
+NumericVector nipter_ssd_scores_cpp(NumericMatrix fracs, NumericVector query, IntegerVector compare_idx, int cpus);
+RcppExport SEXP _RWisecondorX_nipter_ssd_scores_cpp(SEXP fracsSEXP, SEXP querySEXP, SEXP compare_idxSEXP, SEXP cpusSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< NumericMatrix >::type fracs(fracsSEXP);
+    Rcpp::traits::input_parameter< NumericVector >::type query(querySEXP);
+    Rcpp::traits::input_parameter< IntegerVector >::type compare_idx(compare_idxSEXP);
+    Rcpp::traits::input_parameter< int >::type cpus(cpusSEXP);
+    rcpp_result_gen = Rcpp::wrap(nipter_ssd_scores_cpp(fracs, query, compare_idx, cpus));
+    return rcpp_result_gen;
+END_RCPP
+}
+// nipter_ssd_matrix_cpp
+NumericMatrix nipter_ssd_matrix_cpp(NumericMatrix fracs, IntegerVector compare_idx, int cpus);
+RcppExport SEXP _RWisecondorX_nipter_ssd_matrix_cpp(SEXP fracsSEXP, SEXP compare_idxSEXP, SEXP cpusSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< NumericMatrix >::type fracs(fracsSEXP);
+    Rcpp::traits::input_parameter< IntegerVector >::type compare_idx(compare_idxSEXP);
+    Rcpp::traits::input_parameter< int >::type cpus(cpusSEXP);
+    rcpp_result_gen = Rcpp::wrap(nipter_ssd_matrix_cpp(fracs, compare_idx, cpus));
+    return rcpp_result_gen;
+END_RCPP
+}
 
 static const R_CallMethodDef CallEntries[] = {
     {"_RWisecondorX_knn_reference_cpp", (DL_FUNC) &_RWisecondorX_knn_reference_cpp, 6},
     {"_RWisecondorX_null_ratios_cpp", (DL_FUNC) &_RWisecondorX_null_ratios_cpp, 4},
+    {"_RWisecondorX_nipter_ssd_scores_cpp", (DL_FUNC) &_RWisecondorX_nipter_ssd_scores_cpp, 4},
+    {"_RWisecondorX_nipter_ssd_matrix_cpp", (DL_FUNC) &_RWisecondorX_nipter_ssd_matrix_cpp, 3},
     {NULL, NULL, 0}
 };
 

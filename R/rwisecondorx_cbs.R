@@ -22,7 +22,10 @@
 #' @param alpha CBS breakpoint p-value threshold.
 #' @param binsize Reference bin size in bp.
 #' @param seed Optional RNG seed.
-#' @param parallel Logical; use ParDNAcopy if available.
+#' @param parallel Logical; use ParDNAcopy when available (default \code{TRUE}).
+#'   Falls back to DNAcopy::segment() if ParDNAcopy is not installed.
+#' @param cpus Integer; number of threads passed to \code{parSegment()}. Only
+#'   used when \code{parallel = TRUE} and ParDNAcopy is available.
 #'
 #' @return Data frame with columns `chr` (integer, 1-based), `start` (integer,
 #'   0-based bin index), `end` (integer, exclusive bin index), `ratio` (numeric,
@@ -30,7 +33,7 @@
 #'
 #' @keywords internal
 .exec_cbs <- function(results_r, results_w, ref_gender, alpha, binsize, seed,
-                      parallel = FALSE) {
+                      parallel = TRUE, cpus = 1L) {
   # Determine which chromosomes to include
   chrs <- if (ref_gender == "M") seq_len(24L) else seq_len(23L)
 
@@ -79,18 +82,28 @@
   cna_obj <- DNAcopy::CNA(ratio_cbs, chr_cbs, pos_cbs,
                            data.type = "logratio", sampleid = "X")
 
-  # Run CBS
+  # Run CBS — prefer ParDNAcopy when parallel = TRUE and the package is available.
+  # ParDNAcopy::parSegment() accepts a `num.cores` argument; pass cpus there.
+  # Fall back to DNAcopy::segment() (single-threaded) when ParDNAcopy is absent.
   if (isTRUE(parallel) && requireNamespace("ParDNAcopy", quietly = TRUE)) {
     seg_result <- ParDNAcopy::parSegment(cna_obj, alpha = alpha,
-                                          verbose = 0, weights = weight_cbs)
+                                         verbose = 0, weights = weight_cbs,
+                                         num.cores = as.integer(cpus))
   } else {
-    # Suppress DNAcopy's verbose output
-    seg_result <- utils::capture.output(
-      seg_out <- DNAcopy::segment(cna_obj, alpha = alpha, verbose = 1,
-                                  weights = weight_cbs),
-      type = "output"
-    )
-    seg_result <- seg_out
+    if (isTRUE(parallel)) {
+      message("ParDNAcopy not available; falling back to DNAcopy (single-threaded). ",
+              "Install ParDNAcopy for parallel CBS.")
+    }
+    # Suppress DNAcopy's verbose progress output
+    seg_result <- local({
+      seg_out <- NULL
+      utils::capture.output(
+        seg_out <- DNAcopy::segment(cna_obj, alpha = alpha, verbose = 1,
+                                    weights = weight_cbs),
+        type = "output"
+      )
+      seg_out
+    })
   }
 
   seg_df <- seg_result$output

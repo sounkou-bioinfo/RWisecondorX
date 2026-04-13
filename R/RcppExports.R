@@ -9,3 +9,11 @@ null_ratios_cpp <- function(pca_corrected, indexes, null_sample_idx, cpus) {
     .Call(`_RWisecondorX_null_ratios_cpp`, pca_corrected, indexes, null_sample_idx, cpus)
 }
 
+nipter_ssd_scores_cpp <- function(fracs, query, compare_idx, cpus = 1L) {
+    .Call(`_RWisecondorX_nipter_ssd_scores_cpp`, fracs, query, compare_idx, cpus)
+}
+
+nipter_ssd_matrix_cpp <- function(fracs, compare_idx, cpus = 1L) {
+    .Call(`_RWisecondorX_nipter_ssd_matrix_cpp`, fracs, compare_idx, cpus)
+}
+

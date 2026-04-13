@@ -50,8 +50,11 @@
 #'   regions to mask.
 #' @param gender Optional character; force gender (`"F"` or `"M"`).
 #' @param seed Optional integer; RNG seed for CBS reproducibility.
-#' @param parallel Logical; if `TRUE` and `ParDNAcopy` is available, use
-#'   `parSegment()` for parallelized CBS. Default `FALSE`.
+#' @param parallel Logical; use `ParDNAcopy::parSegment()` for CBS when
+#'   available. Default `TRUE`. Falls back to `DNAcopy::segment()` with a
+#'   message if ParDNAcopy is not installed.
+#' @param cpus Integer; number of threads for parallel CBS (`parSegment`) and
+#'   any other OpenMP-accelerated steps. Default `1L`.
 #'
 #' @return A list with class `"WisecondorXPrediction"` containing:
 #'   \describe{
@@ -82,7 +85,8 @@ rwisecondorx_predict <- function(sample,
                                 blacklist       = NULL,
                                 gender          = NULL,
                                 seed            = NULL,
-                                parallel        = FALSE) {
+                                parallel        = TRUE,
+                                cpus            = 1L) {
   # ---------- validation ----------
   stopifnot(is.list(sample), is.list(reference))
   minrefbins  <- as.integer(minrefbins)
@@ -227,7 +231,7 @@ rwisecondorx_predict <- function(sample,
   }
 
   cbs_result <- .exec_cbs(results_r_chr, results_w_chr, ref_gender, alpha,
-                          binsize, seed, parallel)
+                          binsize, seed, parallel, cpus = cpus)
 
   # Compute segment Z-scores
   segment_zscores <- .get_segment_zscores(cbs_result, results_nr_chr, results_r_chr,

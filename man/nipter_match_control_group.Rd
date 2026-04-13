@@ -10,7 +10,8 @@ nipter_match_control_group(
   n,
   mode = c("subset", "report"),
   exclude_chromosomes = c(13L, 18L, 21L),
-  include_chromosomes = NULL
+  include_chromosomes = NULL,
+  cpus = 1L
 )
 }
 \arguments{
@@ -30,6 +31,9 @@ distance calculation (default \code{c(13, 18, 21)}).}
 \item{include_chromosomes}{Integer vector of chromosomes to include. If
 \code{NULL} (default), uses all autosomal chromosomes minus
 \code{exclude_chromosomes}.}
+
+\item{cpus}{Integer; number of OpenMP threads for the SSD computation.
+Default \code{1L}.}
 }
 \value{
 A \code{NIPTeRControlGroup} (if \code{mode = "subset"}) or a named
@@ -37,10 +41,11 @@ numeric vector of sum-of-squares distances (if \code{mode = "report"}).
 }
 \description{
 Ranks control samples by similarity of chromosomal fractions to a test
-sample. Uses sum-of-squared differences of control-chromosome fractions
+sample. Uses sum-of-squared differences of collapsed chromosomal fractions
 (chromosomes 1-12, 14-17, 19-20, 22 by default — excluding trisomy
-chromosomes 13, 18, 21).
+chromosomes 13, 18, 21). The distance computation is accelerated by an
+Rcpp+OpenMP kernel.
 }
 \seealso{
-\code{\link[=nipter_as_control_group]{nipter_as_control_group()}}
+\code{\link[=nipter_as_control_group]{nipter_as_control_group()}}, \code{\link[=nipter_match_matrix]{nipter_match_matrix()}}
 }

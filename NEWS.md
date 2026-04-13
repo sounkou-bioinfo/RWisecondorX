@@ -1,5 +1,26 @@
 # RWisecondorX (development version)
 
+## Y-unique region ratio for sex prediction
+
+* New `nipter_y_unique_ratio()` counts reads overlapping 7 Y-chromosome
+  unique gene regions (HSFY1, BPY2, BPY2B, BPY2C, XKRY, PRY, PRY2) and
+  computes the ratio to total nuclear genome reads. Uses DuckDB/duckhts
+  index-based region queries (`read_bam(region := ...)`) for efficient
+  BAM access. The bundled GRCh37 regions file can be replaced with a custom
+  file for other assemblies.
+
+* New `nipter_sex_model_y_unique()` fits a 2-component GMM on Y-unique
+  ratios (one per BAM in a cohort), producing a `NIPTeRSexModel` compatible
+  with `nipter_predict_sex()`.
+
+* `nipter_predict_sex()` gains a `y_unique_ratio` parameter for passing
+  a pre-computed Y-unique ratio when a `"y_unique"` model is included in
+  the consensus vote. This enables the full 3-model majority-vote sex
+  prediction pipeline (Y-unique ratio + Y fraction + XY fractions).
+
+* Bundled `inst/extdata/grch37_Y_UniqueRegions.txt` — TSV of 7 GRCh37
+  Y-unique regions used for the Y-unique ratio calculation.
+
 ## Sex prediction via Gaussian mixture models
 
 * New `nipter_sex_model()` fits a 2-component GMM on sex chromosome fractions

@@ -4,13 +4,19 @@
 \alias{nipter_predict_sex}
 \title{Predict fetal sex for a NIPTeR sample}
 \usage{
-nipter_predict_sex(sample, ...)
+nipter_predict_sex(sample, ..., y_unique_ratio = NULL)
 }
 \arguments{
 \item{sample}{A \code{NIPTeRSample} object.}
 
 \item{...}{One or more \code{NIPTeRSexModel} objects, or a single list
 of models.}
+
+\item{y_unique_ratio}{Optional numeric scalar; a pre-computed Y-unique
+ratio (from \code{\link{nipter_y_unique_ratio}}) for the sample. This
+is only used when one of the models has \code{method = "y_unique"}.
+If a \code{"y_unique"} model is present and this argument is
+\code{NULL}, that model is skipped with a warning.}
 }
 \value{
 A list of class \code{"NIPTeRSexPrediction"} with elements:
@@ -35,6 +41,10 @@ classified using \code{predict(model$model, newdata = ...)}. The
 classification is mapped to \code{"male"}/\code{"female"} using the
 model's \code{male_cluster}.
 
+For \code{"y_unique"} models, the \code{y_unique_ratio} argument is
+used as the input feature instead of chromosome fractions derived from
+binned read counts.
+
 With multiple models, the consensus is the label that appears most
 frequently (majority vote). In case of a tie, \code{"female"} is
 returned (conservative default for NIPT, as false-male calls could mask
@@ -46,12 +56,15 @@ sex chromosome aneuploidies).
 pred <- nipter_predict_sex(test_sample, sex_model)
 pred$prediction
 
-# Consensus from two models (majority vote)
-pred <- nipter_predict_sex(test_sample, model_y, model_xy)
+# Consensus from three models (majority vote)
+yr <- nipter_y_unique_ratio("sample.bam")
+pred <- nipter_predict_sex(test_sample, model_y, model_xy, model_yu,
+                           y_unique_ratio = yr$ratio)
 pred$prediction
 }
 
 }
 \seealso{
-\code{\link[=nipter_sex_model]{nipter_sex_model()}}
+\code{\link[=nipter_sex_model]{nipter_sex_model()}}, \code{\link[=nipter_sex_model_y_unique]{nipter_sex_model_y_unique()}},
+\code{\link[=nipter_y_unique_ratio]{nipter_y_unique_ratio()}}
 }

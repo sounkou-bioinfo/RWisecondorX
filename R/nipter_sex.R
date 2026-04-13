@@ -138,6 +138,11 @@ nipter_sex_model <- function(control_group,
 #' @param sample A \code{NIPTeRSample} object.
 #' @param ... One or more \code{NIPTeRSexModel} objects, or a single list
 #'   of models.
+#' @param y_unique_ratio Optional numeric scalar; a pre-computed Y-unique
+#'   ratio (from \code{\link{nipter_y_unique_ratio}}) for the sample. This
+#'   is only used when one of the models has \code{method = "y_unique"}.
+#'   If a \code{"y_unique"} model is present and this argument is
+#'   \code{NULL}, that model is skipped with a warning.
 #'
 #' @return A list of class \code{"NIPTeRSexPrediction"} with elements:
 #' \describe{
@@ -156,12 +161,17 @@ nipter_sex_model <- function(control_group,
 #' classification is mapped to \code{"male"}/\code{"female"} using the
 #' model's \code{male_cluster}.
 #'
+#' For \code{"y_unique"} models, the \code{y_unique_ratio} argument is
+#' used as the input feature instead of chromosome fractions derived from
+#' binned read counts.
+#'
 #' With multiple models, the consensus is the label that appears most
 #' frequently (majority vote). In case of a tie, \code{"female"} is
 #' returned (conservative default for NIPT, as false-male calls could mask
 #' sex chromosome aneuploidies).
 #'
-#' @seealso [nipter_sex_model()]
+#' @seealso [nipter_sex_model()], [nipter_sex_model_y_unique()],
+#'   [nipter_y_unique_ratio()]
 #'
 #' @examples
 #' \dontrun{
@@ -169,13 +179,15 @@ nipter_sex_model <- function(control_group,
 #' pred <- nipter_predict_sex(test_sample, sex_model)
 #' pred$prediction
 #'
-#' # Consensus from two models (majority vote)
-#' pred <- nipter_predict_sex(test_sample, model_y, model_xy)
+#' # Consensus from three models (majority vote)
+#' yr <- nipter_y_unique_ratio("sample.bam")
+#' pred <- nipter_predict_sex(test_sample, model_y, model_xy, model_yu,
+#'                            y_unique_ratio = yr$ratio)
 #' pred$prediction
 #' }
 #'
 #' @export
-nipter_predict_sex <- function(sample, ...) {
+nipter_predict_sex <- function(sample, ..., y_unique_ratio = NULL) {
   stopifnot(inherits(sample, "NIPTeRSample"))
 
   models <- list(...)
@@ -204,6 +216,11 @@ nipter_predict_sex <- function(sample, ...) {
     )
   }
 
+  # Validate y_unique_ratio if provided
+  if (!is.null(y_unique_ratio)) {
+    stopifnot(is.numeric(y_unique_ratio), length(y_unique_ratio) == 1L)
+  }
+
   # Compute sample's sex chromosome fractions
   sample_fracs <- .sample_sex_fractions(sample)
 
@@ -213,7 +230,16 @@ nipter_predict_sex <- function(sample, ...) {
   for (i in seq_along(models)) {
     mdl <- models[[i]]
 
-    if (mdl$method == "y_fraction") {
+    if (mdl$method == "y_unique") {
+      # Y-unique model needs a pre-computed ratio
+      if (is.null(y_unique_ratio)) {
+        warning("y_unique model present but y_unique_ratio not provided; ",
+                "skipping this model.", call. = FALSE)
+        model_preds[i] <- NA_character_
+        next
+      }
+      newdata <- y_unique_ratio
+    } else if (mdl$method == "y_fraction") {
       newdata <- sample_fracs["y_fraction"]
     } else {
       newdata <- matrix(sample_fracs[c("x_fraction", "y_fraction")],
@@ -226,9 +252,12 @@ nipter_predict_sex <- function(sample, ...) {
     model_preds[i] <- if (cluster == mdl$male_cluster) "male" else "female"
   }
 
+  # Drop NAs from skipped models before voting
+  valid_preds <- model_preds[!is.na(model_preds)]
+
   # Consensus: majority vote (tie goes to "female" — conservative for NIPT)
-  n_male   <- sum(model_preds == "male")
-  n_female <- sum(model_preds == "female")
+  n_male   <- sum(valid_preds == "male")
+  n_female <- sum(valid_preds == "female")
   consensus <- if (n_male > n_female) "male" else "female"
 
   structure(
@@ -239,6 +268,264 @@ nipter_predict_sex <- function(sample, ...) {
       sample_name      = sample$sample_name
     ),
     class = "NIPTeRSexPrediction"
+  )
+}
+
+
+#' Build a sex prediction model from Y-unique ratios
+#'
+#' Fits a two-component Gaussian mixture model (GMM) on Y-unique region
+#' read ratios, which are computed from BAM files by
+#' \code{\link{nipter_y_unique_ratio}}.
+#'
+#' This is a companion to \code{\link{nipter_sex_model}}, which operates on
+#' binned \code{NIPTeRSample} fractions. The Y-unique model operates at the
+#' BAM level and does not require prior binning. The resulting model object
+#' is compatible with \code{\link{nipter_predict_sex}} for majority-vote
+#' consensus.
+#'
+#' @param ratios Named numeric vector of Y-unique ratios (one per sample).
+#'   Typically obtained by calling \code{\link{nipter_y_unique_ratio}} on
+#'   each BAM in the control cohort.
+#'
+#' @return An object of class \code{"NIPTeRSexModel"} with elements:
+#' \describe{
+#'   \item{model}{The \code{mclust::Mclust} fitted object.}
+#'   \item{method}{\code{"y_unique"}.}
+#'   \item{male_cluster}{Integer (1 or 2); which cluster is male
+#'     (higher Y-unique ratio).}
+#'   \item{classifications}{Named character vector of \code{"male"}/
+#'     \code{"female"} labels for each input sample.}
+#'   \item{fractions}{The input \code{ratios} vector (named).}
+#' }
+#'
+#' @details
+#' The algorithm:
+#' \enumerate{
+#'   \item Fit a two-component Gaussian mixture with equal mixing proportions
+#'     (\code{mclust::Mclust(ratios, G = 2,
+#'     control = mclust::emControl(equalPro = TRUE))}).
+#'   \item Identify the male cluster as the component with the higher
+#'     median Y-unique ratio.
+#' }
+#'
+#' @seealso [nipter_y_unique_ratio()], [nipter_predict_sex()],
+#'   [nipter_sex_model()]
+#'
+#' @examples
+#' \dontrun{
+#' # Compute Y-unique ratios for a cohort
+#' bams <- list.files("bams/", pattern = "\\.bam$", full.names = TRUE)
+#' ratios <- vapply(bams, function(b) nipter_y_unique_ratio(b)$ratio,
+#'                  numeric(1L))
+#' names(ratios) <- basename(bams)
+#'
+#' # Build sex model
+#' model_yu <- nipter_sex_model_y_unique(ratios)
+#' model_yu$classifications
+#' }
+#'
+#' @export
+nipter_sex_model_y_unique <- function(ratios) {
+  stopifnot(is.numeric(ratios), length(ratios) >= 4L)
+  if (is.null(names(ratios))) {
+    names(ratios) <- paste0("sample_", seq_along(ratios))
+  }
+
+  if (!requireNamespace("mclust", quietly = TRUE)) {
+    stop(
+      "Package 'mclust' is required for sex prediction. ",
+      "Install it with: install.packages('mclust')",
+      call. = FALSE
+    )
+  }
+
+  gmm <- .mclust_fit(ratios, G = 2L, equalPro = TRUE)
+
+  if (is.null(gmm)) {
+    stop("mclust::Mclust() failed to converge. ",
+         "The cohort may lack sufficient Y-unique signal.",
+         call. = FALSE)
+  }
+
+  # Male cluster = higher median Y-unique ratio
+  median_1 <- stats::median(ratios[gmm$classification == 1L], na.rm = TRUE)
+  median_2 <- stats::median(ratios[gmm$classification == 2L], na.rm = TRUE)
+  male_cluster <- if (median_1 > median_2) 1L else 2L
+
+  labels <- ifelse(gmm$classification == male_cluster, "male", "female")
+  names(labels) <- names(ratios)
+
+  structure(
+    list(
+      model          = gmm,
+      method         = "y_unique",
+      male_cluster   = male_cluster,
+      classifications = labels,
+      fractions      = ratios
+    ),
+    class = "NIPTeRSexModel"
+  )
+}
+
+
+#' Compute Y-unique region read ratio from a BAM file
+#'
+#' Counts reads overlapping the 7 Y-chromosome unique gene regions
+#' (HSFY1, BPY2, BPY2B, BPY2C, XKRY, PRY, PRY2) and divides by total
+#' nuclear genome reads (chromosomes 1--22, X, Y). This ratio is a strong
+#' univariate sex predictor used in clinical NIPT pipelines.
+#'
+#' The regions are defined in the bundled file
+#' \code{extdata/grch37_Y_UniqueRegions.txt} (GRCh37 coordinates). The BAM
+#' must be indexed (\code{.bai} or \code{.csi}).
+#'
+#' Read counting uses DuckDB/duckhts with index-based region queries
+#' (\code{read_bam(region := ...)}) for the Y-unique intervals, and a
+#' separate full-genome scan for the nuclear total. Both queries apply the
+#' same MAPQ and flag filters.
+#'
+#' @param bam Path to an indexed BAM or CRAM file.
+#' @param mapq Minimum mapping quality. Default \code{1L}.
+#' @param exclude_flags Integer bitmask; reads with any of these flags set
+#'   are dropped (samtools \code{-F}). Default \code{0L}.
+#' @param require_flags Integer bitmask; only reads with all bits set are
+#'   kept (samtools \code{-f}). Default \code{0L}.
+#' @param regions_file Path to a TSV file of Y-unique regions with columns
+#'   \code{Chromosome}, \code{Start}, \code{End}, \code{GeneName}. Defaults
+#'   to the bundled GRCh37 file. Supply a custom file for GRCh38 or other
+#'   assemblies.
+#' @param con Optional open DBI connection with duckhts loaded. If
+#'   \code{NULL} (default) a temporary in-memory DuckDB connection is
+#'   created.
+#' @param reference Optional FASTA reference path for CRAM inputs.
+#'
+#' @return A list with elements:
+#' \describe{
+#'   \item{ratio}{Numeric; Y-unique reads / total nuclear reads. \code{0}
+#'     if total nuclear reads is zero.}
+#'   \item{y_unique_reads}{Integer; reads overlapping any of the 7 Y-unique
+#'     regions.}
+#'   \item{total_nuclear_reads}{Integer; total reads on chromosomes 1--22,
+#'     X, Y.}
+#'   \item{regions}{Data frame of the regions used (columns:
+#'     \code{Chromosome}, \code{Start}, \code{End}, \code{GeneName}).}
+#' }
+#'
+#' @seealso [nipter_sex_model()], [nipter_predict_sex()]
+#'
+#' @examples
+#' \dontrun{
+#' yr <- nipter_y_unique_ratio("sample.bam", mapq = 1L)
+#' yr$ratio
+#' yr$y_unique_reads
+#' yr$total_nuclear_reads
+#' }
+#'
+#' @export
+nipter_y_unique_ratio <- function(bam,
+                                  mapq          = 1L,
+                                  exclude_flags = 0L,
+                                  require_flags = 0L,
+                                  regions_file  = NULL,
+                                  con           = NULL,
+                                  reference     = NULL) {
+  stopifnot(is.character(bam), length(bam) == 1L, nzchar(bam))
+  stopifnot(file.exists(bam))
+  stopifnot(is.numeric(mapq),          length(mapq)          == 1L, mapq          >= 0L)
+  stopifnot(is.numeric(exclude_flags), length(exclude_flags) == 1L, exclude_flags >= 0L)
+  stopifnot(is.numeric(require_flags), length(require_flags) == 1L, require_flags >= 0L)
+  mapq          <- as.integer(mapq)
+  exclude_flags <- as.integer(exclude_flags)
+  require_flags <- as.integer(require_flags)
+
+  # Load regions
+  if (is.null(regions_file)) {
+    regions_file <- system.file("extdata", "grch37_Y_UniqueRegions.txt",
+                                package = "RWisecondorX", mustWork = FALSE)
+    if (!nzchar(regions_file) || !file.exists(regions_file)) {
+      # Fallback for devtools::load_all / sourced context
+      candidates <- c(
+        file.path("inst", "extdata", "grch37_Y_UniqueRegions.txt"),
+        file.path("..", "..", "inst", "extdata", "grch37_Y_UniqueRegions.txt")
+      )
+      regions_file <- candidates[file.exists(candidates)][1L]
+      if (is.na(regions_file)) {
+        stop("Cannot find grch37_Y_UniqueRegions.txt. ",
+             "Provide a path via the 'regions_file' argument.",
+             call. = FALSE)
+      }
+    }
+  }
+  stopifnot(file.exists(regions_file))
+  regions <- utils::read.delim(regions_file, stringsAsFactors = FALSE)
+  stopifnot(all(c("Chromosome", "Start", "End") %in% names(regions)))
+
+  # Build region string for read_bam(region := ...) — comma-separated
+  # htslib format: "Y:start-end,Y:start-end,..."
+  region_strs <- sprintf("%s:%d-%d", regions$Chromosome,
+                         regions$Start, regions$End)
+  region_param <- paste(region_strs, collapse = ",")
+
+  # Manage connection
+  own_con <- is.null(con)
+  if (own_con) {
+    if (!requireNamespace("Rduckhts", quietly = TRUE)) {
+      stop("Rduckhts is required. Install it with: ",
+           "remotes::install_github('RGenomicsETL/duckhts/r/Rduckhts')",
+           call. = FALSE)
+    }
+    drv <- duckdb::duckdb(config = list(allow_unsigned_extensions = "true"))
+    con <- DBI::dbConnect(drv)
+    Rduckhts::rduckhts_load(con)
+    on.exit(DBI::dbDisconnect(con, shutdown = TRUE), add = TRUE)
+  }
+
+  bam_escaped <- gsub("'", "''", bam)
+  ref_clause <- if (!is.null(reference)) {
+    sprintf(", reference := '%s'", gsub("'", "''", reference))
+  } else ""
+
+  # Build flag filter clauses
+  req_clause <- if (require_flags > 0L)
+    sprintf("AND (flag & %d) = %d", require_flags, require_flags) else ""
+  exc_clause <- if (exclude_flags > 0L)
+    sprintf("AND (flag & %d) = 0", exclude_flags) else ""
+
+  # Count reads in Y-unique regions (index-based region query)
+  sql_y_unique <- sprintf(
+    "SELECT COUNT(*)::INTEGER AS n
+     FROM read_bam('%s', region := '%s'%s)
+     WHERE mapq >= %d %s %s",
+    bam_escaped, region_param, ref_clause,
+    mapq, req_clause, exc_clause
+  )
+  y_unique_reads <- DBI::dbGetQuery(con, sql_y_unique)$n[1L]
+
+  # Count total nuclear reads (chromosomes 1-22, X, Y — no region filter,
+  # full scan with rname filtering)
+  # Nuclear chromosomes pattern: matches 1-22, X, Y with optional chr prefix.
+  sql_total <- sprintf(
+    "SELECT COUNT(*)::INTEGER AS n
+     FROM read_bam('%s'%s)
+     WHERE mapq >= %d %s %s
+       AND rname IS NOT NULL
+       AND regexp_matches(upper(regexp_replace(rname, '^[Cc][Hh][Rr]', '')),
+                          '^([1-9]|1[0-9]|2[0-2]|X|Y)$')",
+    bam_escaped, ref_clause,
+    mapq, req_clause, exc_clause
+  )
+  total_nuclear_reads <- DBI::dbGetQuery(con, sql_total)$n[1L]
+
+  ratio <- if (total_nuclear_reads > 0L) {
+    as.numeric(y_unique_reads) / as.numeric(total_nuclear_reads)
+  } else 0
+
+  list(
+    ratio               = ratio,
+    y_unique_reads      = y_unique_reads,
+    total_nuclear_reads = total_nuclear_reads,
+    regions             = regions
   )
 }
 

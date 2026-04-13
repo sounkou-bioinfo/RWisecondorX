@@ -21,7 +21,8 @@ if (all(!is.na(src_paths))) {
   for (p in src_paths) source(p)
 } else if (requireNamespace("RWisecondorX", quietly = TRUE)) {
   for (fn in c("nipter_as_control_group", "nipter_sex_model",
-               "nipter_predict_sex")) {
+               "nipter_predict_sex", "nipter_sex_model_y_unique",
+               "nipter_y_unique_ratio")) {
     assign(fn, getExportedValue("RWisecondorX", fn))
   }
 } else {
@@ -240,3 +241,113 @@ expect_error(nipter_sex_model(small_cg),
 # No model provided to predict
 expect_error(nipter_predict_sex(test_female),
              info = "rejects predict with no models")
+
+
+# ===================================================================
+# Y-UNIQUE MODEL (nipter_sex_model_y_unique)
+# ===================================================================
+
+# Simulate Y-unique ratios: females near 0, males near 0.003
+set.seed(42L)
+n_f <- 15L
+n_m <- 15L
+female_ratios <- abs(rnorm(n_f, mean = 0.00005, sd = 0.00002))
+male_ratios   <- abs(rnorm(n_m, mean = 0.003,   sd = 0.0005))
+all_ratios <- c(female_ratios, male_ratios)
+names(all_ratios) <- c(paste0("female_", seq_len(n_f)),
+                        paste0("male_",   seq_len(n_m)))
+true_sex_yu <- c(rep("female", n_f), rep("male", n_m))
+names(true_sex_yu) <- names(all_ratios)
+
+model_yu <- nipter_sex_model_y_unique(all_ratios)
+
+expect_true(inherits(model_yu, "NIPTeRSexModel"),
+            info = "y_unique model has correct class")
+expect_identical(model_yu$method, "y_unique",
+                 info = "y_unique model method is correct")
+expect_true(model_yu$male_cluster %in% c(1L, 2L),
+            info = "y_unique male_cluster is 1 or 2")
+expect_identical(length(model_yu$classifications), 30L,
+                 info = "y_unique classifications has 30 entries")
+
+# Classification accuracy
+accuracy_yu <- mean(model_yu$classifications == true_sex_yu)
+expect_true(accuracy_yu >= 0.90,
+            info = paste0("Y-unique model accuracy >= 90% (got ",
+                         round(accuracy_yu * 100), "%)"))
+
+# Male cluster should have higher ratio values
+male_idx <- model_yu$classifications == "male"
+expect_true(median(all_ratios[male_idx]) > median(all_ratios[!male_idx]),
+            info = "y_unique male cluster has higher ratios")
+
+# Edge case: too few samples
+expect_error(nipter_sex_model_y_unique(c(a = 0.001, b = 0.002, c = 0.003)),
+             info = "y_unique rejects < 4 samples")
+
+# Unnamed ratios get default names
+unnamed_ratios <- unname(all_ratios)
+model_unnamed <- nipter_sex_model_y_unique(unnamed_ratios)
+expect_true(!is.null(names(model_unnamed$classifications)),
+            info = "unnamed ratios get default sample names")
+
+
+# ===================================================================
+# PREDICT SEX WITH Y-UNIQUE MODEL
+# ===================================================================
+
+# Predict female sample using y_unique model via nipter_predict_sex
+pred_yu_f <- nipter_predict_sex(test_female, model_yu,
+                                y_unique_ratio = 0.00003)
+expect_identical(pred_yu_f$prediction, "female",
+                 info = "y_unique model predicts female correctly")
+expect_identical(pred_yu_f$model_predictions[["y_unique"]], "female",
+                 info = "y_unique model_predictions entry correct for female")
+
+# Predict male sample using y_unique model
+pred_yu_m <- nipter_predict_sex(test_male, model_yu,
+                                y_unique_ratio = 0.004)
+expect_identical(pred_yu_m$prediction, "male",
+                 info = "y_unique model predicts male correctly")
+
+# Three-model consensus with y_unique
+pred_3 <- nipter_predict_sex(test_female, model_y, model_xy, model_yu,
+                             y_unique_ratio = 0.00003)
+expect_identical(length(pred_3$model_predictions), 3L,
+                 info = "3-model consensus has 3 predictions")
+expect_identical(pred_3$prediction, "female",
+                 info = "3-model consensus predicts female correctly")
+
+pred_3m <- nipter_predict_sex(test_male, model_y, model_xy, model_yu,
+                              y_unique_ratio = 0.004)
+expect_identical(pred_3m$prediction, "male",
+                 info = "3-model consensus predicts male correctly")
+
+# y_unique model without ratio → warning + NA + skipped in consensus
+expect_warning(
+  pred_skip <- nipter_predict_sex(test_female, model_yu),
+  info = "warns when y_unique model present but ratio missing"
+)
+expect_true(is.na(pred_skip$model_predictions[["y_unique"]]),
+            info = "y_unique prediction is NA when ratio missing")
+# With only the y_unique model skipped, consensus defaults to female (tie)
+expect_identical(pred_skip$prediction, "female",
+                 info = "consensus defaults to female when only model skipped")
+
+
+# ===================================================================
+# nipter_y_unique_ratio — input validation
+# ===================================================================
+
+# Bad bam path
+expect_error(nipter_y_unique_ratio("nonexistent.bam"),
+             info = "y_unique_ratio rejects nonexistent BAM")
+
+# Bad regions file — use a temp file as a fake BAM so we pass the file.exists
+# check on the BAM path and hit the regions_file check instead.
+.tmp_fake_bam <- tempfile(fileext = ".bam")
+file.create(.tmp_fake_bam)
+expect_error(nipter_y_unique_ratio(.tmp_fake_bam,
+                                   regions_file = "nonexistent_regions.txt"),
+             info = "y_unique_ratio rejects nonexistent regions file")
+unlink(.tmp_fake_bam)

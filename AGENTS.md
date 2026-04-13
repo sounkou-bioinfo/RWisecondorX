@@ -56,15 +56,14 @@ Each file is strictly separate; never mix NIPTeR and WisecondorX code. All stati
 - `R/nipter_chi.R` — `nipter_chi_correct()`: chi-squared overdispersion correction applied simultaneously to sample and control group. SeparatedStrands: chi computed on summed strand counts, correction applied per-strand via `lapply()`.
 - `R/nipter_score.R` — `nipter_z_score()`: chromosomal fraction Z-score with Shapiro-Wilk normality test. Uses collapsed fractions for SeparatedStrands. `nipter_ncv_score()`: normalised chromosome value with brute-force denominator search using `utils::combn()` (replaces `sets::set_combn()` dependency).
 - `R/nipter_regression.R` — `nipter_regression()`: forward stepwise regression Z-score with train/test split, practical vs theoretical CV selection. Supports both CombinedStrands and SeparatedStrands. SeparatedStrands doubles the predictor pool (44 candidates: `"1F".."22F","1R".."22R"`) with complementary exclusion (selecting `"5F"` excludes both `"5F"` and `"5R"` from the same model).
-- `R/nipter_sex.R` — `nipter_sex_model()`: 2-component GMM sex prediction via `mclust::Mclust()`, supporting `"y_fraction"` and `"xy_fraction"` methods. `nipter_predict_sex()`: classifies a sample as male/female using one or more models with majority-vote consensus. Internal `.mclust_fit()` wrapper evaluates in mclust namespace to work around `mclustBIC()` not being namespace-qualified in upstream mclust.
+- `R/nipter_sex.R` — `nipter_sex_model()`: 2-component GMM sex prediction via `mclust::Mclust()`, supporting `"y_fraction"` and `"xy_fraction"` methods. `nipter_sex_model_y_unique()`: 2-component GMM on Y-unique region read ratios (BAM-level, uses `nipter_y_unique_ratio()`). `nipter_y_unique_ratio()`: counts reads overlapping 7 Y-chromosome unique gene regions via DuckDB/duckhts index-based region queries and returns ratio to total nuclear reads. `nipter_predict_sex()`: classifies a sample as male/female using one or more models with majority-vote consensus; `y_unique_ratio` parameter enables the Y-unique model in the vote. Internal `.mclust_fit()` wrapper evaluates in mclust namespace to work around `mclustBIC()` not being namespace-qualified in upstream mclust.
 - `inst/tinytest/test_nipter_stats.R` — 105 assertions covering all statistical functions including SeparatedStrands variants.
-- `inst/tinytest/test_nipter_sex.R` — 26 assertions covering sex model building, classification accuracy, prediction, consensus, and edge cases.
+- `inst/tinytest/test_nipter_sex.R` — 45 assertions covering sex model building, Y-unique model, 3-model consensus, classification accuracy, prediction, and edge cases.
 
 ### Open architectural questions
 
 - **Sex-stratified NCV for X/Y chromosomes**: The user's clinical pipeline computes sex-stratified NCV denominators for X and Y (separate models for males vs females). Not yet implemented.
 - **Sex-stratified regression for X/Y**: Forward stepwise `lm()` models for X and Y fractions, stratified by predicted sex. Not yet implemented.
-- **Y-unique ratio model**: The user's pipeline uses `YUniqueRatioFiltered` from samtools idxstats as a third sex prediction feature. Would require an `idxstats`-like function in duckhts/Rduckhts.
 - **DNACopy replacement**: the segmentation step in `wisecondorx_predict` uses DNACopy internally; evaluate whether to expose or replace it.
 - **Multi-chromosome NIPTeR conformance fixture**: `make fixtures` currently produces a chr11-only BAM. A multi-chromosome synthetic BAM (all 24 chroms, no unmapped reads, no same-position collisions) would allow `NIPTER_CONFORMANCE_BAM` to be populated automatically in CI without a real patient BAM.
 
@@ -84,7 +83,7 @@ Each file is strictly separate; never mix NIPTeR and WisecondorX code. All stati
 - `R/npz.R` — NPZ output.
 - `R/aaa.R` — SRA metadata helpers.
 - `inst/tinytest/` — unit tests (one file per feature family).
-- `inst/extdata/` — synthetic BAM/CRAM fixtures.
+- `inst/extdata/` — synthetic BAM/CRAM fixtures and bundled reference data (`grch37_Y_UniqueRegions.txt`).
 - The WisecondorX upstream algorithm reference is `../../duckhts/.sync/WisecondorX/`.
 - The NIPTeR upstream algorithm reference is `../../duckhts/.sync/NIPTeR/`.
 - The WisecondorX conformance script is `../../duckhts/scripts/wisecondorx_convert_conformance.py`.

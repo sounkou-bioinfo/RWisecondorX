@@ -242,8 +242,8 @@ bam_convert_bed <- function(bam,
   # Write uncompressed BED to a temp file, then bgzip → tabix via Rduckhts.
   tmp <- tempfile(fileext = ".bed")
   on.exit(unlink(tmp), add = TRUE)
-  write.table(df, tmp, sep = "\t", quote = FALSE, row.names = FALSE,
-              col.names = FALSE)
+  utils::write.table(df, tmp, sep = "\t", quote = FALSE, row.names = FALSE,
+                     col.names = FALSE)
 
   Rduckhts::rduckhts_bgzip(con, tmp,
                            output_path = bed,

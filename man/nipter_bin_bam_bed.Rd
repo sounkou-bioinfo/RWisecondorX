@@ -64,12 +64,14 @@ bgzipped, tabix-indexed BED file.
 When \code{separate_strands = FALSE} (default), the output has five columns:
 \code{chrom}, \code{start}, \code{end}, \code{count}, \code{corrected_count}.
 
-When \code{separate_strands = TRUE}, the output has seven columns:
+When \code{separate_strands = TRUE}, the output has nine columns:
 \code{chrom}, \code{start}, \code{end}, \code{count}, \code{count_fwd}, \code{count_rev},
-\code{corrected_count}. \code{count} is the total (forward + reverse).
+\code{corrected_count}, \code{corrected_fwd}, \code{corrected_rev}. \code{count} is the total
+(forward + reverse); \code{corrected_count} is the total of the per-strand
+corrected values.
 
-\code{corrected_count} is \code{NA} until a GC-corrected sample is supplied via the
-\code{corrected} parameter.
+\code{corrected_count} (and \code{corrected_fwd}/\code{corrected_rev}) is \code{NA} until a
+GC-corrected sample is supplied via the \code{corrected} parameter.
 }
 \examples{
 \dontrun{
@@ -79,7 +81,7 @@ nipter_bin_bam_bed("sample.bam", "sample.nipter.bed.gz")
 nipter_bin_bam_bed("sample.dm.bam", "sample.nipter.bed.gz",
                    mapq = 40L, exclude_flags = 1024L)
 
-# Strand-separated output (7 columns)
+# Strand-separated output (9 columns)
 nipter_bin_bam_bed("sample.bam", "sample.stranded.bed.gz",
                    separate_strands = TRUE)
 }

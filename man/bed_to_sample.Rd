@@ -7,7 +7,7 @@
 bed_to_sample(bed, binsize = NULL, con = NULL)
 }
 \arguments{
-\item{bed}{Path to a bgzipped (or plain) BED file.}
+\item{bed}{Path to a bgzipped (or plain) BED file with a \code{.tbi} index.}
 
 \item{binsize}{Optional integer; bin size in base pairs. If \code{NULL} (default),
 inferred from the first row of the BED file.}

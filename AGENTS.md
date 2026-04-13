@@ -32,7 +32,7 @@ Design priorities:
 
 **NIPTeR binning layer — `R/nipter_bin.R`**
 - `nipter_bin_bam()`: produces `NIPTeRSample` objects. With `separate_strands = FALSE` (default), class is `c("NIPTeRSample", "CombinedStrands")`; with `separate_strands = TRUE`, class is `c("NIPTeRSample", "SeparatedStrands")` with `autosomal_chromosome_reads` as a list of two matrices (forward/reverse, rownames `"1F".."22F"` / `"1R".."22R"`). Exposes `mapq`, `require_flags`, `exclude_flags`, `rmdup` for pre-filtering matching real-world NIPT pipelines (e.g. `mapq=40L, exclude_flags=1024L`).
-- `nipter_bin_bam_bed()`: BED output with `separate_strands` support. When `FALSE` (default): 5-column BED (`chrom`, `start`, `end`, `count`, `corrected_count`). When `TRUE`: 7-column BED adding `count_fwd` and `count_rev` columns.
+- `nipter_bin_bam_bed()`: BED output with `separate_strands` support. When `FALSE` (default): 5-column BED (`chrom`, `start`, `end`, `count`, `corrected_count`). When `TRUE`: 9-column BED (`chrom`, `start`, `end`, `count`, `count_fwd`, `count_rev`, `corrected_count`, `corrected_fwd`, `corrected_rev`).
 
 **Tests**
 - `inst/tinytest/test_fixtures.R` (41 assertions): synthetic BAM/CRAM fixtures, all three `rmdup` modes, CRAM reference round-trip.
@@ -86,8 +86,8 @@ Pure R/Rcpp port of the WisecondorX `newref` and `predict` pipelines, with perfo
 
 **BED.gz reader functions — round-trip from stored BED files**
 
-- `R/bed_reader.R` — `bed_to_sample()`: reads a 4-column BED.gz (from `bam_convert_bed()`) into the named-list-of-integer-vectors format for `rwisecondorx_newref()` / `rwisecondorx_predict()`. `bed_to_nipter_sample()`: reads a 5-column (CombinedStrands) or 7-column (SeparatedStrands) BED.gz (from `nipter_bin_bam_bed()`) into a `NIPTeRSample` object. Auto-detects column count; handles literal "NA" in `corrected_count` via `TRY_CAST`.
-- `inst/tinytest/test_bed_reader.R` — 34 assertions covering WisecondorX and NIPTeR round-trips, SeparatedStrands 7-column BED, sample name inference, and `scale_sample()` integration.
+- `R/bed_reader.R` — `bed_to_sample()`: reads a 4-column BED.gz (from `bam_convert_bed()`) into the named-list-of-integer-vectors format for `rwisecondorx_newref()` / `rwisecondorx_predict()`. `bed_to_nipter_sample()`: reads a 5-column (CombinedStrands) or 9-column (SeparatedStrands) BED.gz (from `nipter_bin_bam_bed()`) into a `NIPTeRSample` object. Auto-detects column count via `read_tabix()` probe; handles literal "NA" in `corrected_count` via `TRY_CAST`. Per-strand corrected values (`corrected_fwd`, `corrected_rev`) are read independently for SeparatedStrands.
+- `inst/tinytest/test_bed_reader.R` — 46 assertions covering WisecondorX and NIPTeR round-trips, SeparatedStrands 9-column BED, corrected per-strand round-trip, sample name inference, and `scale_sample()` integration.
 
 ### Open architectural questions
 
@@ -139,10 +139,10 @@ The BED.gz format is the language-agnostic handoff between binning and downstrea
 
 - 4-column WisecondorX BED: `chrom`, `start`, `end`, `count` (written by `bam_convert_bed()`).
 - 5-column NIPTeR BED (CombinedStrands): `chrom`, `start`, `end`, `count`, `corrected_count` (written by `nipter_bin_bam_bed()`).
-- 7-column NIPTeR BED (SeparatedStrands): `chrom`, `start`, `end`, `count`, `count_fwd`, `count_rev`, `corrected_count` (written by `nipter_bin_bam_bed(separate_strands = TRUE)`).
+- 9-column NIPTeR BED (SeparatedStrands): `chrom`, `start`, `end`, `count`, `count_fwd`, `count_rev`, `corrected_count`, `corrected_fwd`, `corrected_rev` (written by `nipter_bin_bam_bed(separate_strands = TRUE)`). `count = count_fwd + count_rev`; `corrected_*` columns are `NA` until a GC-corrected sample is supplied.
 - Coordinates are 0-based half-open intervals (BED convention). Chromosomes use no `chr` prefix.
 - All files are bgzipped (BGZF) and tabix-indexed via `Rduckhts::rduckhts_bgzip()` and `Rduckhts::rduckhts_tabix_index()`. Do not use `gzfile()` or external tools.
-- `bed_to_sample()` reads 4-column BED.gz back into the WisecondorX in-memory format. `bed_to_nipter_sample()` reads 5- or 7-column BED.gz back into a `NIPTeRSample`. These close the round-trip so analysis pipelines can start from pre-computed BED files without re-reading the BAM.
+- `bed_to_sample()` reads 4-column BED.gz back into the WisecondorX in-memory format. `bed_to_nipter_sample()` reads 5- or 9-column BED.gz back into a `NIPTeRSample`. These close the round-trip so analysis pipelines can start from pre-computed BED files without re-reading the BAM. All BED reading uses `read_tabix()` (not `read_bed()`) to avoid BED-schema type coercion issues with double-valued columns.
 
 ---
 

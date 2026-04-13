@@ -129,7 +129,7 @@ integer vectors consumed by `rwisecondorx_newref()` and
 sample <- bed_to_sample("sample.bed.gz", binsize = 5000L)
 ```
 
-`bed_to_nipter_sample()` reads a 5-column (CombinedStrands) or 7-column
+`bed_to_nipter_sample()` reads a 5-column (CombinedStrands) or 9-column
 (SeparatedStrands) NIPTeR BED.gz into a `NIPTeRSample` object compatible with
 all NIPTeR statistical functions. Column count is auto-detected:
 

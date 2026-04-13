@@ -6,7 +6,8 @@
 #
 # This closes the round-trip: bam_convert_bed() / nipter_bin_bam_bed() write
 # bgzipped BED files; these functions read them back. All HTS I/O goes through
-# Rduckhts's read_bed() DuckDB table function.
+# Rduckhts's read_tabix() DuckDB table function, which returns all columns as
+# VARCHAR — no BED-schema type coercion issues with doubles in columns 7+.
 
 
 #' Read a WisecondorX-format BED file into a sample list
@@ -20,7 +21,7 @@
 #' size is inferred from the first row (`end - start`) unless explicitly
 #' provided.
 #'
-#' @param bed Path to a bgzipped (or plain) BED file.
+#' @param bed Path to a bgzipped (or plain) BED file with a `.tbi` index.
 #' @param binsize Optional integer; bin size in base pairs. If `NULL` (default),
 #'   inferred from the first row of the BED file.
 #' @param con Optional open DBI connection with duckhts already loaded.
@@ -60,14 +61,15 @@ bed_to_sample <- function(bed, binsize = NULL, con = NULL) {
   bed_path <- normalizePath(bed, mustWork = TRUE)
   bed_sql <- gsub("'", "''", bed_path)
 
-  # read_bed() maps columns as: chrom, start, end, name(=count as VARCHAR), ...
+  # read_tabix() returns all columns as VARCHAR (column0, column1, ...).
+  # 4-column BED: chrom, start, end, count
   sql <- sprintf("
     SELECT
-      chrom,
-      \"start\" AS start_pos,
-      \"end\"   AS end_pos,
-      CAST(name AS INTEGER) AS count
-    FROM read_bed('%s')
+      column0                    AS chrom,
+      CAST(column1 AS INTEGER)   AS start_pos,
+      CAST(column2 AS INTEGER)   AS end_pos,
+      CAST(column3 AS INTEGER)   AS count
+    FROM read_tabix('%s')
   ", bed_sql)
 
   rows <- DBI::dbGetQuery(con, sql)
@@ -89,19 +91,27 @@ bed_to_sample <- function(bed, binsize = NULL, con = NULL) {
 
 #' Read a NIPTeR-format BED file into a NIPTeRSample
 #'
-#' Reads a 5-column or 7-column bgzipped BED file (as written by
+#' Reads a 5-column or 9-column bgzipped BED file (as written by
 #' [nipter_bin_bam_bed()]) and returns a `NIPTeRSample` object suitable for
 #' all NIPTeR statistical functions: [nipter_gc_correct()],
 #' [nipter_chi_correct()], [nipter_z_score()], [nipter_ncv_score()],
 #' [nipter_regression()], and [nipter_predict_sex()].
 #'
 #' A 5-column BED (`chrom`, `start`, `end`, `count`, `corrected_count`)
-#' produces a `CombinedStrands` sample. A 7-column BED (`chrom`, `start`,
-#' `end`, `count`, `count_fwd`, `count_rev`, `corrected_count`) produces a
-#' `SeparatedStrands` sample with independent forward/reverse count matrices.
-#' The number of columns is detected automatically.
+#' produces a `CombinedStrands` sample. A 9-column BED (`chrom`, `start`,
+#' `end`, `count`, `count_fwd`, `count_rev`, `corrected_count`,
+#' `corrected_fwd`, `corrected_rev`) produces a `SeparatedStrands` sample
+#' with independent forward/reverse count matrices. The number of columns is
+#' detected automatically.
 #'
-#' @param bed Path to a bgzipped (or plain) BED file.
+#' When the corrected columns contain non-NA values (i.e. the BED was written
+#' with a GC-corrected `corrected` argument), the returned sample's count
+#' matrices are replaced with the corrected values and the correction status is
+#' set to `"GC Corrected"`. For `SeparatedStrands`, the per-strand corrected
+#' values (`corrected_fwd`, `corrected_rev`) are used to populate the
+#' forward and reverse matrices independently.
+#'
+#' @param bed Path to a bgzipped (or plain) BED file with a `.tbi` index.
 #' @param name Optional sample name. If `NULL` (default), derived from the BED
 #'   file basename (e.g. `"sample"` from `"sample.bed.gz"`).
 #' @param binsize Optional integer; bin size in base pairs. If `NULL` (default),
@@ -113,7 +123,7 @@ bed_to_sample <- function(bed, binsize = NULL, con = NULL) {
 #'   **`CombinedStrands`** (from 5-column BED): same structure as
 #'   [nipter_bin_bam()] with `separate_strands = FALSE`.
 #'
-#'   **`SeparatedStrands`** (from 7-column BED): same structure as
+#'   **`SeparatedStrands`** (from 9-column BED): same structure as
 #'   [nipter_bin_bam()] with `separate_strands = TRUE`.
 #'
 #' @seealso [nipter_bin_bam_bed()], [nipter_bin_bam()], [bed_to_sample()],
@@ -151,24 +161,19 @@ bed_to_nipter_sample <- function(bed, name = NULL, binsize = NULL, con = NULL) {
     name <- sub("\\.bed(\\.gz)?$", "", basename(bed), ignore.case = TRUE)
   }
 
-  # Detect column count by reading the first row with all available columns
+  # Detect column count by probing column5 (0-indexed).
+  # 5-col BED: column0..column4 → column5 does not exist (DuckDB error).
+  # 9-col BED: column0..column8 → column5 will have count_rev.
   probe_sql <- sprintf(
-    "SELECT chrom, \"start\", \"end\", name, score, strand FROM read_bed('%s') LIMIT 1",
+    "SELECT column5 FROM read_tabix('%s') LIMIT 1",
     bed_sql
   )
-  probe <- DBI::dbGetQuery(con, probe_sql)
-
-  if (nrow(probe) == 0L) {
-    stop("BED file is empty: ", bed, call. = FALSE)
-  }
-
-  # Determine format from the 6th column (strand position in read_bed mapping):
-  # 5-col BED: chrom, start, end, count(=name), corrected_count(=score)
-  #   → strand column will be NULL or NA
-
-  # 7-col BED: chrom, start, end, count(=name), count_fwd(=score),
-  #            count_rev(=strand), corrected_count mapped further
-  is_separated <- !is.na(probe$strand[1L]) && nzchar(probe$strand[1L])
+  is_separated <- tryCatch({
+    probe <- DBI::dbGetQuery(con, probe_sql)
+    nrow(probe) > 0L &&
+      !is.na(probe$column5[1L]) &&
+      nzchar(probe$column5[1L])
+  }, error = function(e) FALSE)
 
   if (is_separated) {
     .bed_to_nipter_separated(con, bed_sql, name, binsize)
@@ -214,16 +219,16 @@ bed_to_nipter_sample <- function(bed, name = NULL, binsize = NULL, con = NULL) {
 
 
 # Read a 5-column CombinedStrands BED into a NIPTeRSample.
-# Columns: chrom, start, end, count(=name), corrected_count(=score)
+# Columns: chrom, start, end, count, corrected_count
 .bed_to_nipter_combined <- function(con, bed_sql, name, binsize) {
   sql <- sprintf("
     SELECT
-      chrom,
-      \"start\"                      AS start_pos,
-      \"end\"                        AS end_pos,
-      CAST(name AS INTEGER)          AS count,
-      TRY_CAST(score AS DOUBLE)      AS corrected_count
-    FROM read_bed('%s')
+      column0                          AS chrom,
+      CAST(column1 AS INTEGER)         AS start_pos,
+      CAST(column2 AS INTEGER)         AS end_pos,
+      CAST(column3 AS INTEGER)         AS count,
+      TRY_CAST(column4 AS DOUBLE)      AS corrected_count
+    FROM read_tabix('%s')
   ", bed_sql)
 
   rows <- DBI::dbGetQuery(con, sql)
@@ -313,20 +318,22 @@ bed_to_nipter_sample <- function(bed, name = NULL, binsize = NULL, con = NULL) {
 }
 
 
-# Read a 7-column SeparatedStrands BED into a NIPTeRSample.
-# Columns: chrom, start, end, count(=name), count_fwd(=score),
-#           count_rev(=strand), corrected_count(=thick_start)
+# Read a 9-column SeparatedStrands BED into a NIPTeRSample.
+# Columns: chrom, start, end, count, count_fwd, count_rev,
+#           corrected_count, corrected_fwd, corrected_rev
 .bed_to_nipter_separated <- function(con, bed_sql, name, binsize) {
   sql <- sprintf("
     SELECT
-      chrom,
-      \"start\"                          AS start_pos,
-      \"end\"                            AS end_pos,
-      CAST(name   AS INTEGER)            AS count,
-      CAST(score  AS INTEGER)            AS count_fwd,
-      CAST(strand AS INTEGER)            AS count_rev,
-      TRY_CAST(thick_start AS DOUBLE)    AS corrected_count
-    FROM read_bed('%s')
+      column0                          AS chrom,
+      CAST(column1 AS INTEGER)         AS start_pos,
+      CAST(column2 AS INTEGER)         AS end_pos,
+      CAST(column3 AS INTEGER)         AS count,
+      CAST(column4 AS INTEGER)         AS count_fwd,
+      CAST(column5 AS INTEGER)         AS count_rev,
+      TRY_CAST(column6 AS DOUBLE)      AS corrected_count,
+      TRY_CAST(column7 AS DOUBLE)      AS corrected_fwd,
+      TRY_CAST(column8 AS DOUBLE)      AS corrected_rev
+    FROM read_tabix('%s')
   ", bed_sql)
 
   rows <- DBI::dbGetQuery(con, sql)
@@ -357,7 +364,7 @@ bed_to_nipter_sample <- function(bed, name = NULL, binsize = NULL, con = NULL) {
 
   col_names <- as.character(seq_len(n_bins))
 
-  # Build four matrices: fwd_auto, rev_auto, fwd_sex, rev_sex
+  # Build four raw-count matrices: fwd_auto, rev_auto, fwd_sex, rev_sex
   fwd_auto <- matrix(0L, nrow = 22L, ncol = n_bins,
                      dimnames = list(paste0(auto_keys, "F"), col_names))
   rev_auto <- matrix(0L, nrow = 22L, ncol = n_bins,
@@ -382,7 +389,7 @@ bed_to_nipter_sample <- function(bed, name = NULL, binsize = NULL, con = NULL) {
     }
   }
 
-  structure(
+  sample_obj <- structure(
     list(
       autosomal_chromosome_reads  = list(fwd_auto, rev_auto),
       sex_chromosome_reads        = list(fwd_sex, rev_sex),
@@ -392,4 +399,41 @@ bed_to_nipter_sample <- function(bed, name = NULL, binsize = NULL, con = NULL) {
     ),
     class = c("NIPTeRSample", "SeparatedStrands")
   )
+
+  # Apply per-strand corrected counts if present
+  has_corr <- !all(is.na(rows$corrected_fwd)) &&
+    !all(is.na(rows$corrected_rev))
+
+  if (has_corr) {
+    corr_fwd_auto <- matrix(0, nrow = 22L, ncol = n_bins,
+                            dimnames = list(paste0(auto_keys, "F"), col_names))
+    corr_rev_auto <- matrix(0, nrow = 22L, ncol = n_bins,
+                            dimnames = list(paste0(auto_keys, "R"), col_names))
+    corr_fwd_sex  <- matrix(0, nrow = 2L, ncol = n_bins,
+                            dimnames = list(c("XF", "YF"), col_names))
+    corr_rev_sex  <- matrix(0, nrow = 2L, ncol = n_bins,
+                            dimnames = list(c("XR", "YR"), col_names))
+
+    for (i in seq_along(auto_keys)) {
+      sel <- which(chrom == auto_keys[i])
+      if (length(sel) > 0L) {
+        corr_fwd_auto[i, bin_idx[sel] + 1L] <- rows$corrected_fwd[sel]
+        corr_rev_auto[i, bin_idx[sel] + 1L] <- rows$corrected_rev[sel]
+      }
+    }
+    for (i in seq_along(sex_keys)) {
+      sel <- which(chrom == sex_keys[i])
+      if (length(sel) > 0L) {
+        corr_fwd_sex[i, bin_idx[sel] + 1L] <- rows$corrected_fwd[sel]
+        corr_rev_sex[i, bin_idx[sel] + 1L] <- rows$corrected_rev[sel]
+      }
+    }
+
+    sample_obj$autosomal_chromosome_reads <- list(corr_fwd_auto, corr_rev_auto)
+    sample_obj$sex_chromosome_reads       <- list(corr_fwd_sex, corr_rev_sex)
+    sample_obj$correction_status_autosomal <- "GC Corrected"
+    sample_obj$correction_status_sex       <- "GC Corrected"
+  }
+
+  sample_obj
 }

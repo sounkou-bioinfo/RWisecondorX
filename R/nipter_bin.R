@@ -122,12 +122,14 @@ nipter_bin_bam <- function(bam,
 #' When `separate_strands = FALSE` (default), the output has five columns:
 #' `chrom`, `start`, `end`, `count`, `corrected_count`.
 #'
-#' When `separate_strands = TRUE`, the output has seven columns:
+#' When `separate_strands = TRUE`, the output has nine columns:
 #' `chrom`, `start`, `end`, `count`, `count_fwd`, `count_rev`,
-#' `corrected_count`. `count` is the total (forward + reverse).
+#' `corrected_count`, `corrected_fwd`, `corrected_rev`. `count` is the total
+#' (forward + reverse); `corrected_count` is the total of the per-strand
+#' corrected values.
 #'
-#' `corrected_count` is `NA` until a GC-corrected sample is supplied via the
-#' `corrected` parameter.
+#' `corrected_count` (and `corrected_fwd`/`corrected_rev`) is `NA` until a
+#' GC-corrected sample is supplied via the `corrected` parameter.
 #'
 #' @param bam Path to an indexed BAM or CRAM file.
 #' @param bed Path for the output `.bed.gz` file. The tabix index is written
@@ -163,7 +165,7 @@ nipter_bin_bam <- function(bam,
 #' nipter_bin_bam_bed("sample.dm.bam", "sample.nipter.bed.gz",
 #'                    mapq = 40L, exclude_flags = 1024L)
 #'
-#' # Strand-separated output (7 columns)
+#' # Strand-separated output (9 columns)
 #' nipter_bin_bam_bed("sample.bam", "sample.stranded.bed.gz",
 #'                    separate_strands = TRUE)
 #' }
@@ -229,8 +231,8 @@ nipter_bin_bam_bed <- function(bam,
 
   tmp <- tempfile(fileext = ".bed")
   on.exit(unlink(tmp), add = TRUE)
-  write.table(df, tmp, sep = "\t", quote = FALSE, row.names = FALSE,
-              col.names = FALSE)
+  utils::write.table(df, tmp, sep = "\t", quote = FALSE, row.names = FALSE,
+                     col.names = FALSE)
 
   Rduckhts::rduckhts_bgzip(con, tmp,
                            output_path = bed,
@@ -385,9 +387,9 @@ nipter_bin_bam_bed <- function(bam,
 }
 
 
-# SeparatedStrands BED data.frame: 7 columns
-# chrom, start, end, count, count_fwd, count_rev, corrected_count
-# count = count_fwd + count_rev (total)
+# SeparatedStrands BED data.frame: 9 columns
+# chrom, start, end, count, count_fwd, count_rev,
+# corrected_count, corrected_fwd, corrected_rev
 .nipter_bed_separated_strands <- function(sample, binsize, corrected = NULL) {
   fwd_auto <- sample$autosomal_chromosome_reads[[1L]]  # "1F".."22F"
   rev_auto <- sample$autosomal_chromosome_reads[[2L]]   # "1R".."22R"
@@ -410,6 +412,8 @@ nipter_bin_bam_bed <- function(bam,
     count_fwd       = as.integer(t(fwd_combined)),
     count_rev       = as.integer(t(rev_combined)),
     corrected_count = NA_real_,
+    corrected_fwd   = NA_real_,
+    corrected_rev   = NA_real_,
     stringsAsFactors = FALSE
   )
 
@@ -420,6 +424,8 @@ nipter_bin_bam_bed <- function(bam,
     corr_rev <- rbind(corrected$autosomal_chromosome_reads[[2L]],
                       corrected$sex_chromosome_reads[[2L]])
     df$corrected_count <- as.numeric(t(corr_fwd + corr_rev))
+    df$corrected_fwd   <- as.numeric(t(corr_fwd))
+    df$corrected_rev   <- as.numeric(t(corr_rev))
   } else if (!is.null(corrected)) {
     corr_auto <- corrected$autosomal_chromosome_reads[[1L]]
     corr_sex  <- corrected$sex_chromosome_reads[[1L]]

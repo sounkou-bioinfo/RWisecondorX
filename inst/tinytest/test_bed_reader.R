@@ -122,7 +122,7 @@ expect_identical(nipter_rt_named$sample_name, "my_sample",
 
 
 # ==========================================================================
-# bed_to_nipter_sample() round-trip — SeparatedStrands (7-column BED)
+# bed_to_nipter_sample() round-trip — SeparatedStrands (9-column BED)
 # ==========================================================================
 
 nipter_ss_orig <- nipter_bin_bam(mixed_bam, binsize = 5000L, rmdup = "none",
@@ -140,7 +140,7 @@ nipter_ss_rt <- bed_to_nipter_sample(ss_bed)
 expect_true(inherits(nipter_ss_rt, "NIPTeRSample"),
             info = "SeparatedStrands bed_to_nipter_sample() returns NIPTeRSample")
 expect_true(inherits(nipter_ss_rt, "SeparatedStrands"),
-            info = "7-column BED produces SeparatedStrands")
+            info = "9-column BED produces SeparatedStrands")
 
 # Forward autosomal
 fwd_auto_orig <- nipter_ss_orig$autosomal_chromosome_reads[[1L]]
@@ -175,6 +175,121 @@ expect_identical(rownames(rev_sex_rt), c("XR", "YR"),
                  info = "SeparatedStrands rev sex rownames")
 expect_identical(as.integer(rev_sex_rt), as.integer(rev_sex_orig),
                  info = "SeparatedStrands rev sex counts round-trip")
+
+
+# ==========================================================================
+# bed_to_nipter_sample() round-trip — corrected CombinedStrands (5-column)
+# ==========================================================================
+
+# Simulate GC correction by manually setting corrected counts on the sample.
+# The corrected values are doubles (not integers), which is why read_tabix()
+# is needed instead of read_bed().
+nipter_corr <- nipter_orig   # copy the raw sample
+auto_raw <- nipter_corr$autosomal_chromosome_reads[[1L]]
+sex_raw  <- nipter_corr$sex_chromosome_reads[[1L]]
+
+# Multiply raw counts by 1.1 to create synthetic corrected values (doubles)
+corr_auto <- auto_raw * 1.1
+corr_sex  <- sex_raw * 1.1
+
+nipter_corr$autosomal_chromosome_reads <- list(corr_auto)
+nipter_corr$sex_chromosome_reads       <- list(corr_sex)
+nipter_corr$correction_status_autosomal <- "GC Corrected"
+nipter_corr$correction_status_sex       <- "GC Corrected"
+
+corr_bed <- tempfile(fileext = ".bed.gz")
+nipter_bin_bam_bed(mixed_bam, corr_bed, binsize = 5000L, rmdup = "none",
+                   corrected = nipter_corr)
+
+corr_rt <- bed_to_nipter_sample(corr_bed)
+
+expect_identical(corr_rt$correction_status_autosomal, "GC Corrected",
+                 info = "CombinedStrands corrected round-trip: correction status")
+expect_identical(corr_rt$correction_status_sex, "GC Corrected",
+                 info = "CombinedStrands corrected round-trip: sex correction status")
+
+# Corrected values round-trip within floating-point tolerance
+corr_auto_rt <- corr_rt$autosomal_chromosome_reads[[1L]]
+expect_equal(as.numeric(corr_auto_rt), as.numeric(corr_auto), tolerance = 1e-6,
+             info = "CombinedStrands corrected auto values round-trip")
+corr_sex_rt <- corr_rt$sex_chromosome_reads[[1L]]
+expect_equal(as.numeric(corr_sex_rt), as.numeric(corr_sex), tolerance = 1e-6,
+             info = "CombinedStrands corrected sex values round-trip")
+
+
+# ==========================================================================
+# bed_to_nipter_sample() round-trip — corrected SeparatedStrands (9-column)
+# ==========================================================================
+
+# Simulate per-strand GC correction on the SeparatedStrands sample
+nipter_ss_corr <- nipter_ss_orig
+fwd_auto_raw <- nipter_ss_corr$autosomal_chromosome_reads[[1L]]
+rev_auto_raw <- nipter_ss_corr$autosomal_chromosome_reads[[2L]]
+fwd_sex_raw  <- nipter_ss_corr$sex_chromosome_reads[[1L]]
+rev_sex_raw  <- nipter_ss_corr$sex_chromosome_reads[[2L]]
+
+# Apply different multipliers per strand to verify they are independent
+corr_fwd_auto <- fwd_auto_raw * 1.15
+corr_rev_auto <- rev_auto_raw * 0.95
+corr_fwd_sex  <- fwd_sex_raw * 1.15
+corr_rev_sex  <- rev_sex_raw * 0.95
+
+nipter_ss_corr$autosomal_chromosome_reads <- list(corr_fwd_auto, corr_rev_auto)
+nipter_ss_corr$sex_chromosome_reads       <- list(corr_fwd_sex, corr_rev_sex)
+nipter_ss_corr$correction_status_autosomal <- "GC Corrected"
+nipter_ss_corr$correction_status_sex       <- "GC Corrected"
+class(nipter_ss_corr) <- c("NIPTeRSample", "SeparatedStrands")
+
+corr_ss_bed <- tempfile(fileext = ".bed.gz")
+nipter_bin_bam_bed(mixed_bam, corr_ss_bed, binsize = 5000L, rmdup = "none",
+                   separate_strands = TRUE, corrected = nipter_ss_corr)
+
+corr_ss_rt <- bed_to_nipter_sample(corr_ss_bed)
+
+expect_true(inherits(corr_ss_rt, "SeparatedStrands"),
+            info = "Corrected SeparatedStrands round-trip: class is SeparatedStrands")
+expect_identical(corr_ss_rt$correction_status_autosomal, "GC Corrected",
+                 info = "Corrected SeparatedStrands round-trip: auto correction status")
+expect_identical(corr_ss_rt$correction_status_sex, "GC Corrected",
+                 info = "Corrected SeparatedStrands round-trip: sex correction status")
+
+# Forward auto corrected values round-trip
+corr_fwd_auto_rt <- corr_ss_rt$autosomal_chromosome_reads[[1L]]
+expect_equal(as.numeric(corr_fwd_auto_rt), as.numeric(corr_fwd_auto),
+             tolerance = 1e-6,
+             info = "Corrected SeparatedStrands: fwd auto round-trips")
+
+# Reverse auto corrected values round-trip
+corr_rev_auto_rt <- corr_ss_rt$autosomal_chromosome_reads[[2L]]
+expect_equal(as.numeric(corr_rev_auto_rt), as.numeric(corr_rev_auto),
+             tolerance = 1e-6,
+             info = "Corrected SeparatedStrands: rev auto round-trips")
+
+# Forward sex corrected values round-trip
+corr_fwd_sex_rt <- corr_ss_rt$sex_chromosome_reads[[1L]]
+expect_equal(as.numeric(corr_fwd_sex_rt), as.numeric(corr_fwd_sex),
+             tolerance = 1e-6,
+             info = "Corrected SeparatedStrands: fwd sex round-trips")
+
+# Reverse sex corrected values round-trip
+corr_rev_sex_rt <- corr_ss_rt$sex_chromosome_reads[[2L]]
+expect_equal(as.numeric(corr_rev_sex_rt), as.numeric(corr_rev_sex),
+             tolerance = 1e-6,
+             info = "Corrected SeparatedStrands: rev sex round-trips")
+
+# Verify forward and reverse multipliers are different (independence check)
+# The fwd had 1.15 multiplier, rev had 0.95 — if they got mixed up,
+# the values wouldn't match
+fwd_auto_nz <- which(as.numeric(fwd_auto_raw) > 0)
+if (length(fwd_auto_nz) > 0L) {
+  expect_true(
+    !isTRUE(all.equal(
+      as.numeric(corr_fwd_auto_rt)[fwd_auto_nz],
+      as.numeric(corr_rev_auto_rt)[fwd_auto_nz]
+    )),
+    info = "Corrected SeparatedStrands: fwd and rev are independent"
+  )
+}
 
 
 # ==========================================================================

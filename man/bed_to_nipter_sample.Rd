@@ -7,7 +7,7 @@
 bed_to_nipter_sample(bed, name = NULL, binsize = NULL, con = NULL)
 }
 \arguments{
-\item{bed}{Path to a bgzipped (or plain) BED file.}
+\item{bed}{Path to a bgzipped (or plain) BED file with a \code{.tbi} index.}
 
 \item{name}{Optional sample name. If \code{NULL} (default), derived from the BED
 file basename (e.g. \code{"sample"} from \code{"sample.bed.gz"}).}
@@ -23,11 +23,11 @@ An object of class \verb{c("NIPTeRSample", <strand_type>)}:
 \strong{\code{CombinedStrands}} (from 5-column BED): same structure as
 \code{\link[=nipter_bin_bam]{nipter_bin_bam()}} with \code{separate_strands = FALSE}.
 
-\strong{\code{SeparatedStrands}} (from 7-column BED): same structure as
+\strong{\code{SeparatedStrands}} (from 9-column BED): same structure as
 \code{\link[=nipter_bin_bam]{nipter_bin_bam()}} with \code{separate_strands = TRUE}.
 }
 \description{
-Reads a 5-column or 7-column bgzipped BED file (as written by
+Reads a 5-column or 9-column bgzipped BED file (as written by
 \code{\link[=nipter_bin_bam_bed]{nipter_bin_bam_bed()}}) and returns a \code{NIPTeRSample} object suitable for
 all NIPTeR statistical functions: \code{\link[=nipter_gc_correct]{nipter_gc_correct()}},
 \code{\link[=nipter_chi_correct]{nipter_chi_correct()}}, \code{\link[=nipter_z_score]{nipter_z_score()}}, \code{\link[=nipter_ncv_score]{nipter_ncv_score()}},
@@ -35,10 +35,18 @@ all NIPTeR statistical functions: \code{\link[=nipter_gc_correct]{nipter_gc_corr
 }
 \details{
 A 5-column BED (\code{chrom}, \code{start}, \code{end}, \code{count}, \code{corrected_count})
-produces a \code{CombinedStrands} sample. A 7-column BED (\code{chrom}, \code{start},
-\code{end}, \code{count}, \code{count_fwd}, \code{count_rev}, \code{corrected_count}) produces a
-\code{SeparatedStrands} sample with independent forward/reverse count matrices.
-The number of columns is detected automatically.
+produces a \code{CombinedStrands} sample. A 9-column BED (\code{chrom}, \code{start},
+\code{end}, \code{count}, \code{count_fwd}, \code{count_rev}, \code{corrected_count},
+\code{corrected_fwd}, \code{corrected_rev}) produces a \code{SeparatedStrands} sample
+with independent forward/reverse count matrices. The number of columns is
+detected automatically.
+
+When the corrected columns contain non-NA values (i.e. the BED was written
+with a GC-corrected \code{corrected} argument), the returned sample's count
+matrices are replaced with the corrected values and the correction status is
+set to \code{"GC Corrected"}. For \code{SeparatedStrands}, the per-strand corrected
+values (\code{corrected_fwd}, \code{corrected_rev}) are used to populate the
+forward and reverse matrices independently.
 }
 \examples{
 \dontrun{

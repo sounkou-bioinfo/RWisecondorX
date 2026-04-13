@@ -1,3 +1,7 @@
+# Suppress R CMD check NOTEs for symbols used inside evalq() in the mclust
+# namespace (nipter_sex.R and rwisecondorx_utils.R).
+utils::globalVariables(c("Mclust", "emControl", "data"))
+
 #' SRA Run Metadata Utilities
 #'
 #' These helpers standardize how `RWisecondorX` stages SRA run metadata for

@@ -49,8 +49,9 @@
 </h1></div>
 <!-- badges: start -->
 
-<p><code>RWisecondorX</code> is an R port of <a href="https://github.com/CenterForMedicalGeneticsGhent/WisecondorX" class="external-link">WisecondorX</a> built on top of <code>Rduckhts</code> and DuckDB. It follows the <a href="https://rewrites.bio" class="external-link">rewrites.bio</a> principles: exact emulation of upstream outputs, full credit to the original authors, and transparency about AI assistance.</p>
+<p><code>RWisecondorX</code> is an R toolkit for copy number analysis and trisomy prediction in non-invasive prenatal testing (NIPT), built on top of <code>Rduckhts</code> and DuckDB. It ports both <a href="https://github.com/CenterForMedicalGeneticsGhent/WisecondorX" class="external-link">WisecondorX</a> (CNV detection) and <a href="https://github.com/molgenis/NIPTeR" class="external-link">NIPTeR</a> (trisomy prediction via Z-scores, NCV, regression, and chi-squared correction), following the <a href="https://rewrites.bio" class="external-link">rewrites.bio</a> principles: exact emulation of upstream outputs, full credit to the original authors, and transparency about AI assistance.</p>
 <p>The core convert step runs entirely in R/SQL via <code>Rduckhts</code> with no Python dependency. <code><a href="reference/bam_convert.html">bam_convert()</a></code> returns per-bin read counts in memory; <code><a href="reference/bam_convert_bed.html">bam_convert_bed()</a></code> writes them to a bgzipped, tabix-indexed BED file readable by DuckDB or any tabix-aware tool; and <code><a href="reference/bam_convert_npz.html">bam_convert_npz()</a></code> serialises them to a WisecondorX-compatible <code>.npz</code> via <code>reticulate</code>. The convert implementation exactly replicates the upstream <code>larp</code> / <code>larp2</code> streaming deduplication behaviour, achieving bin-for-bin agreement with the Python implementation.</p>
+<p>The NIPTeR statistical layer provides GC correction (via on-the-fly FASTA computation, not bundled tables), chi-squared overdispersion correction, chromosomal fraction Z-scores, normalised chromosome values (NCV), and forward stepwise regression — all operating on <code>NIPTeRSample</code> objects produced by <code><a href="reference/nipter_bin_bam.html">nipter_bin_bam()</a></code>.</p>
 <p>For pipelines that need the full upstream toolchain, thin <code>condathis</code> wrappers cover every stage: <code><a href="reference/wisecondorx_convert.html">wisecondorx_convert()</a></code>, <code><a href="reference/wisecondorx_newref.html">wisecondorx_newref()</a></code>, and <code><a href="reference/wisecondorx_predict.html">wisecondorx_predict()</a></code> each delegate to the official bioconda package without requiring a manual conda setup.</p>
 <div class="section level2">
 <h2 id="installation">Installation<a class="anchor" aria-label="anchor" href="#installation"></a>
@@ -174,10 +175,67 @@
 <span><span class="op">)</span></span></code></pre></div>
 </div>
 <div class="section level2">
+<h2 id="nipter-style-trisomy-prediction">NIPTeR-Style Trisomy Prediction<a class="anchor" aria-label="anchor" href="#nipter-style-trisomy-prediction"></a>
+</h2>
+<p><code>RWisecondorX</code> also ports the statistical analysis layer from <a href="https://github.com/molgenis/NIPTeR" class="external-link">NIPTeR</a> (de Weerd et al.), replacing <code>Rsamtools</code> with <code>Rduckhts</code> and bundled <code>sysdata.rda</code> tables with on-the-fly computation via <code>rduckhts_fasta_nuc()</code>. The analysis pipeline follows NIPTeR’s workflow: bin samples, build a control group, correct for GC bias and overdispersion, then compute Z-scores or NCV values for trisomy prediction.</p>
+<div class="section level3">
+<h3 id="binning">Binning<a class="anchor" aria-label="anchor" href="#binning"></a>
+</h3>
+<p><code><a href="reference/nipter_bin_bam.html">nipter_bin_bam()</a></code> produces <code>NIPTeRSample</code> objects compatible with all downstream functions. Pre-filtering flags mirror <code>samtools view -f</code>/<code>-F</code> conventions, so real-world NIPT pipelines that mark duplicates with Picard can pass <code>exclude_flags = 1024L</code> directly.</p>
+<div class="sourceCode" id="cb7"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span><span class="va">samples</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/lapply.html" class="external-link">lapply</a></span><span class="op">(</span><span class="va">bam_files</span>, <span class="va">nipter_bin_bam</span>, binsize <span class="op">=</span> <span class="fl">50000L</span><span class="op">)</span></span></code></pre></div>
+</div>
+<div class="section level3">
+<h3 id="control-group-construction">Control Group Construction<a class="anchor" aria-label="anchor" href="#control-group-construction"></a>
+</h3>
+<p>A control group is the reference cohort against which test samples are scored. <code><a href="reference/nipter_as_control_group.html">nipter_as_control_group()</a></code> validates and deduplicates the input samples. <code><a href="reference/nipter_diagnose_control_group.html">nipter_diagnose_control_group()</a></code> reports per-chromosome Z-scores and Shapiro-Wilk normality p-values across the group, useful for identifying outlier samples before scoring. When working with a large cohort, <code><a href="reference/nipter_match_control_group.html">nipter_match_control_group()</a></code> selects the closest-matching subset for a given test sample based on chromosomal fraction distance.</p>
+<div class="sourceCode" id="cb8"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span><span class="va">cg</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/nipter_as_control_group.html">nipter_as_control_group</a></span><span class="op">(</span><span class="va">samples</span><span class="op">)</span></span>
+<span><span class="va">diag</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/nipter_diagnose_control_group.html">nipter_diagnose_control_group</a></span><span class="op">(</span><span class="va">cg</span><span class="op">)</span></span>
+<span><span class="va">matched_cg</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/nipter_match_control_group.html">nipter_match_control_group</a></span><span class="op">(</span><span class="va">test_sample</span>, <span class="va">cg</span>, n_controls <span class="op">=</span> <span class="fl">50L</span><span class="op">)</span></span></code></pre></div>
+</div>
+<div class="section level3">
+<h3 id="gc-correction">GC Correction<a class="anchor" aria-label="anchor" href="#gc-correction"></a>
+</h3>
+<p><code><a href="reference/nipter_gc_correct.html">nipter_gc_correct()</a></code> adjusts bin counts for GC-content bias. GC percentages are computed per bin from the reference FASTA via <code>rduckhts_fasta_nuc()</code> rather than from static bundled tables. Two methods are available: LOESS regression (default, matching NIPTeR) and bin-weight normalisation. The function accepts either a single sample or an entire control group.</p>
+<div class="sourceCode" id="cb9"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span><span class="va">cg</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/nipter_gc_correct.html">nipter_gc_correct</a></span><span class="op">(</span><span class="va">cg</span>, fasta <span class="op">=</span> <span class="st">"hg38.fa"</span>, method <span class="op">=</span> <span class="st">"loess"</span><span class="op">)</span></span>
+<span><span class="va">test_sample</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/nipter_gc_correct.html">nipter_gc_correct</a></span><span class="op">(</span><span class="va">test_sample</span>, fasta <span class="op">=</span> <span class="st">"hg38.fa"</span><span class="op">)</span></span></code></pre></div>
+</div>
+<div class="section level3">
+<h3 id="chi-squared-correction">Chi-Squared Correction<a class="anchor" aria-label="anchor" href="#chi-squared-correction"></a>
+</h3>
+<p><code><a href="reference/nipter_chi_correct.html">nipter_chi_correct()</a></code> identifies overdispersed bins across the control group using a normalised chi-squared test and downweights them. The correction is applied simultaneously to both the test sample and control group, maintaining consistency for downstream scoring.</p>
+<div class="sourceCode" id="cb10"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span><span class="va">corrected</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/nipter_chi_correct.html">nipter_chi_correct</a></span><span class="op">(</span><span class="va">test_sample</span>, <span class="va">cg</span>, chi_cutoff <span class="op">=</span> <span class="fl">3.5</span><span class="op">)</span></span>
+<span><span class="va">test_sample</span> <span class="op">&lt;-</span> <span class="va">corrected</span><span class="op">$</span><span class="va">sample</span></span>
+<span><span class="va">cg</span> <span class="op">&lt;-</span> <span class="va">corrected</span><span class="op">$</span><span class="va">control_group</span></span></code></pre></div>
+</div>
+<div class="section level3">
+<h3 id="scoring">Scoring<a class="anchor" aria-label="anchor" href="#scoring"></a>
+</h3>
+<p><code><a href="reference/nipter_z_score.html">nipter_z_score()</a></code> computes the chromosomal fraction Z-score for a focus chromosome, testing how far the sample deviates from the control distribution. A Z-score above 3 is the conventional threshold for trisomy. Each result includes a Shapiro-Wilk p-value for the control distribution so that normality violations are visible.</p>
+<div class="sourceCode" id="cb11"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span><span class="va">z21</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/nipter_z_score.html">nipter_z_score</a></span><span class="op">(</span><span class="va">test_sample</span>, <span class="va">cg</span>, chromo_focus <span class="op">=</span> <span class="fl">21</span><span class="op">)</span></span>
+<span><span class="va">z21</span><span class="op">$</span><span class="va">sample_z_score</span></span>
+<span><span class="va">z21</span><span class="op">$</span><span class="va">control_statistics</span></span></code></pre></div>
+<p><code><a href="reference/nipter_ncv_score.html">nipter_ncv_score()</a></code> computes the normalised chromosome value, which searches for the denominator chromosome set that minimises control-group variance before computing the Z-score. This is more robust than the standard Z-score when the control group is small or the chromosomal fraction has high variance.</p>
+<div class="sourceCode" id="cb12"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span><span class="va">ncv21</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/nipter_ncv_score.html">nipter_ncv_score</a></span><span class="op">(</span><span class="va">test_sample</span>, <span class="va">cg</span>, chromo_focus <span class="op">=</span> <span class="fl">21</span><span class="op">)</span></span>
+<span><span class="va">ncv21</span><span class="op">$</span><span class="va">sample_ncv_score</span></span>
+<span><span class="va">ncv21</span><span class="op">$</span><span class="va">denominators</span></span></code></pre></div>
+<p><code><a href="reference/nipter_regression.html">nipter_regression()</a></code> uses forward stepwise linear regression to predict the focus chromosome’s fraction from other chromosomes, then scores the residual. It builds multiple models with a train/test split and selects the CV (practical vs theoretical) that gives the more conservative estimate.</p>
+<div class="sourceCode" id="cb13"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span><span class="va">reg21</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/nipter_regression.html">nipter_regression</a></span><span class="op">(</span><span class="va">test_sample</span>, <span class="va">cg</span>, chromo_focus <span class="op">=</span> <span class="fl">21</span><span class="op">)</span></span>
+<span><span class="va">reg21</span><span class="op">$</span><span class="va">models</span><span class="op">[[</span><span class="fl">1</span><span class="op">]</span><span class="op">]</span><span class="op">$</span><span class="va">z_score</span></span>
+<span><span class="va">reg21</span><span class="op">$</span><span class="va">models</span><span class="op">[[</span><span class="fl">1</span><span class="op">]</span><span class="op">]</span><span class="op">$</span><span class="va">predictors</span></span></code></pre></div>
+</div>
+</div>
+<div class="section level2">
 <h2 id="sra-metadata-helpers">SRA Metadata Helpers<a class="anchor" aria-label="anchor" href="#sra-metadata-helpers"></a>
 </h2>
 <p><code><a href="reference/sra_runinfo.html">sra_runinfo_url()</a></code>, <code><a href="reference/sra_runinfo.html">download_sra_runinfo()</a></code>, and <code><a href="reference/sra_runinfo.html">read_sra_runinfo()</a></code> are small helpers for staging NCBI SRA run metadata used by conformance fixtures.</p>
-<div class="sourceCode" id="cb7"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb14"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="kw"><a href="https://rdrr.io/r/base/library.html" class="external-link">library</a></span><span class="op">(</span><span class="va"><a href="https://sounkou-bioinfo.github.io/RWisecondorX/">RWisecondorX</a></span><span class="op">)</span></span>
 <span></span>
 <span><span class="fu"><a href="reference/sra_runinfo.html">sra_runinfo_url</a></span><span class="op">(</span><span class="st">"PRJNA400134"</span><span class="op">)</span></span>

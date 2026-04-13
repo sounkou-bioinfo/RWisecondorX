@@ -59,7 +59,8 @@ nipter_bin_bam_bed(
 
 - corrected:
 
-  Optional `NIPTeRSample` already processed by `nipter_gc_correct()`.
+  Optional `NIPTeRSample` already processed by
+  [`nipter_gc_correct()`](https://sounkou-bioinfo.github.io/RWisecondorX/reference/nipter_gc_correct.md).
   When supplied, its corrected counts populate the `corrected_count`
   column; otherwise the column is `NA`.
 
@@ -81,16 +82,20 @@ nipter_bin_bam_bed(
 
 ## Details
 
-`corrected_count` is filled with `NA` until `nipter_gc_correct()` is
-available. Once GC correction is ported, the typical workflow will be:
+`corrected_count` is filled with `NA` until
+[`nipter_gc_correct()`](https://sounkou-bioinfo.github.io/RWisecondorX/reference/nipter_gc_correct.md)
+is available. Once GC correction is ported, the typical workflow will
+be:
 [`nipter_bin_bam()`](https://sounkou-bioinfo.github.io/RWisecondorX/reference/nipter_bin_bam.md)
-→ `nipter_gc_correct()` → `nipter_bin_bam_bed()` with the corrected
-sample passed as `corrected`.
+→
+[`nipter_gc_correct()`](https://sounkou-bioinfo.github.io/RWisecondorX/reference/nipter_gc_correct.md)
+→ `nipter_bin_bam_bed()` with the corrected sample passed as
+`corrected`.
 
 ## See also
 
 [`nipter_bin_bam()`](https://sounkou-bioinfo.github.io/RWisecondorX/reference/nipter_bin_bam.md),
-`nipter_gc_correct()`,
+[`nipter_gc_correct()`](https://sounkou-bioinfo.github.io/RWisecondorX/reference/nipter_gc_correct.md),
 [`bam_convert_bed()`](https://sounkou-bioinfo.github.io/RWisecondorX/reference/bam_convert_bed.md)
 
 ## Examples

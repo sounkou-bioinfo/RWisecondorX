@@ -97,7 +97,7 @@ reads (<code>samtools view -F 1024</code>).</p></dd>
 
 <dt id="arg-corrected">corrected<a class="anchor" aria-label="anchor" href="#arg-corrected"></a></dt>
 <dd><p>Optional <code>NIPTeRSample</code> already processed by
-<code>nipter_gc_correct()</code>. When supplied, its corrected counts populate the
+<code><a href="nipter_gc_correct.html">nipter_gc_correct()</a></code>. When supplied, its corrected counts populate the
 <code>corrected_count</code> column; otherwise the column is <code>NA</code>.</p></dd>
 
 
@@ -119,14 +119,14 @@ reads (<code>samtools view -F 1024</code>).</p></dd>
     </div>
     <div class="section level2">
     <h2 id="details">Details<a class="anchor" aria-label="anchor" href="#details"></a></h2>
-    <p><code>corrected_count</code> is filled with <code>NA</code> until <code>nipter_gc_correct()</code> is
+    <p><code>corrected_count</code> is filled with <code>NA</code> until <code><a href="nipter_gc_correct.html">nipter_gc_correct()</a></code> is
 available. Once GC correction is ported, the typical workflow will be:
-<code><a href="nipter_bin_bam.html">nipter_bin_bam()</a></code> → <code>nipter_gc_correct()</code> → <code>nipter_bin_bam_bed()</code> with
+<code><a href="nipter_bin_bam.html">nipter_bin_bam()</a></code> → <code><a href="nipter_gc_correct.html">nipter_gc_correct()</a></code> → <code>nipter_bin_bam_bed()</code> with
 the corrected sample passed as <code>corrected</code>.</p>
     </div>
     <div class="section level2">
     <h2 id="see-also">See also<a class="anchor" aria-label="anchor" href="#see-also"></a></h2>
-    <div class="dont-index"><p><code><a href="nipter_bin_bam.html">nipter_bin_bam()</a></code>, <code>nipter_gc_correct()</code>, <code><a href="bam_convert_bed.html">bam_convert_bed()</a></code></p></div>
+    <div class="dont-index"><p><code><a href="nipter_bin_bam.html">nipter_bin_bam()</a></code>, <code><a href="nipter_gc_correct.html">nipter_gc_correct()</a></code>, <code><a href="bam_convert_bed.html">bam_convert_bed()</a></code></p></div>
     </div>
 
     <div class="section level2">

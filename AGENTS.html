@@ -49,166 +49,198 @@
 <strong>Interoperable file formats</strong> — bgzipped, tabix-indexed BED files as the intermediate layer between binning and analysis, consumable by DuckDB, R, Python, or any tabix-aware tool.</li>
 <li>
 <strong>No Python runtime dependency</strong> — <code>Rduckhts</code> replaces <code>pysam</code> for all HTS operations; <code>reticulate</code> and <code>condathis</code> are optional and used only for conformance testing.</li>
-</ul></div>
+</ul><hr></div>
 <div class="section level2">
-<h2 id="current-direction">Current Direction<a class="anchor" aria-label="anchor" href="#current-direction"></a></h2>
-<ul><li>Runtime R package functionality avoids requiring Python by default.</li>
+<h2 id="implementation-status">Implementation Status<a class="anchor" aria-label="anchor" href="#implementation-status"></a></h2>
+<div class="section level3">
+<h3 id="completed">Completed<a class="anchor" aria-label="anchor" href="#completed"></a></h3>
+<p><strong>Shared binning engine — <code>R/convert.R</code></strong> - <code><a href="reference/bam_convert.html">bam_convert()</a></code>: DuckDB/SQL read-counting core. Supports <code>binsize</code>, <code>mapq</code>, <code>require_flags</code> (samtools <code>-f</code>), <code>exclude_flags</code> (samtools <code>-F</code>), <code>rmdup</code> (<code>"streaming"</code> / <code>"flag"</code> / <code>"none"</code>), CRAM via <code>reference</code>. Achieves exact bin-for-bin conformance with WisecondorX on HG00106.chrom11 (25,115 non-zero bins, 0 mismatches). - <code><a href="reference/bam_convert_bed.html">bam_convert_bed()</a></code>: bgzipped + tabix-indexed 4-column BED output (<code>chrom</code>, <code>start</code>, <code>end</code>, <code>count</code>). Uses <code><a href="https://rgenomicsetl.r-universe.dev/Rduckhts/reference/rduckhts_bgzip.html" class="external-link">Rduckhts::rduckhts_bgzip()</a></code> and <code>rduckhts_tabix_index()</code> — no external tools.</p>
+<p><strong>WisecondorX layer</strong> - <code>R/wisecondorx_cli.R</code>: <code><a href="reference/wisecondorx_convert.html">wisecondorx_convert()</a></code>, <code><a href="reference/wisecondorx_newref.html">wisecondorx_newref()</a></code>, <code><a href="reference/wisecondorx_predict.html">wisecondorx_predict()</a></code> — thin <code>condathis</code> wrappers delegating to the official bioconda package. - <code>R/npz.R</code>: <code><a href="reference/bam_convert_npz.html">bam_convert_npz()</a></code> — WisecondorX-compatible NPZ output via <code>reticulate</code>.</p>
+<p><strong>NIPTeR binning layer — <code>R/nipter_bin.R</code></strong> - <code><a href="reference/nipter_bin_bam.html">nipter_bin_bam()</a></code>: produces <code>NIPTeRSample</code> objects (class <code>c("NIPTeRSample", "CombinedStrands")</code>). Exposes <code>mapq</code>, <code>require_flags</code>, <code>exclude_flags</code>, <code>rmdup</code> for pre-filtering matching real-world NIPT pipelines (e.g. <code>mapq=40L, exclude_flags=1024L</code>). - <code><a href="reference/nipter_bin_bam_bed.html">nipter_bin_bam_bed()</a></code>: 5-column BED (<code>chrom</code>, <code>start</code>, <code>end</code>, <code>count</code>, <code>corrected_count</code>). <code>corrected_count</code> is <code>NA</code> until GC correction is ported; column is present so downstream tools can rely on the schema now.</p>
+<p><strong>Tests</strong> - <code>inst/tinytest/test_fixtures.R</code> (41 assertions): synthetic BAM/CRAM fixtures, all three <code>rmdup</code> modes, CRAM reference round-trip. - <code>inst/tinytest/test_nipter.R</code> (47 assertions): <code>NIPTeRSample</code> structure, matrix dimensions and rownames, MAPQ filter, <code>exclude_flags=1024</code> dedup, BED.gz output shape, optional bin-for-bin conformance against <code><a href="https://rdrr.io/pkg/NIPTeR/man/bin_bam_sample.html" class="external-link">NIPTeR::bin_bam_sample()</a></code> via <code>NIPTER_CONFORMANCE_BAM</code> env var. - <code>inst/tinytest/test_cli_args.R</code>: CLI argument builder unit tests. - <code>inst/tinytest/test_npz.R</code>: NPZ round-trip tests. - <code>inst/tinytest/test_integration.R</code>: WisecondorX bin-for-bin conformance via condathis. - <code>inst/tinytest/test_sra_metadata.R</code>: SRA URL helpers.</p>
+<p><strong>Infrastructure</strong> - <code>R/aaa.R</code>: SRA metadata helpers. - <code>scripts/make_fixtures.sh</code>: reproducible synthetic BAM/CRAM fixture generation. - <code>DESCRIPTION</code>: NIPTeR authors (Dirk de Weerd, Lennart Johansson) listed as <code>cph</code>. NIPTeR added to <code>Suggests</code>.</p>
+<p><strong>NIPTeR statistical layer</strong></p>
+<p>Each file is strictly separate; never mix NIPTeR and WisecondorX code.</p>
+<ul><li>
+<code>R/nipter_control.R</code> — <code><a href="reference/nipter_as_control_group.html">nipter_as_control_group()</a></code>: constructs a <code>NIPTeRControlGroup</code> from a list of <code>NIPTeRSample</code> objects with validation and dedup. <code><a href="reference/nipter_diagnose_control_group.html">nipter_diagnose_control_group()</a></code>: per-chromosome Z-scores and Shapiro-Wilk normality tests across the control group. <code><a href="reference/nipter_match_control_group.html">nipter_match_control_group()</a></code>: selects the best-fit control samples for a test sample by sum-of-squares chromosomal fraction distance.</li>
 <li>
-<code>condathis</code> is optional and used only for reproducible conformance test environments; it installs the official <code>wisecondorx</code> package from bioconda, not any vendored copy.</li>
-<li>The vendored Python implementation has been <strong>removed</strong> from <code>inst/python/wisecondorx/</code> to avoid licence drift and maintenance burden. The canonical upstream reference is <code>../../duckhts/.sync/WisecondorX/</code> (algorithm reference only) and the official bioconda package (execution reference).</li>
-<li>The NIPTeR upstream reference is <code>../../duckhts/.sync/NIPTeR/</code> (read-only algorithm reference).</li>
+<code>R/nipter_gc.R</code> — <code><a href="reference/nipter_gc_correct.html">nipter_gc_correct()</a></code>: LOESS and bin-weight GC correction. GC content derived from the FASTA reference via <code>rduckhts_fasta_nuc()</code> — <strong>no bundled correction tables</strong> (unlike the original NIPTeR <code>sysdata.rda</code>). Supports both single samples and control groups. Sex chromosome correction via nearest-neighbour (LOESS) or same-bucket weights (bin-weight).</li>
 <li>
-<code>reticulate</code> remains an optional dependency used only for conformance tests and optional helpers.</li>
+<code>R/nipter_chi.R</code> — <code><a href="reference/nipter_chi_correct.html">nipter_chi_correct()</a></code>: chi-squared overdispersion correction applied simultaneously to sample and control group. Uses normalised chi-squared threshold (default 3.5). Sex chromosome correction uses mean autosomal correction factor per bin position.</li>
+<li>
+<code>R/nipter_score.R</code> — <code><a href="reference/nipter_z_score.html">nipter_z_score()</a></code>: chromosomal fraction Z-score with Shapiro-Wilk normality test. <code><a href="reference/nipter_ncv_score.html">nipter_ncv_score()</a></code>: normalised chromosome value with brute-force denominator search using <code><a href="https://rdrr.io/r/utils/combn.html" class="external-link">utils::combn()</a></code> (replaces <code><a href="https://rdrr.io/pkg/sets/man/set.html" class="external-link">sets::set_combn()</a></code> dependency).</li>
+<li>
+<code>R/nipter_regression.R</code> — <code><a href="reference/nipter_regression.html">nipter_regression()</a></code>: forward stepwise regression Z-score with train/test split, practical vs theoretical CV selection. Currently CombinedStrands only; SeparatedStrands requires <code>separate_strands = TRUE</code> support.</li>
+<li>
+<code>inst/tinytest/test_nipter_stats.R</code> — 69 assertions covering all statistical functions.</li>
 </ul></div>
+<div class="section level3">
+<h3 id="open-architectural-questions">Open architectural questions<a class="anchor" aria-label="anchor" href="#open-architectural-questions"></a></h3>
+<ul><li>
+<strong><code>separate_strands = TRUE</code></strong>: currently stubbed with <code><a href="https://rdrr.io/r/base/stop.html" class="external-link">stop()</a></code> in <code><a href="reference/nipter_bin_bam.html">nipter_bin_bam()</a></code>. Requires <code>GROUP BY rname, bin, strand</code> in the SQL layer and returning two matrices (<code>forward_reads_matrix</code> and <code>reverse_reads_matrix</code>). Needed for the SeparatedStrands variant of <code><a href="reference/nipter_regression.html">nipter_regression()</a></code>, which is already implemented structurally but gated on the input class.</li>
+<li>
+<strong>Gender/sex prediction</strong>: investigate whether to use NIPTeR’s Y-fraction method, WisecondorX’s <code>--yfrac</code> approach, or a unified strategy.</li>
+<li>
+<strong>DNACopy replacement</strong>: the segmentation step in <code>wisecondorx_predict</code> uses DNACopy internally; evaluate whether to expose or replace it.</li>
+<li>
+<strong>Multi-chromosome NIPTeR conformance fixture</strong>: <code>make fixtures</code> currently produces a chr11-only BAM. A multi-chromosome synthetic BAM (all 24 chroms, no unmapped reads, no same-position collisions) would allow <code>NIPTER_CONFORMANCE_BAM</code> to be populated automatically in CI without a real patient BAM.</li>
+</ul><hr></div>
+</div>
 <div class="section level2">
 <h2 id="source-layout-expectations">Source Layout Expectations<a class="anchor" aria-label="anchor" href="#source-layout-expectations"></a></h2>
 <ul><li>
-<code>R/convert.R</code> — shared BAM/CRAM binning engine (<code><a href="reference/bam_convert.html">bam_convert()</a></code>, <code><a href="reference/bam_convert_bed.html">bam_convert_bed()</a></code>); the central read-counting layer used by both WisecondorX and NIPTeR layers.</li>
+<code>R/convert.R</code> — shared BAM/CRAM binning engine; used by both WisecondorX and NIPTeR layers.</li>
 <li>
-<code>R/nipter_bin.R</code> — NIPTeR binning layer (<code><a href="reference/nipter_bin_bam.html">nipter_bin_bam()</a></code>, <code><a href="reference/nipter_bin_bam_bed.html">nipter_bin_bam_bed()</a></code>); produces <code>NIPTeRSample</code> objects and bgzipped BED output.</li>
+<code>R/nipter_bin.R</code> — NIPTeR binning layer.</li>
 <li>
-<code>R/nipter_gc.R</code> <em>(planned)</em> — <code>nipter_gc_correct()</code> using <code>rduckhts_fasta_nuc()</code> for GC content; no bundled correction tables.</li>
+<code>R/nipter_gc.R</code> — GC correction (LOESS and bin-weight).</li>
 <li>
-<code>R/nipter_score.R</code> <em>(planned)</em> — <code>nipter_z_score()</code>, <code>nipter_ncv_score()</code>, <code>nipter_regression()</code>.</li>
+<code>R/nipter_score.R</code> — Z-score and NCV scoring.</li>
 <li>
-<code>R/nipter_chi.R</code> <em>(planned)</em> — <code>nipter_chi_correct()</code>.</li>
+<code>R/nipter_chi.R</code> — chi-squared overdispersion correction.</li>
 <li>
-<code>R/nipter_control.R</code> <em>(planned)</em> — <code>nipter_as_control_group()</code> and related group management.</li>
+<code>R/nipter_control.R</code> — control group construction, diagnostics, and matching.</li>
 <li>
-<code>R/wisecondorx_cli.R</code> — CLI wrappers (<code><a href="reference/wisecondorx_convert.html">wisecondorx_convert()</a></code>, <code><a href="reference/wisecondorx_newref.html">wisecondorx_newref()</a></code>, <code><a href="reference/wisecondorx_predict.html">wisecondorx_predict()</a></code>).</li>
+<code>R/nipter_regression.R</code> — forward stepwise regression Z-score.</li>
 <li>
-<code>R/npz.R</code> — <code><a href="reference/bam_convert_npz.html">bam_convert_npz()</a></code> for WisecondorX-compatible NPZ output.</li>
+<code>R/wisecondorx_cli.R</code> — CLI wrappers.</li>
+<li>
+<code>R/npz.R</code> — NPZ output.</li>
 <li>
 <code>R/aaa.R</code> — SRA metadata helpers.</li>
 <li>
 <code>inst/tinytest/</code> — unit tests (one file per feature family).</li>
 <li>
-<code>inst/extdata/</code> — synthetic BAM/CRAM fixtures generated by <code>scripts/make_fixtures.sh</code>.</li>
-<li>There is NO <code>inst/python/</code> directory — vendored Python has been removed.</li>
+<code>inst/extdata/</code> — synthetic BAM/CRAM fixtures.</li>
 <li>The WisecondorX upstream algorithm reference is <code>../../duckhts/.sync/WisecondorX/</code>.</li>
 <li>The NIPTeR upstream algorithm reference is <code>../../duckhts/.sync/NIPTeR/</code>.</li>
 <li>The WisecondorX conformance script is <code>../../duckhts/scripts/wisecondorx_convert_conformance.py</code>.</li>
-</ul></div>
+<li>There is NO <code>inst/python/</code> directory.</li>
+</ul><hr></div>
 <div class="section level2">
 <h2 id="interoperable-file-formats">Interoperable File Formats<a class="anchor" aria-label="anchor" href="#interoperable-file-formats"></a></h2>
 <p>The BED.gz format is the language-agnostic handoff between binning and downstream analysis:</p>
-<ul><li>Four-column WisecondorX BED: <code>chrom</code>, <code>start</code>, <code>end</code>, <code>count</code> (written by <code><a href="reference/bam_convert_bed.html">bam_convert_bed()</a></code>).</li>
-<li>Five-column NIPTeR BED: <code>chrom</code>, <code>start</code>, <code>end</code>, <code>count</code>, <code>corrected_count</code> (written by <code><a href="reference/nipter_bin_bam_bed.html">nipter_bin_bam_bed()</a></code>).</li>
+<ul><li>4-column WisecondorX BED: <code>chrom</code>, <code>start</code>, <code>end</code>, <code>count</code> (written by <code><a href="reference/bam_convert_bed.html">bam_convert_bed()</a></code>).</li>
+<li>5-column NIPTeR BED: <code>chrom</code>, <code>start</code>, <code>end</code>, <code>count</code>, <code>corrected_count</code> (written by <code><a href="reference/nipter_bin_bam_bed.html">nipter_bin_bam_bed()</a></code>).</li>
 <li>Coordinates are 0-based half-open intervals (BED convention). Chromosomes use no <code>chr</code> prefix.</li>
 <li>All files are bgzipped (BGZF) and tabix-indexed via <code><a href="https://rgenomicsetl.r-universe.dev/Rduckhts/reference/rduckhts_bgzip.html" class="external-link">Rduckhts::rduckhts_bgzip()</a></code> and <code><a href="https://rgenomicsetl.r-universe.dev/Rduckhts/reference/rduckhts_tabix_index.html" class="external-link">Rduckhts::rduckhts_tabix_index()</a></code>. Do not use <code><a href="https://rdrr.io/r/base/connections.html" class="external-link">gzfile()</a></code> or external tools.</li>
-<li>These files are queryable directly with <code>DuckDB</code> using the <code>read_csv()</code> or <code>hts_read_bgzf_bed()</code> functions.</li>
-</ul></div>
+</ul><hr></div>
 <div class="section level2">
 <h2 id="convert-step-exact-sql-replication-of-pysam-larplarp2">Convert Step: Exact SQL Replication of pysam larp/larp2<a class="anchor" aria-label="anchor" href="#convert-step-exact-sql-replication-of-pysam-larplarp2"></a></h2>
-<p>The WisecondorX convert step uses a streaming dedup state machine (<code>larp</code>/<code>larp2</code>). The exact SQL equivalent uses DuckDB window functions over <code>FILE_OFFSET</code> (a column added to <code>read_bam()</code> by the duckhts extension that captures the BGZF virtual offset after each read, giving monotonic BAM file order):</p>
+<p>The WisecondorX convert step uses a streaming dedup state machine (<code>larp</code>/<code>larp2</code>). The exact SQL equivalent uses DuckDB window functions over <code>FILE_OFFSET</code>:</p>
 <div class="sourceCode" id="cb1"><pre class="sourceCode sql"><code class="sourceCode sql"><span id="cb1-1"><a href="#cb1-1" tabindex="-1"></a><span class="fu">LAG</span>(pos) <span class="kw">OVER</span> (<span class="kw">ORDER</span> <span class="kw">BY</span> file_offset)                                          <span class="co">-- prev_pos (larp)</span></span>
 <span id="cb1-2"><a href="#cb1-2" tabindex="-1"></a><span class="fu">LAST_VALUE</span>(<span class="cf">CASE</span> <span class="cf">WHEN</span> is_paired <span class="op">!=</span> <span class="dv">0</span> <span class="cf">THEN</span> pnext <span class="cf">END</span> IGNORE <span class="kw">NULLS</span>)              <span class="co">-- prev_pnext (larp2)</span></span>
 <span id="cb1-3"><a href="#cb1-3" tabindex="-1"></a>    <span class="kw">OVER</span> (<span class="kw">ORDER</span> <span class="kw">BY</span> file_offset <span class="kw">ROWS</span> <span class="kw">BETWEEN</span> <span class="kw">UNBOUNDED</span> <span class="kw">PRECEDING</span> <span class="kw">AND</span> <span class="dv">1</span> <span class="kw">PRECEDING</span>)</span></code></pre></div>
 <p>Key subtleties reproduced exactly:</p>
-<ul><li>Improper pairs (<code>is_paired AND NOT is_proper</code>) are invisible to both larp and larp2. This filter is applied only for <code>rmdup = "streaming"</code> — it is intrinsic to the WisecondorX algorithm, not a user flag option.</li>
+<ul><li>Improper pairs (<code>is_paired AND NOT is_proper</code>) are invisible to both larp and larp2. This filter is internal to <code>rmdup = "streaming"</code> — it is intrinsic to the WisecondorX algorithm, not a user flag option.</li>
 <li>Unpaired reads update larp but NOT larp2 — hence the <code>IGNORE NULLS</code> trick.</li>
 <li>
 <code>larp</code> is never reset between chromosomes — hence no <code>PARTITION BY</code>.</li>
-<li>Bin assignment uses integer division <code>pos // binsize</code> (not <code>/</code>), matching Python’s <code>int(pos / binsize)</code>.</li>
+<li>Bin assignment uses integer division <code>pos // binsize</code> matching Python’s <code>int(pos / binsize)</code>.</li>
 <li>
 <code>pos</code> is 0-based: subtract 1 from duckhts 1-based POS before dividing.</li>
-</ul><p>The conformance script achieves exact bin-for-bin match on HG00106.chrom11 (25,115 non-zero bins, 0 mismatches).</p>
-</div>
+</ul><hr></div>
 <div class="section level2">
 <h2 id="flag-filtering-api">Flag Filtering API<a class="anchor" aria-label="anchor" href="#flag-filtering-api"></a></h2>
-<p><code><a href="reference/bam_convert.html">bam_convert()</a></code> and <code><a href="reference/bam_convert_bed.html">bam_convert_bed()</a></code> expose samtools-style <code>-f</code>/<code>-F</code> flag filtering:</p>
+<p><code><a href="reference/bam_convert.html">bam_convert()</a></code>, <code><a href="reference/bam_convert_bed.html">bam_convert_bed()</a></code>, <code><a href="reference/nipter_bin_bam.html">nipter_bin_bam()</a></code>, and <code><a href="reference/nipter_bin_bam_bed.html">nipter_bin_bam_bed()</a></code> expose samtools-style <code>-f</code>/<code>-F</code> flag filtering:</p>
 <ul><li>
 <code>require_flags</code> (integer bitmask, default <code>0L</code>): only reads where <code>(flag &amp; require_flags) == require_flags</code> are kept. Equivalent to <code>samtools view -f</code>.</li>
 <li>
 <code>exclude_flags</code> (integer bitmask, default <code>0L</code>): reads where <code>(flag &amp; exclude_flags) != 0</code> are dropped. Equivalent to <code>samtools view -F</code>.</li>
-<li>Use the duckhts UDFs <code>sam_flag_bits(flag)</code> and <code>sam_flag_has(flag, bit)</code> to inspect SAM flags in SQL if needed.</li>
-</ul><p>The NIPTeR layer (<code><a href="reference/nipter_bin_bam.html">nipter_bin_bam()</a></code>) uses <code>require_flags = 0L, exclude_flags = 0L</code> by default (all mapped reads, matching NIPTeR’s <code>scanBam</code> defaults).</p>
-</div>
-<div class="section level2">
-<h2 id="nipter-layer">NIPTeR Layer<a class="anchor" aria-label="anchor" href="#nipter-layer"></a></h2>
-<p>The NIPTeR port follows the same rewrites.bio principles as the WisecondorX port: exact emulation, credit original authors, AI transparency. Key differences from the original:</p>
-<ul><li>
-<code><a href="https://rdrr.io/pkg/Rsamtools/man/scanBam.html" class="external-link">Rsamtools::scanBam()</a></code> is replaced by <code><a href="reference/bam_convert.html">bam_convert()</a></code> (DuckDB/Rduckhts SQL engine).</li>
-<li>GC content will be derived from the FASTA reference via <code>rduckhts_fasta_nuc()</code> — no bundled correction tables.</li>
-<li>
-<code>NIPTeRSample</code> objects use the same list structure as NIPTeR’s <code>NIPTSample</code> (<code>autosomal_chromosome_reads</code>, <code>sex_chromosome_reads</code>, correction status fields, <code>sample_name</code>).</li>
-<li>Strand separation (<code>separate_strands = TRUE</code>) is stubbed with an informative error; it requires a forward/reverse SQL split and will be added with the regression layer.</li>
-</ul><div class="section level3">
-<h3 id="known-issues-in-nipters-scanbam-approach">Known issues in NIPTeR’s scanBam approach<a class="anchor" aria-label="anchor" href="#known-issues-in-nipters-scanbam-approach"></a></h3>
-<p>Two bugs in the original <code>bin_bam_sample()</code> affect conformance testing and real-world correctness:</p>
-<p><strong>1. Split length mismatch on BAMs with unmapped reads.</strong></p>
+</ul><p>Common real-world NIPT pre-filter pattern (matches <code>samtools view --min-MQ 40 -F 1024</code>):</p>
 <div class="sourceCode" id="cb2"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span><span class="fu"><a href="reference/nipter_bin_bam.html">nipter_bin_bam</a></span><span class="op">(</span><span class="st">"sample.dm.bam"</span>, mapq <span class="op">=</span> <span class="fl">40L</span>, exclude_flags <span class="op">=</span> <span class="fl">1024L</span><span class="op">)</span></span></code></pre></div>
+<hr></div>
+<div class="section level2">
+<h2 id="nipter-layer-known-issues-and-design-decisions">NIPTeR Layer: Known Issues and Design Decisions<a class="anchor" aria-label="anchor" href="#nipter-layer-known-issues-and-design-decisions"></a></h2>
+<div class="section level3">
+<h3 id="nipters-scanbam-approach-is-concat-and-pretend-single-ended">NIPTeR’s scanBam approach is “concat and pretend single-ended”<a class="anchor" aria-label="anchor" href="#nipters-scanbam-approach-is-concat-and-pretend-single-ended"></a></h3>
+<p>NIPTeR’s <code>bin_bam_sample()</code> calls <code>scanBam()</code> without filtering parameters, then splits all read records by strand (<code>+</code> / <code>-</code>), discarding only reads with strand <code>"*"</code> (unmapped). It then applies <code><a href="https://rdrr.io/r/base/unique.html" class="external-link">unique()</a></code> on positions per chromosome per strand and sums forward and reverse counts into a single matrix.</p>
+<p>The consequence is that <strong>paired-end data is treated as if you concatenated both mates into a single-ended read pool</strong>: R1 (forward) and R2 (reverse) are each counted independently at their respective start positions. A paired-end library produces roughly 2× the bin counts of a single-end library for the same sequencing depth, because both mates of every fragment are counted.</p>
+<p>This creates a fundamental incompatibility: <strong>a NIPTeR reference (control group) built from single-end samples cannot be used to test a paired-end sample, and vice versa.</strong> In practice this goes unnoticed when all samples in a cohort use the same library preparation, but mixing single-end and paired-end data produces wildly incorrect Z-scores and NCV values.</p>
+<p>Our <code><a href="reference/nipter_bin_bam.html">nipter_bin_bam()</a></code> replicates this behaviour (both mates counted) as the default (<code>rmdup = "none"</code>, no flag filters), keeping it compatible with NIPTeR control groups built the same way. Users who need fragment-level counts (one count per fragment, not per read) should pre-filter to R1 only using <code>require_flags = 0x41L</code> (paired + read1) or count only unique fragments — this is a future enhancement.</p>
+</div>
+<div class="section level3">
+<h3 id="nipters-implicit-positional-dedup-is-similar-to-wisecondorx-streaming-dedup-but-different">NIPTeR’s implicit positional dedup is similar to WisecondorX streaming dedup, but different<a class="anchor" aria-label="anchor" href="#nipters-implicit-positional-dedup-is-similar-to-wisecondorx-streaming-dedup-but-different"></a></h3>
+<p>NIPTeR’s <code>bin_reads()</code> applies <code><a href="https://rdrr.io/r/base/unique.html" class="external-link">unique()</a></code> to read positions per chromosome per strand before binning. The effect is that two reads with the same start position on the same chromosome and strand are counted once, not twice. This is position-based deduplication.</p>
+<p>WisecondorX’s <code>larp</code> also collapses consecutive reads at the same position. The critical differences:</p>
+<table class="table"><colgroup><col width="33%"><col width="33%"><col width="33%"></colgroup><thead><tr class="header"><th></th>
+<th>NIPTeR <code><a href="https://rdrr.io/r/base/unique.html" class="external-link">unique()</a></code>
+</th>
+<th>WisecondorX larp/larp2</th>
+</tr></thead><tbody><tr class="odd"><td>Scope</td>
+<td>Per-chromosome, per-strand</td>
+<td>Global file order, no reset between chroms</td>
+</tr><tr class="even"><td>Pairing awareness</td>
+<td>None — operates on positions only</td>
+<td>larp2 uses pnext for paired reads</td>
+</tr><tr class="odd"><td>Improper pair handling</td>
+<td>None</td>
+<td>Improper pairs excluded entirely</td>
+</tr><tr class="even"><td>Equivalent samtools flag</td>
+<td>Not equivalent to any flag</td>
+<td>Not expressible as a single flag</td>
+</tr></tbody></table><p>Both collapse same-position reads, but NIPTeR’s <code><a href="https://rdrr.io/r/base/unique.html" class="external-link">unique()</a></code> also silently merges any two reads that happen to share a start position, including distinct reads that are not PCR duplicates. On the <code>hg00106_chr11_fixture.bam</code> fixture (1,018 paired-end reads) NIPTeR’s approach would count 1,003 vs 1,018 from <code>rmdup = "none"</code> — a difference of 15 reads, all at positions where the duplicate flag (<code>0x400</code>) is set on one mate.</p>
+</div>
+<div class="section level3">
+<h3 id="two-additional-bugs-in-nipters-scanbam-call">Two additional bugs in NIPTeR’s scanBam call<a class="anchor" aria-label="anchor" href="#two-additional-bugs-in-nipters-scanbam-call"></a></h3>
+<p><strong>Bug 1 — Split length mismatch on BAMs with unmapped reads.</strong></p>
+<div class="sourceCode" id="cb3"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="co"># NIPTeR source — bin_sample.R</span></span>
 <span><span class="va">splitted_reads</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/split.html" class="external-link">split</a></span><span class="op">(</span>x <span class="op">=</span> <span class="va">reads</span>, f <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/droplevels.html" class="external-link">droplevels</a></span><span class="op">(</span><span class="va">strands</span><span class="op">[</span><span class="va">strands</span> <span class="op">!=</span> <span class="st">"*"</span><span class="op">]</span><span class="op">)</span><span class="op">)</span></span></code></pre></div>
-<p><code>strands[strands != "*"]</code> drops unmapped-read entries, producing a factor of length <code>N − U</code> (U = unmapped reads). But <code>reads</code> is not subsetted and has length <code>N</code>. R’s <code><a href="https://rdrr.io/r/base/split.html" class="external-link">split()</a></code> requires <code>length(f) == length(x)</code>, so this silently misbehaves or errors on any BAM that contains unmapped reads. In practice NIPTeR users pre-filter with <code>samtools view -F 4</code> before calling <code>bin_bam_sample()</code>, making the bug latent.</p>
-<p><strong>2. Implicit positional deduplication via <code><a href="https://rdrr.io/r/base/unique.html" class="external-link">unique()</a></code>.</strong></p>
-<div class="sourceCode" id="cb3"><pre class="downlit sourceCode r">
+<p><code>strands[strands != "*"]</code> has length <code>N − U</code> (U = unmapped reads) but <code>reads</code> has length <code>N</code>. R’s <code><a href="https://rdrr.io/r/base/split.html" class="external-link">split()</a></code> requires equal lengths, so this errors or silently misbehaves on any BAM containing unmapped reads. NIPTeR implicitly requires <code>samtools view -F 4</code> pre-filtering.</p>
+<p><strong>Bug 2 — Positional dedup via <code><a href="https://rdrr.io/r/base/unique.html" class="external-link">unique()</a></code> is flag-ignorant.</strong></p>
+<div class="sourceCode" id="cb4"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="co"># NIPTeR source — bin_sample.R / bin_reads()</span></span>
 <span><span class="va">reads</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/lapply.html" class="external-link">sapply</a></span><span class="op">(</span>X <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/unique.html" class="external-link">unique</a></span><span class="op">(</span><span class="va">reads_data_frame</span><span class="op">[</span><span class="va">min_read</span><span class="op">:</span><span class="va">max_read</span><span class="op">]</span><span class="op">)</span>,</span>
 <span>                FUN <span class="op">=</span> <span class="va">getbins</span>, bin_size <span class="op">=</span> <span class="va">bin_size</span><span class="op">)</span></span>
 <span><span class="va">bins</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/tabulate.html" class="external-link">tabulate</a></span><span class="op">(</span><span class="va">reads</span>, nbins <span class="op">=</span> <span class="va">n_bins</span><span class="op">)</span></span></code></pre></div>
-<p><code><a href="https://rdrr.io/r/base/unique.html" class="external-link">unique()</a></code> is applied to positions <em>per chromosome per strand</em> before bin assignment. This means two reads sharing the same start position are counted once, not twice — an implicit, flag-ignorant deduplication. The resulting bin counts are unique-start-position counts, not read counts. This is not equivalent to <code>-F 1024</code> (SAM duplicate flag) deduplication: a PCR duplicate at a unique position survives, while two distinct reads at the same position are silently merged.</p>
-<p><strong>Consequence for conformance testing.</strong> Exact bin-for-bin match between our output and NIPTeR is only achievable on BAMs where: - No unmapped reads are present (avoids bug 1), and - No two reads share the same start position on the same chromosome+strand (avoids the <code><a href="https://rdrr.io/r/base/unique.html" class="external-link">unique()</a></code> discrepancy with <code>rmdup = "none"</code>).</p>
-<p>The <code>NIPTER_CONFORMANCE_BAM</code> env var should point to a coordinate-sorted, pre-filtered BAM (e.g. <code>samtools view -F 4 -b in.bam</code>) for reliable conformance runs. Our <code>rmdup = "none"</code> mode is the closest analogue to NIPTeR’s default, but counts each read independently rather than unique positions.</p>
-</div>
+<p><code><a href="https://rdrr.io/r/base/tabulate.html" class="external-link">tabulate()</a></code> here counts unique <em>positions per bin</em>, not reads. A PCR duplicate at a unique position survives; two distinct reads at the same position are silently merged. This is not equivalent to <code>-F 1024</code>.</p>
+<p><strong>Consequence for conformance testing.</strong> Exact bin-for-bin match against <code><a href="https://rdrr.io/pkg/NIPTeR/man/bin_bam_sample.html" class="external-link">NIPTeR::bin_bam_sample()</a></code> requires a BAM with no unmapped reads and no two reads sharing a start position per strand. The <code>NIPTER_CONFORMANCE_BAM</code> env var must point to such a BAM. Our <code>rmdup = "none"</code> is the closest mode but counts each read independently rather than unique positions.</p>
+<hr></div>
 </div>
 <div class="section level2">
 <h2 id="agent-working-instructions">Agent Working Instructions<a class="anchor" aria-label="anchor" href="#agent-working-instructions"></a></h2>
 <p>Always read the existing implementation before changing it:</p>
 <ol style="list-style-type: decimal"><li>Read the relevant R files, package metadata, and tests before proposing changes.</li>
-<li>When upstream WisecondorX behavior is unclear, consult <code>../../duckhts/.sync/WisecondorX/</code> (algorithm reference only). Do NOT look for <code>inst/python/</code> — it has been removed.</li>
-<li>When upstream NIPTeR behavior is unclear, consult <code>../../duckhts/.sync/NIPTeR/</code>.</li>
-<li>For conformance testing, use the official <code>wisecondorx</code> bioconda package via <code>condathis</code>, not any vendored copy.</li>
-<li>Preserve CRAN-friendly package behavior. Do not make package loading depend on a preconfigured external Python installation.</li>
+<li>When upstream WisecondorX behaviour is unclear, consult <code>../../duckhts/.sync/WisecondorX/</code>. Do NOT look for <code>inst/python/</code> — it has been removed.</li>
+<li>When upstream NIPTeR behaviour is unclear, consult <code>../../duckhts/.sync/NIPTeR/</code>.</li>
+<li>For conformance testing, use the official <code>wisecondorx</code> bioconda package via <code>condathis</code>. Do NOT vendor Python source.</li>
+<li>Preserve CRAN-friendly package behaviour. Do not make package loading depend on a preconfigured external Python installation.</li>
 <li>Keep package runtime logic and conformance tooling separate.</li>
-<li>Keep the WisecondorX and NIPTeR layers in <strong>separate files</strong> with strict naming conventions (<code>nipter_*.R</code> vs. <code>wisecondorx_*.R</code>). The shared engine is in <code>convert.R</code>.</li>
-</ol></div>
+<li>Keep WisecondorX and NIPTeR layers in <strong>separate files</strong> (<code>nipter_*.R</code> vs <code>wisecondorx_*.R</code>). The shared engine is <code>convert.R</code>.</li>
+</ol><hr></div>
 <div class="section level2">
 <h2 id="documentation-conventions">Documentation Conventions<a class="anchor" aria-label="anchor" href="#documentation-conventions"></a></h2>
 <ul><li>
 <code>README.Rmd</code> is the primary editable README source. Run <code>make readme</code> to regenerate <code>README.md</code>.</li>
-<li>Keep package metadata in <code>DESCRIPTION</code> aligned with the actual runtime strategy.</li>
 <li>R documentation and <code>NAMESPACE</code> are generated from roxygen2 tags. Run <code>make rd</code> after changing <code>@export</code>, <code>@param</code>, or <code>@seealso</code> tags.</li>
-<li>Do not manually edit generated artifacts when a source file exists upstream of them.</li>
-</ul></div>
-<div class="section level2">
-<h2 id="generated-files-rules">Generated Files Rules<a class="anchor" aria-label="anchor" href="#generated-files-rules"></a></h2>
-<ul><li>Do not hand-edit <code>NAMESPACE</code>; regenerate it with <code>make rd</code>.</li>
-<li>Do not hand-edit <code>README.md</code>; edit <code>README.Rmd</code> and run <code>make readme</code>.</li>
-<li>Treat generated files as outputs of the package workflow, not primary editing targets.</li>
+<li>Do not manually edit <code>NAMESPACE</code> or <code>README.md</code>.</li>
 </ul></div>
 <div class="section level2">
 <h2 id="build-and-workflow-rules">Build and Workflow Rules<a class="anchor" aria-label="anchor" href="#build-and-workflow-rules"></a></h2>
-<ul><li>Prefer the repository <code>Makefile</code> over ad hoc command sequences when an appropriate target exists.</li>
-<li>Use make targets: <code>make rd</code> (roxygen2), <code>make test</code> (tinytest), <code>make readme</code> (render README), <code>make fixtures</code> (synthetic BAMs).</li>
+<ul><li>Use make targets: <code>make rd</code>, <code>make test</code>, <code>make readme</code>, <code>make fixtures</code>.</li>
 <li>Keep build steps deterministic and non-interactive.</li>
-<li>Keep CRAN-facing package behavior intact when changing build or test workflows.</li>
-</ul></div>
-<div class="section level2">
-<h2 id="python-integration-rules">Python Integration Rules<a class="anchor" aria-label="anchor" href="#python-integration-rules"></a></h2>
-<ul><li>Do not make package loading depend on <code>reticulate</code> or Python availability.</li>
-<li>Use <code>reticulate</code> primarily in tests, conformance helpers, or explicitly optional workflows.</li>
-<li>If optional Python-backed helpers are added, guard them with <code><a href="https://rdrr.io/r/base/ns-load.html" class="external-link">requireNamespace("reticulate", quietly = TRUE)</a></code>.</li>
-<li>Avoid hard-coding machine-local Python paths in package code.</li>
 </ul></div>
 <div class="section level2">
 <h2 id="conformance-testing-rules">Conformance Testing Rules<a class="anchor" aria-label="anchor" href="#conformance-testing-rules"></a></h2>
-<ul><li>Conformance tests are optional and skip cleanly when <code>condathis</code> or <code>reticulate</code> are unavailable.</li>
-<li>Install the official <code>wisecondorx</code> bioconda package via <code>condathis</code> for reproducible reference runs. Do NOT vendor Python source.</li>
-<li>The <code>rmdup</code> parameter in <code><a href="reference/bam_convert.html">bam_convert()</a></code> must support: <code>"streaming"</code> (WisecondorX larp/larp2), <code>"none"</code> (NIPTeR default / <code>--normdup</code>), <code>"flag"</code> (Picard/sambamba pre-marked BAMs).</li>
+<ul><li>Conformance tests skip cleanly when <code>condathis</code>, <code>reticulate</code>, or required BAMs are unavailable.</li>
+<li>
+<code>WISECONDORX_TEST_BAM</code> — a human BAM for WisecondorX integration tests.</li>
+<li>
+<code>NIPTER_CONFORMANCE_BAM</code> — a coordinate-sorted, pre-filtered (no unmapped reads, no same-position strand collisions) whole-genome BAM for NIPTeR conformance.</li>
 </ul></div>
 <div class="section level2">
 <h2 id="testing-rules">Testing Rules<a class="anchor" aria-label="anchor" href="#testing-rules"></a></h2>
-<ul><li>Use <code>tinytest</code> as the default R package test framework.</li>
-<li>Add package tests under <code>inst/tinytest/</code>, preferably one file per feature family or workflow.</li>
-<li>When R-facing behavior changes, update or add <code>tinytest</code> coverage rather than relying only on manual checks.</li>
-<li>Tests that depend on Python or <code>reticulate</code> must skip cleanly when those dependencies are unavailable.</li>
+<ul><li>Use <code>tinytest</code>. One file per feature family under <code>inst/tinytest/</code>.</li>
+<li>Update tests when R-facing behaviour changes.</li>
+<li>Tests requiring Python or <code>reticulate</code> must skip cleanly when unavailable.</li>
 </ul></div>
 <div class="section level2">
 <h2 id="copyright-and-attribution">Copyright and Attribution<a class="anchor" aria-label="anchor" href="#copyright-and-attribution"></a></h2>
-<ul><li>NIPTeR authors Dirk de Weerd and Lennart Johansson are listed as <code>cph</code> in <code>DESCRIPTION</code> in accordance with the rewrites.bio attribution principle.</li>
+<ul><li>NIPTeR authors Dirk de Weerd and Lennart Johansson are listed as <code>cph</code> in <code>DESCRIPTION</code>.</li>
 <li>WisecondorX authors are listed as <code>ctb</code>.</li>
-<li>Any new upstream algorithm ported must have its original authors credited in <code>DESCRIPTION</code> with an appropriate role (<code>cph</code> for copyright holders of ported code).</li>
+<li>Any new upstream algorithm ported must have its original authors credited with an appropriate role.</li>
 </ul></div>
 </div>
 

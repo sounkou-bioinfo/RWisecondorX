@@ -1,0 +1,314 @@
+# WisecondorX native R implementation — reference building (newref stage)
+#
+# Ports newref_control.py and newref_tools.py from the upstream WisecondorX
+# Python package. Original authors: Lennart Raman, Roy Straver, Wim Audenaert.
+# Ported to R with credit under GPL-3.
+#
+# This file implements the complete `newref` pipeline:
+# 1. Load and rescale binned samples to a common bin size.
+# 2. Train a gender model (2-component GMM on Y-fractions).
+# 3. Compute the global bin mask.
+# 4. For each gender partition (Autosomal, Female gonosomal, Male gonosomal):
+#    a. Normalize and mask.
+#    b. Train PCA (5 components, ratio correction).
+#    c. PCA distance filtering (remove anomalous bins).
+#    d. Find within-sample reference bins (K-nearest neighbour).
+#    e. Compute null ratios for between-sample Z-scoring.
+# 5. Merge autosomal and gonosomal sub-references.
+#
+# The result is a list (the "reference object") that can be passed to
+# `rwisecondorx_predict()` and optionally serialized to disk via `saveRDS()`.
+
+
+#' Build a WisecondorX reference from binned samples
+#'
+#' Native R implementation of the WisecondorX `newref` pipeline. Takes a
+#' list of binned samples (as returned by [bam_convert()] or loaded from NPZ
+#' via reticulate) and builds a PCA-based reference suitable for
+#' [rwisecondorx_predict()].
+#'
+#' The pipeline trains a gender model (2-component GMM on Y-fractions),
+#' optionally applies gender correction for non-NIPT workflows, computes a
+#' global bin mask, then builds three sub-references: autosomes (A), female
+#' gonosomes (F), and male gonosomes (M). Each sub-reference includes PCA
+#' components, within-sample reference bin indices and distances, and null
+#' ratios for between-sample Z-scoring.
+#'
+#' This is a faithful port of the upstream Python `wisecondorx newref`,
+#' crediting the original WisecondorX authors.
+#'
+#' @param samples List of sample objects, each a named list of integer vectors
+#'   keyed by chromosome (`"1"`--`"24"`), as returned by [bam_convert()].
+#'   At least 10 samples are required.
+#' @param binsize Integer; the target bin size in base pairs. All samples are
+#'   rescaled to this size. Default `100000L`.
+#' @param sample_binsizes Optional integer vector of per-sample bin sizes. If
+#'   `NULL` (default), all samples are assumed to already be at `binsize`.
+#' @param nipt Logical; if `TRUE`, NIPT mode (no gender correction, no male
+#'   gonosomal reference). Default `FALSE`.
+#' @param refsize Integer; number of reference bin locations per target bin.
+#'   Default `300L`.
+#' @param yfrac Optional numeric; manual Y-fraction cutoff for gender
+#'   classification. If `NULL` (default), the cutoff is derived from a GMM.
+#' @param cpus Integer; number of threads for reference bin finding.
+#'   Default `1L`.
+#'
+#' @return A list (the reference object) with class `"WisecondorXReference"`,
+#'   containing autosomal and (optionally) gonosomal sub-references. See
+#'   Details for the full structure.
+#'
+#' @details
+#' The returned reference object contains:
+#' \describe{
+#'   \item{binsize}{Integer; the reference bin size.}
+#'   \item{is_nipt}{Logical; whether NIPT mode was used.}
+#'   \item{trained_cutoff}{Numeric; Y-fraction gender cutoff.}
+#'   \item{has_female}{Logical; whether a female gonosomal reference exists.}
+#'   \item{has_male}{Logical; whether a male gonosomal reference exists.}
+#'   \item{mask, bins_per_chr, masked_bins_per_chr, masked_bins_per_chr_cum,
+#'     pca_components, pca_mean, indexes, distances, null_ratios}{Autosomal
+#'     reference components.}
+#'   \item{mask.F, ..., null_ratios.F}{Female gonosomal reference (if present).}
+#'   \item{mask.M, ..., null_ratios.M}{Male gonosomal reference (if present).}
+#' }
+#'
+#' @seealso [rwisecondorx_predict()], [scale_sample()], [bam_convert()]
+#'
+#' @export
+rwisecondorx_newref <- function(samples,
+                               binsize         = 100000L,
+                               sample_binsizes = NULL,
+                               nipt            = FALSE,
+                               refsize         = 300L,
+                               yfrac           = NULL,
+                               cpus            = 1L) {
+  # ---------- input validation ----------
+  stopifnot(is.list(samples), length(samples) >= 10L)
+  binsize <- as.integer(binsize)
+  refsize <- as.integer(refsize)
+  cpus    <- as.integer(cpus)
+  stopifnot(binsize > 0L, refsize > 0L, cpus >= 1L)
+  if (!is.null(yfrac)) {
+    stopifnot(is.numeric(yfrac), length(yfrac) == 1L, yfrac > 0, yfrac <= 1)
+  }
+
+  # ---------- Step 1: rescale all samples ----------
+  if (!is.null(sample_binsizes)) {
+    stopifnot(length(sample_binsizes) == length(samples))
+    for (i in seq_along(samples)) {
+      samples[[i]] <- scale_sample(samples[[i]],
+                                   from_size = sample_binsizes[i],
+                                   to_size   = binsize)
+    }
+  }
+
+  # ---------- Step 2: train gender model ----------
+  gender_model <- .train_gender_model(samples, yfrac = yfrac)
+  genders        <- gender_model$genders
+  trained_cutoff <- gender_model$cutoff
+
+  n_female <- sum(genders == "F")
+  n_male   <- sum(genders == "M")
+
+  if (n_female < 5L && isTRUE(nipt)) {
+    warning("A NIPT reference should have at least 5 female feti samples. ",
+            "Removing NIPT mode.", call. = FALSE)
+    nipt <- FALSE
+  }
+
+  # ---------- Step 3: gender correction (non-NIPT) ----------
+  if (!nipt) {
+    for (i in seq_along(samples)) {
+      samples[[i]] <- .gender_correct(samples[[i]], genders[i])
+    }
+  }
+
+  # ---------- Step 4: compute global mask ----------
+  mask_info    <- .get_mask(samples)
+  total_mask   <- mask_info$mask
+  bins_per_chr <- mask_info$bins_per_chr
+
+  # AND with gender-specific masks
+  if (n_female > 4L) {
+    female_samples <- samples[genders == "F"]
+    female_mask <- .get_mask(female_samples)$mask
+    total_mask <- total_mask & female_mask
+  }
+  if (n_male > 4L && !nipt) {
+    male_samples <- samples[genders == "M"]
+    male_mask <- .get_mask(male_samples)$mask
+    total_mask <- total_mask & male_mask
+  }
+
+  # ---------- Step 5: build sub-references ----------
+  result <- list(
+    binsize        = binsize,
+    is_nipt        = nipt,
+    trained_cutoff = trained_cutoff,
+    has_female     = FALSE,
+    has_male       = FALSE
+  )
+
+  # 5a: Autosomal reference (all samples)
+  message("Building autosomal reference...")
+  auto_ref <- .build_sub_reference(samples, "A", total_mask, bins_per_chr,
+                                   refsize = refsize, cpus = cpus)
+  for (nm in names(auto_ref)) result[[nm]] <- auto_ref[[nm]]
+
+  # 5b: Female gonosomal reference
+  if (n_female > 4L) {
+    message("Building female gonosomal reference...")
+    female_samples <- samples[genders == "F"]
+    gon_f_ref <- .build_sub_reference(female_samples, "F", total_mask, bins_per_chr,
+                                      refsize = refsize, cpus = 1L)
+    result$has_female <- TRUE
+    for (nm in names(gon_f_ref)) result[[paste0(nm, ".F")]] <- gon_f_ref[[nm]]
+  }
+
+  # 5c: Male gonosomal reference (non-NIPT only)
+  if (!nipt && n_male > 4L) {
+    message("Building male gonosomal reference...")
+    male_samples <- samples[genders == "M"]
+    gon_m_ref <- .build_sub_reference(male_samples, "M", total_mask, bins_per_chr,
+                                      refsize = refsize, cpus = 1L)
+    result$has_male <- TRUE
+    for (nm in names(gon_m_ref)) result[[paste0(nm, ".M")]] <- gon_m_ref[[nm]]
+  }
+
+  class(result) <- "WisecondorXReference"
+  result
+}
+
+
+#' Build a sub-reference for one gender partition
+#'
+#' @param samples List of sample objects.
+#' @param gender `"A"` (autosomes), `"F"` (female gonosomes), `"M"` (male gonosomes).
+#' @param total_mask Logical mask over all 24 chromosomes.
+#' @param bins_per_chr Integer vector of length 24.
+#' @param refsize Number of reference bins per target.
+#' @param cpus Number of threads.
+#' @return Named list with mask, bins_per_chr, masked_bins_per_chr, etc.
+#' @keywords internal
+.build_sub_reference <- function(samples, gender, total_mask, bins_per_chr,
+                                 refsize, cpus) {
+  last_chr <- switch(gender, "A" = 22L, "F" = 23L, "M" = 24L)
+  chr_range <- seq_len(last_chr)
+
+  # Trim mask and bins_per_chr to the relevant chromosomes
+  sub_bins <- bins_per_chr[chr_range]
+  total_bins <- sum(sub_bins)
+  sub_mask <- total_mask[seq_len(total_bins)]
+
+  # Normalize and mask
+  masked_data <- .normalize_and_mask(samples, chr_range, sub_mask)
+
+  # Train PCA
+  pca_result <- .train_pca(masked_data)
+  corrected <- pca_result$corrected
+
+  # PCA distance filtering: remove anomalous bins
+  med_prof <- apply(corrected, 1, stats::median)
+  dist_to_med <- colSums((t(corrected) - med_prof)^2)
+  # Actually: dist_to_med[i] = sum((corrected[,i] - med_prof)^2) for columns
+
+  # Wait - corrected is (n_bins, n_samples), but upstream computes distance
+  # per BIN (row), not per sample. Let me re-read upstream...
+  # upstream: corrected shape = (n_bins, n_samples), med_prof = median over axis=0
+  # dist_to_med = sum((corrected - med_prof)**2, axis=1) -- that's sum over samples
+  # So it's distance per BIN, checking for bins that don't match across samples.
+  dist_to_med <- rowSums((corrected - med_prof)^2)
+  mad_val <- stats::median(abs(dist_to_med - stats::median(dist_to_med)))
+  cutoff_pca <- max(stats::median(dist_to_med) + 10 * mad_val, 5.0)
+  bad_bins <- dist_to_med > cutoff_pca
+
+  if (any(bad_bins)) {
+    n_removed <- sum(bad_bins)
+    message(sprintf("  Removing %d anomalous bins (PCA distance cutoff=%.4f)",
+                    n_removed, cutoff_pca))
+    # Update mask: find which masked positions are bad
+    masked_indices <- which(sub_mask)
+    sub_mask[masked_indices[bad_bins]] <- FALSE
+
+    # Re-train PCA on cleaned set
+    masked_data <- .normalize_and_mask(samples, chr_range, sub_mask)
+    pca_result <- .train_pca(masked_data)
+    corrected <- pca_result$corrected
+  }
+
+  # Compute masked_bins_per_chr
+  masked_bins_per_chr <- integer(length(sub_bins))
+  cumpos <- 0L
+  for (i in seq_along(sub_bins)) {
+    masked_bins_per_chr[i] <- sum(sub_mask[(cumpos + 1L):(cumpos + sub_bins[i])])
+    cumpos <- cumpos + sub_bins[i]
+  }
+  masked_bins_per_chr_cum <- cumsum(masked_bins_per_chr)
+
+  # Find within-sample reference bins
+  message("  Finding reference bins...")
+  ref_result <- .get_reference(corrected, masked_bins_per_chr, masked_bins_per_chr_cum,
+                               refsize, gender, cpus)
+
+  list(
+    mask                   = sub_mask,
+    bins_per_chr           = sub_bins,
+    masked_bins_per_chr     = masked_bins_per_chr,
+    masked_bins_per_chr_cum = masked_bins_per_chr_cum,
+    pca_components         = pca_result$components,
+    pca_mean               = pca_result$center,
+    indexes                = ref_result$indexes,
+    distances              = ref_result$distances,
+    null_ratios            = ref_result$null_ratios
+  )
+}
+
+
+#' Find within-sample reference bins (KNN)
+#'
+#' For each target bin, finds the `refsize` most similar bins from other
+#' chromosomes, measured by Euclidean distance in PCA-corrected space.
+#' Also computes null ratios for between-sample Z-scoring.
+#'
+#' Mirrors `newref_tools.get_reference()` and `get_ref_for_bins()`.
+#' Uses Rcpp + OpenMP for performance-critical distance computation and
+#' null ratio calculation.
+#'
+#' @param pca_corrected Numeric matrix `(n_masked_bins, n_samples)`.
+#' @param masked_bins_per_chr Integer vector.
+#' @param masked_bins_per_chr_cum Integer vector (cumulative).
+#' @param refsize Number of reference bins per target.
+#' @param gender `"A"`, `"F"`, or `"M"`.
+#' @param cpus Number of threads for parallel computation. Default `1L`.
+#'
+#' @return List with `indexes` (integer matrix), `distances` (numeric matrix),
+#'   `null_ratios` (numeric matrix).
+#'
+#' @keywords internal
+.get_reference <- function(pca_corrected, masked_bins_per_chr,
+                           masked_bins_per_chr_cum, refsize, gender, cpus) {
+  n_bins <- nrow(pca_corrected)
+  n_samples <- ncol(pca_corrected)
+
+  # KNN reference bin finding via Rcpp (OpenMP-parallelized)
+  knn_result <- knn_reference_cpp(
+    pca_corrected,
+    as.integer(masked_bins_per_chr),
+    as.integer(masked_bins_per_chr_cum),
+    as.integer(refsize),
+    gender,
+    as.integer(cpus)
+  )
+
+  indexes   <- knn_result$indexes
+  distances <- knn_result$distances
+
+  # Null ratios via Rcpp (OpenMP-parallelized)
+  message("  Computing null ratios...")
+  n_null <- min(n_samples, 100L)
+  null_sample_idx <- sample(n_samples, n_null)
+  null_ratios <- null_ratios_cpp(pca_corrected, indexes, null_sample_idx,
+                                 as.integer(cpus))
+
+  list(indexes = indexes, distances = distances, null_ratios = null_ratios)
+}

@@ -1,31 +1,16 @@
 library(tinytest)
+library(RWisecondorX)
 
 # ---------------------------------------------------------------------------
-# Load source helpers when running from the source tree
+# CLI argument builder tests
 # ---------------------------------------------------------------------------
 
-.source_candidate <- function(path) {
-  candidates <- c(path, file.path("..", "..", path))
-  candidates[file.exists(candidates)][1L]
-}
-
-src_convert <- .source_candidate("R/convert.R")
-src_npz <- .source_candidate("R/npz.R")
-src_pipeline <- .source_candidate("R/wisecondorx_cli.R")
-
-if (!is.na(src_convert) && !is.na(src_npz) && !is.na(src_pipeline)) {
-  source(src_convert)
-  source(src_npz)
-  source(src_pipeline)
-} else if (requireNamespace("RWisecondorX", quietly = TRUE)) {
-  .read_bam_call <- getFromNamespace(".read_bam_call", "RWisecondorX")
-  .wisecondorx_convert_args <- getFromNamespace(".wisecondorx_convert_args", "RWisecondorX")
-  .wisecondorx_newref_args <- getFromNamespace(".wisecondorx_newref_args", "RWisecondorX")
-  .wisecondorx_predict_args <- getFromNamespace(".wisecondorx_predict_args", "RWisecondorX")
-  .format_ylim <- getFromNamespace(".format_ylim", "RWisecondorX")
-} else {
-  stop("Unable to locate source files or installed RWisecondorX namespace for CLI tests.", call. = FALSE)
-}
+# Expose internal helpers for unit testing
+.read_bam_call <- RWisecondorX:::.read_bam_call
+.wisecondorx_convert_args <- RWisecondorX:::.wisecondorx_convert_args
+.wisecondorx_newref_args <- RWisecondorX:::.wisecondorx_newref_args
+.wisecondorx_predict_args <- RWisecondorX:::.wisecondorx_predict_args
+.format_ylim <- RWisecondorX:::.format_ylim
 
 # ---------------------------------------------------------------------------
 # read_bam SQL call builder

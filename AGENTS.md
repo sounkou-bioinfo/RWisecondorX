@@ -60,11 +60,35 @@ Each file is strictly separate; never mix NIPTeR and WisecondorX code. All stati
 - `inst/tinytest/test_nipter_stats.R` — 105 assertions covering all statistical functions including SeparatedStrands variants.
 - `inst/tinytest/test_nipter_sex.R` — 45 assertions covering sex model building, Y-unique model, 3-model consensus, classification accuracy, prediction, and edge cases.
 
+**Native WisecondorX implementation (newref + predict)**
+
+Pure R/Rcpp port of the WisecondorX `newref` and `predict` pipelines, with performance-critical KNN reference-finding in compiled C++. No Python runtime dependency.
+
+- `R/rwisecondorx_utils.R` — Shared utilities: `.train_gender_model()` (2-component GMM on Y-fractions with zero-variance fallback), `.gender_correct()`, `.get_mask()` (5% median coverage threshold), `.normalize_and_mask()`, `.train_pca()` (5 components, ratio correction), `.project_pc()`, `.predict_gender()`. Also exports `scale_sample()` for rescaling bin sizes.
+- `R/rwisecondorx_newref.R` — `rwisecondorx_newref()`: reference building pipeline. Gender model training → global bin mask → per-partition (A/F/M) normalize/PCA/distance-filter/KNN/null-ratios. `.build_sub_reference()` orchestrates each partition. `.get_reference()` delegates to Rcpp.
+- `R/rwisecondorx_predict.R` — `rwisecondorx_predict()`: prediction pipeline. Rescale → predict gender → normalize autosomes (coverage + PCA + weights + optimal cutoff + 3-pass within-sample normalization with aberration masking) → normalize gonosomes → combine → inflate → log-transform → blacklist → CBS → segment Z-scores → aberration calling. `.normalize()`, `.normalize_repeat()`, `.normalize_once()` implement the multi-pass normalization. Global-to-local index conversion in `.normalize_once()` handles the index-space mapping correctly.
+- `R/rwisecondorx_cbs.R` — `.exec_cbs()`: DNAcopy/ParDNAcopy wrapper matching upstream conventions (0→NA, 0 weights→1e-99, split segments at large NA gaps, recalculate weighted means). `.get_segment_zscores()`: segment-level Z-scores from null ratio distributions.
+- `R/rwisecondorx_output.R` — BED and statistics output writers for `WisecondorXPrediction` objects.
+- `src/knn_reference.cpp` — `knn_reference_cpp()`: OpenMP-parallelized KNN reference bin finding (leave-one-chromosome-out squared Euclidean distance, partial sort for K nearest). Stores **global** 1-based indexes. `null_ratios_cpp()`: OpenMP-parallelized null ratio computation using global indexes directly against full sample vectors.
+- `src/RcppExports.cpp`, `R/RcppExports.R` — auto-generated Rcpp glue.
+- `R/zzz_rcpp.R` — `@useDynLib RWisecondorX, .registration = TRUE` and `@importFrom Rcpp sourceCpp` roxygen directives.
+- `src/Makevars`, `src/Makevars.win` — OpenMP compilation flags.
+
+**Synthetic cohort generator**
+
+- `R/cohort.R` — `generate_cohort()`: creates synthetic BAMs with "compressed" chromosome lengths (100bp per bin) for testing. Produces ~435KB BAMs per sample. Supports trisomy signal injection. Exports `COMPRESSED_BINSIZE` constant (100L).
+- `inst/scripts/make_cohort.R` — CLI wrapper for batch cohort generation.
+
+**Tests — native WisecondorX and pipeline**
+
+- `inst/tinytest/test_rwisecondorx.R` — 76 assertions: reference building (gender model, masking, PCA, KNN indexes and distances, null ratios), prediction (normalization, CBS, Z-scores, aberration calling), trisomy detection sensitivity (T21/T18/T13 detected as gains, euploid negative control clean).
+- `inst/tinytest/test_cohort_pipeline.R` — 31 assertions: end-to-end pipeline (cohort generation → binning → newref → predict → aberration detection). All test files use `library(RWisecondorX)` instead of `source()` hacks.
+
 ### Open architectural questions
 
 - **Sex-stratified NCV for X/Y chromosomes**: The user's clinical pipeline computes sex-stratified NCV denominators for X and Y (separate models for males vs females). Not yet implemented.
 - **Sex-stratified regression for X/Y**: Forward stepwise `lm()` models for X and Y fractions, stratified by predicted sex. Not yet implemented.
-- **DNACopy replacement**: the segmentation step in `wisecondorx_predict` uses DNACopy internally; evaluate whether to expose or replace it.
+- **End-to-end conformance testing vs upstream Python**: Full newref + predict conformance testing against the official WisecondorX Python package. Requires real multi-sample BAMs; not yet automated.
 - **Multi-chromosome NIPTeR conformance fixture**: `make fixtures` currently produces a chr11-only BAM. A multi-chromosome synthetic BAM (all 24 chroms, no unmapped reads, no same-position collisions) would allow `NIPTER_CONFORMANCE_BAM` to be populated automatically in CI without a real patient BAM.
 
 ---
@@ -79,13 +103,25 @@ Each file is strictly separate; never mix NIPTeR and WisecondorX code. All stati
 - `R/nipter_control.R` — control group construction, diagnostics, and matching.
 - `R/nipter_regression.R` — forward stepwise regression Z-score.
 - `R/nipter_sex.R` — sex prediction via Gaussian mixture models (mclust).
-- `R/wisecondorx_cli.R` — CLI wrappers.
+- `R/rwisecondorx_utils.R` — shared utilities for native WisecondorX implementation.
+- `R/rwisecondorx_newref.R` — native WisecondorX reference building.
+- `R/rwisecondorx_predict.R` — native WisecondorX prediction pipeline.
+- `R/rwisecondorx_cbs.R` — CBS segmentation wrapper (DNAcopy/ParDNAcopy).
+- `R/rwisecondorx_output.R` — BED/statistics output generation.
+- `R/cohort.R` — synthetic cohort generator for testing.
+- `R/wisecondorx_cli.R` — CLI wrappers (condathis-based conformance tools).
 - `R/npz.R` — NPZ output.
 - `R/aaa.R` — SRA metadata helpers.
+- `R/RcppExports.R` — auto-generated Rcpp R wrappers.
+- `R/zzz_rcpp.R` — roxygen directives for useDynLib + importFrom Rcpp.
+- `src/knn_reference.cpp` — Rcpp + OpenMP KNN reference finding and null ratios.
+- `src/RcppExports.cpp` — auto-generated Rcpp C++ glue.
+- `src/Makevars`, `src/Makevars.win` — OpenMP compilation flags.
 - `inst/tinytest/` — unit tests (one file per feature family).
 - `inst/extdata/` — synthetic BAM/CRAM fixtures and bundled reference data (`grch37_Y_UniqueRegions.txt`).
-- The WisecondorX upstream algorithm reference is `../../duckhts/.sync/WisecondorX/`.
-- The NIPTeR upstream algorithm reference is `../../duckhts/.sync/NIPTeR/`.
+- `inst/scripts/make_cohort.R` — CLI wrapper for cohort generation.
+- The WisecondorX upstream algorithm reference is `.sync/WisecondorX/`.
+- The NIPTeR upstream algorithm reference is `.sync/NIPTeR/`.
 - The WisecondorX conformance script is `../../duckhts/scripts/wisecondorx_convert_conformance.py`.
 - There is NO `inst/python/` directory.
 
@@ -228,3 +264,24 @@ Always read the existing implementation before changing it:
 - NIPTeR authors Dirk de Weerd and Lennart Johansson are listed as `cph` in `DESCRIPTION`.
 - WisecondorX authors are listed as `ctb`.
 - Any new upstream algorithm ported must have its original authors credited with an appropriate role.
+
+---
+
+## KNN Index Semantics — Critical Design Note
+
+Our Rcpp implementation (`knn_reference_cpp()`) stores **global** 1-based indexes into the full masked-bin array. Upstream Python (`get_ref_for_bins()`) stores **local** indexes relative to `chr_data` (the leave-one-chromosome-out subset).
+
+The consequence:
+
+| Context | Upstream Python | Our R/Rcpp |
+|---|---|---|
+| KNN index storage | Local (into `chr_data`) | Global (into full array) |
+| Predict normalization | Correct: rebuilds `chr_data`, uses local indexes | Correct: rebuilds `chr_data`, converts global→local via offset |
+| Null ratio computation | **Bug**: uses local indexes as global (no `chr_data` rebuild) | Correct: uses global indexes against full sample vector |
+
+The global-to-local conversion in `.normalize_once()` is:
+- Global index `g < chr_start` → local `g` (before excised chromosome, unchanged)
+- Global index `g > chr_cum` → local `g - n_chr` (after excised chromosome, shifted down)
+- Global index within `[chr_start, chr_cum]` should never occur (same-chromosome bins excluded during KNN building)
+
+Do not change the index storage convention without updating both `.normalize_once()` in predict and `null_ratios_cpp()` in newref.

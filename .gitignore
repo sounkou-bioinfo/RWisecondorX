@@ -10,3 +10,18 @@ wisecondorx.egg-info/
 docs
 RWisecondorX.Rcheck/
 RWisecondorX*tar.gz
+
+# Agent/editor artifacts
+.codex/
+
+# Upstream sync mirrors (read-only reference, not shipped)
+.sync/
+
+# pkgdown / site build output
+_site/
+
+# Compiled shared objects (Rcpp)
+src/*.o
+src/*.so
+src/*.dll
+src/symbols.rds

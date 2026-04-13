@@ -1,33 +1,9 @@
 library(tinytest)
+library(RWisecondorX)
 
 .fixture_path <- function(name) {
-  candidates <- c(
-    system.file("extdata", name, package = "RWisecondorX"),
-    file.path("inst", "extdata", name),
-    file.path("..", "..", "inst", "extdata", name)
-  )
-  candidates <- candidates[nzchar(candidates) & file.exists(candidates)]
-  if (length(candidates) == 0L) return(NULL)
-  candidates[[1L]]
-}
-
-.source_candidate <- function(path) {
-  candidates <- c(path, file.path("..", "..", path))
-  candidates[file.exists(candidates)][1L]
-}
-
-src_convert <- .source_candidate("R/convert.R")
-
-if (!is.na(src_convert)) {
-  source(src_convert)
-} else if (requireNamespace("RWisecondorX", quietly = TRUE)) {
-  bam_convert <- getExportedValue("RWisecondorX", "bam_convert")
-} else {
-  stop("Unable to locate R/convert.R for tests.", call. = FALSE)
-}
-
-if (!requireNamespace("Rduckhts", quietly = TRUE)) {
-  exit_file("Rduckhts not available")
+  f <- system.file("extdata", name, package = "RWisecondorX")
+  if (nzchar(f)) f else NULL
 }
 
 paired_bam <- .fixture_path("fixture_paired.bam")

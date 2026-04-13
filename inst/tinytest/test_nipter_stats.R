@@ -1,4 +1,5 @@
 library(tinytest)
+library(RWisecondorX)
 
 # ---------------------------------------------------------------------------
 # Tests for the NIPTeR statistical layer:
@@ -9,29 +10,6 @@ library(tinytest)
 #
 # These tests use synthetic NIPTeRSample objects (no BAM fixture required).
 # ---------------------------------------------------------------------------
-
-.source_candidate <- function(path) {
-  candidates <- c(path, file.path("..", "..", path))
-  candidates[file.exists(candidates)][1L]
-}
-
-src_files <- c("R/convert.R", "R/nipter_bin.R", "R/nipter_control.R",
-               "R/nipter_gc.R", "R/nipter_chi.R", "R/nipter_score.R",
-               "R/nipter_regression.R")
-src_paths <- vapply(src_files, .source_candidate, character(1L))
-
-if (all(!is.na(src_paths))) {
-  for (p in src_paths) source(p)
-} else if (requireNamespace("RWisecondorX", quietly = TRUE)) {
-  for (fn in c("nipter_as_control_group", "nipter_diagnose_control_group",
-               "nipter_match_control_group", "nipter_z_score",
-               "nipter_ncv_score", "nipter_chi_correct",
-               "nipter_regression")) {
-    assign(fn, getExportedValue("RWisecondorX", fn))
-  }
-} else {
-  stop("Unable to locate source files or installed RWisecondorX.", call. = FALSE)
-}
 
 # ---------------------------------------------------------------------------
 # Helpers: build synthetic NIPTeRSample objects

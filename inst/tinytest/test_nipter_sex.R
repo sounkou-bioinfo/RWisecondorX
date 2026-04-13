@@ -1,4 +1,5 @@
 library(tinytest)
+library(RWisecondorX)
 
 # ---------------------------------------------------------------------------
 # Tests for nipter_sex.R — sex prediction via mclust GMM
@@ -7,32 +8,7 @@ library(tinytest)
 # chromosome signal (no BAM fixture required).
 # ---------------------------------------------------------------------------
 
-.source_candidate <- function(path) {
-  candidates <- c(path, file.path("..", "..", path))
-  candidates[file.exists(candidates)][1L]
-}
-
-src_files <- c("R/convert.R", "R/nipter_bin.R", "R/nipter_control.R",
-               "R/nipter_gc.R", "R/nipter_chi.R", "R/nipter_score.R",
-               "R/nipter_regression.R", "R/nipter_sex.R")
-src_paths <- vapply(src_files, .source_candidate, character(1L))
-
-if (all(!is.na(src_paths))) {
-  for (p in src_paths) source(p)
-} else if (requireNamespace("RWisecondorX", quietly = TRUE)) {
-  for (fn in c("nipter_as_control_group", "nipter_sex_model",
-               "nipter_predict_sex", "nipter_sex_model_y_unique",
-               "nipter_y_unique_ratio")) {
-    assign(fn, getExportedValue("RWisecondorX", fn))
-  }
-} else {
-  stop("Unable to locate source files or installed RWisecondorX.", call. = FALSE)
-}
-
-# Skip if mclust is not available
-if (!requireNamespace("mclust", quietly = TRUE)) {
-  exit_file("mclust not installed — skipping sex prediction tests")
-}
+library(mclust)
 
 # ---------------------------------------------------------------------------
 # Helpers: build synthetic samples with sex chromosome signal

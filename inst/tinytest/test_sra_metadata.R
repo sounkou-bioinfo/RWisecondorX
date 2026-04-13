@@ -1,15 +1,5 @@
-if (requireNamespace("RWisecondorX", quietly = TRUE)) {
-  sra_runinfo_url <- getExportedValue("RWisecondorX", "sra_runinfo_url")
-  download_sra_runinfo <- getExportedValue("RWisecondorX", "download_sra_runinfo")
-  read_sra_runinfo <- getExportedValue("RWisecondorX", "read_sra_runinfo")
-} else {
-  candidate_paths <- c("R/aaa.R", "../../R/aaa.R")
-  source_path <- candidate_paths[file.exists(candidate_paths)][1]
-  if (is.na(source_path)) {
-    stop("Unable to locate R/aaa.R for source-tree tests.", call. = FALSE)
-  }
-  source(source_path)
-}
+library(tinytest)
+library(RWisecondorX)
 
 expect_identical(
   sra_runinfo_url("PRJNA400134"),

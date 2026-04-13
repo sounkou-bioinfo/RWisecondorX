@@ -20,7 +20,7 @@ deps:
 build: deps
 	R CMD build .
 
-.PHONY: install check build rd test test-source fixtures clean help
+.PHONY: install check build rd test test-source fixtures cohort clean help
 
 install: build
 	THREADS=4 R CMD INSTALL $(PKG_NAME)_$(PKG_VERSION).tar.gz
@@ -33,11 +33,13 @@ readme:
 	R -e "rmarkdown::render('README.Rmd', output_format = rmarkdown::github_document(html_preview = FALSE))"
 fixtures:
 	bash scripts/make_fixtures.sh
+cohort:
+	R -e "library(RWisecondorX); generate_cohort('cohort_out')"
 rd:
 	R -e 'roxygen2::roxygenize(".",load_code=NULL)'
 
 test: install
-	R -e "tinytest::test_package('$(PKG_NAME)')"
+	time R -e "tinytest::test_package('$(PKG_NAME)')"
 
 test-source:
 	R -e "tinytest::run_test_dir('inst/tinytest')"
@@ -62,5 +64,6 @@ help:
 	@echo "  test       - Run installed-package tinytest tests"
 	@echo "  test-source - Run tinytest directly from the source tree"
 	@echo "  fixtures   - Regenerate packaged BAM/CRAM fixtures under inst/extdata"
+	@echo "  cohort     - Generate synthetic BAM cohort into cohort_out/"
 	@echo "  clean      - Clean build artifacts"
 	@echo "  help       - Show this help message"

@@ -1,40 +1,9 @@
 library(tinytest)
-
-# ---------------------------------------------------------------------------
-# Load source when running from the source tree, otherwise use installed pkg
-# ---------------------------------------------------------------------------
-
-.source_candidate <- function(path) {
-  candidates <- c(path, file.path("..", "..", path))
-  candidates[file.exists(candidates)][1L]
-}
-
-src_convert <- .source_candidate("R/convert.R")
-src_nipter  <- .source_candidate("R/nipter_bin.R")
-
-if (!is.na(src_convert) && !is.na(src_nipter)) {
-  source(src_convert)
-  source(src_nipter)
-} else if (requireNamespace("RWisecondorX", quietly = TRUE)) {
-  nipter_bin_bam     <- getExportedValue("RWisecondorX", "nipter_bin_bam")
-  nipter_bin_bam_bed <- getExportedValue("RWisecondorX", "nipter_bin_bam_bed")
-} else {
-  stop("Unable to locate source files or installed RWisecondorX.", call. = FALSE)
-}
-
-if (!requireNamespace("Rduckhts", quietly = TRUE)) {
-  exit_file("Rduckhts not available")
-}
+library(RWisecondorX)
 
 .fixture_path <- function(name) {
-  candidates <- c(
-    system.file("extdata", name, package = "RWisecondorX"),
-    file.path("inst", "extdata", name),
-    file.path("..", "..", "inst", "extdata", name)
-  )
-  candidates <- candidates[nzchar(candidates) & file.exists(candidates)]
-  if (length(candidates) == 0L) return(NULL)
-  candidates[[1L]]
+  f <- system.file("extdata", name, package = "RWisecondorX")
+  if (nzchar(f)) f else NULL
 }
 
 test_bam <- .fixture_path("hg00106_chr11_fixture.bam")

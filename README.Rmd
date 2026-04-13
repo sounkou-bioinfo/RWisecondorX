@@ -157,40 +157,128 @@ automatically via `condathis`.
 ```{r cli-example, eval = FALSE}
 library(RWisecondorX)
 
-reference_npz <- tempfile(fileext = ".npz")
-plotyfrac_png <- tempfile(fileext = ".png")
-output_prefix <- tempfile(pattern = "wisecondorx-")
+npz_files <- list.files("controls/", "\\.npz$", full.names = TRUE)
 
 wisecondorx_newref(
-  npz_files   = c(fixture_npz, fixture_npz),
-  output      = reference_npz,
-  binsize     = 5000L,
+  npz_files   = npz_files,
+  output      = "reference.npz",
   ref_binsize = 100000L,
   nipt        = TRUE,
   refsize     = 300L,
-  yfrac       = NULL,
-  plotyfrac   = plotyfrac_png,
-  cpus        = 1L
+  plotyfrac   = "yfrac_plot.png",
+  cpus        = 4L
 )
 
 wisecondorx_predict(
-  npz          = fixture_npz,
-  ref          = reference_npz,
-  output_prefix = output_prefix,
-  minrefbins   = 150L,
-  maskrepeats  = 5L,
-  zscore       = 5,
-  alpha        = 1e-4,
-  beta         = NULL,
-  blacklist    = NULL,
-  gender       = NULL,
-  bed          = TRUE,
-  plot         = FALSE,
-  regions      = NULL,
-  ylim         = NULL,
-  cairo        = FALSE,
-  seed         = 1L
+  npz             = "sample.npz",
+  ref             = "reference.npz",
+  output_prefix   = "results/sample",
+  bed             = TRUE,
+  plot            = TRUE,
+  add_plot_title  = TRUE,
+  seed            = 1L
 )
+```
+
+## Native WisecondorX Pipeline (No Python)
+
+`rwisecondorx_newref()` and `rwisecondorx_predict()` are pure R/Rcpp
+implementations of the full WisecondorX algorithm — reference building, PCA
+correction, within-sample normalisation, CBS segmentation, and aberration
+calling — with no Python dependency. Performance-critical KNN reference-bin
+finding is compiled via Rcpp with OpenMP parallelisation. CBS segmentation uses
+DNAcopy (or ParDNAcopy for parallel operation) directly instead of calling the
+upstream `CBS.R` subprocess.
+
+The typical workflow is: bin samples with `bam_convert()`, build a reference
+with `rwisecondorx_newref()`, then call aberrations with
+`rwisecondorx_predict()`. The reference is a plain R list that can be
+serialised with `saveRDS()` and shared between sessions.
+
+```{r native-wisecondorx, eval = FALSE}
+library(RWisecondorX)
+
+bam_files <- list.files("controls/", "\\.bam$", full.names = TRUE)
+
+samples <- lapply(bam_files, bam_convert, binsize = 5000L, rmdup = "streaming")
+
+ref <- rwisecondorx_newref(
+  samples  = samples,
+  binsize  = 100000L,
+  nipt     = TRUE,
+  refsize  = 300L,
+  cpus     = 4L
+)
+
+saveRDS(ref, "reference.rds")
+
+test_sample <- bam_convert("test.bam", binsize = 5000L, rmdup = "streaming")
+
+prediction <- rwisecondorx_predict(
+  sample         = test_sample,
+  reference      = ref,
+  sample_binsize = 5000L,
+  outprefix      = "results/test",
+  zscore         = 5,
+  alpha          = 1e-4,
+  seed           = 1L
+)
+
+prediction$aberrations
+prediction$statistics
+```
+
+### Synthetic Cohort For Testing
+
+`generate_cohort()` creates a synthetic BAM cohort suitable for end-to-end
+pipeline testing. It produces 50 samples using "compressed" chromosome lengths
+(100bp per 100kb genomic bin), so each BAM is ~435KB. The cohort includes
+euploid females and males plus three trisomy samples (T21, T18, T13) for
+sensitivity validation.
+
+```{r cohort-example, eval = FALSE}
+library(RWisecondorX)
+
+out_dir <- tempfile("cohort_")
+generate_cohort(out_dir)
+
+bams <- list.files(out_dir, "\\.bam$", full.names = TRUE)
+length(bams)  # 50
+
+samples <- lapply(bams, bam_convert,
+                  binsize = COMPRESSED_BINSIZE, rmdup = "none")
+ref <- rwisecondorx_newref(samples, binsize = COMPRESSED_BINSIZE,
+                           nipt = TRUE, cpus = 4L)
+
+t21_bam <- file.path(out_dir, "sample_048_T21.bam")
+t21 <- bam_convert(t21_bam, binsize = COMPRESSED_BINSIZE, rmdup = "none")
+pred <- rwisecondorx_predict(t21, ref,
+                             sample_binsize = COMPRESSED_BINSIZE,
+                             zscore = 5, seed = 42L)
+
+pred$aberrations[pred$aberrations$type == "gain", c("chr", "start", "end", "zscore")]
+```
+
+## Sex Prediction
+
+`nipter_sex_model()` trains a 2-component Gaussian mixture model on chromosome
+fraction data from a control group for sex prediction. Three model types are
+available: Y-fraction alone, bivariate X+Y fractions, and Y-unique region
+read ratios from specific Y-chromosome genes. `nipter_predict_sex()` classifies
+a test sample using one or more models with majority-vote consensus.
+
+```{r sex-prediction, eval = FALSE}
+library(RWisecondorX)
+
+cg <- nipter_as_control_group(samples)
+cg <- nipter_gc_correct(cg, fasta = "hg38.fa")
+corrected <- nipter_chi_correct(samples[[1]], cg)
+cg <- corrected$control_group
+
+model_y  <- nipter_sex_model(cg, method = "y_fraction")
+model_xy <- nipter_sex_model(cg, method = "xy_fraction")
+
+nipter_predict_sex(test_sample, models = list(model_y, model_xy))
 ```
 
 ## NIPTeR-Style Trisomy Prediction

@@ -2,6 +2,45 @@
 
 ## RWisecondorX (development version)
 
+### SeparatedStrands BED expanded to 9 columns; BED readers switched to `read_tabix()`
+
+- `nipter_bin_bam_bed(separate_strands = TRUE)` now writes **9-column**
+  BED files: `chrom`, `start`, `end`, `count`, `count_fwd`, `count_rev`,
+  `corrected_count`, `corrected_fwd`, `corrected_rev`. The previous
+  7-column format lacked per-strand corrected values, so GC-corrected
+  SeparatedStrands samples lost their per-strand correction information
+  on the BED round-trip.
+
+- [`bed_to_sample()`](https://sounkou-bioinfo.github.io/RWisecondorX/reference/bed_to_sample.md)
+  and
+  [`bed_to_nipter_sample()`](https://sounkou-bioinfo.github.io/RWisecondorX/reference/bed_to_nipter_sample.md)
+  now use `read_tabix()` instead of `read_bed()` for reading BED.gz
+  files. `read_tabix()` returns all columns as VARCHAR with no
+  BED-schema type coercion, avoiding the problem where `read_bed()` maps
+  columns 7-8 to `thick_start`/`thick_end` (INTEGER) and rejects
+  double-precision corrected values.
+
+- [`bed_to_nipter_sample()`](https://sounkou-bioinfo.github.io/RWisecondorX/reference/bed_to_nipter_sample.md)
+  format detection now uses
+  [`tryCatch()`](https://rdrr.io/r/base/conditions.html) around the
+  `column5` probe query, so it correctly falls back to CombinedStrands
+  when the file has only 5 columns (where `column5` does not exist in
+  `read_tabix`).
+
+- New tests for corrected per-strand round-trip: CombinedStrands
+  corrected values and SeparatedStrands per-strand corrected values
+  (with independent forward/reverse multipliers) survive the write→read
+  cycle within floating-point tolerance. Independence of forward and
+  reverse corrections is explicitly verified.
+
+- Fixed R CMD check NOTEs:
+  [`utils::globalVariables()`](https://rdrr.io/r/utils/globalVariables.html)
+  for mclust symbols in `R/aaa.R`;
+  [`utils::write.table()`](https://rdrr.io/r/utils/write.table.html)
+  qualified in `R/convert.R` and `R/nipter_bin.R`.
+
+- Total test count: 391 assertions, all passing.
+
 ### BED.gz reader functions — close the round-trip
 
 - New
@@ -18,27 +57,27 @@
 
 - New
   [`bed_to_nipter_sample()`](https://sounkou-bioinfo.github.io/RWisecondorX/reference/bed_to_nipter_sample.md)
-  reads a 5-column (CombinedStrands) or 7-column (SeparatedStrands)
+  reads a 5-column (CombinedStrands) or 9-column (SeparatedStrands)
   BED.gz file (written by
   [`nipter_bin_bam_bed()`](https://sounkou-bioinfo.github.io/RWisecondorX/reference/nipter_bin_bam_bed.md))
   into a `NIPTeRSample` object compatible with all NIPTeR statistical
-  functions. Column count is auto-detected: if the `strand` field in
-  `read_bed()` contains non-null integers it is a 7-column
-  SeparatedStrands file, otherwise 5-column CombinedStrands. Handles
-  literal `"NA"` strings in the `corrected_count` field via `TRY_CAST`.
-  Sample name is inferred from the filename or set explicitly.
+  functions. Column count is auto-detected. Handles literal `"NA"`
+  strings in the `corrected_count` field via `TRY_CAST`. Sample name is
+  inferred from the filename or set explicitly.
 
 - Both functions accept an optional DuckDB connection for reuse across
   multiple files, creating one internally (with
   `allow_unsigned_extensions = "true"`) when none is supplied.
 
-- New `inst/tinytest/test_bed_reader.R` — 34 assertions covering
+- New `inst/tinytest/test_bed_reader.R` — 46 assertions covering
   WisecondorX 4-column round-trip, NIPTeR CombinedStrands 5-column
-  round-trip, SeparatedStrands 7-column round-trip (all four matrices),
-  sample name inference, and integration with
+  round-trip, SeparatedStrands 9-column round-trip (all four matrices),
+  corrected per-strand round-trip, sample name inference, and
+  integration with
   [`scale_sample()`](https://sounkou-bioinfo.github.io/RWisecondorX/reference/scale_sample.md).
 
-- Total test count: 379 assertions, all passing.
+- Total test count: 391 assertions (46 in test_bed_reader.R), all
+  passing.
 
 ### Native WisecondorX implementation
 
@@ -225,10 +264,11 @@
 ### `nipter_bin_bam_bed()` SeparatedStrands output
 
 - [`nipter_bin_bam_bed()`](https://sounkou-bioinfo.github.io/RWisecondorX/reference/nipter_bin_bam_bed.md)
-  gains a `separate_strands` parameter. When `TRUE`, outputs a 7-column
+  gains a `separate_strands` parameter. When `TRUE`, outputs a 9-column
   BED (`chrom`, `start`, `end`, `count`, `count_fwd`, `count_rev`,
-  `corrected_count`) where `count = count_fwd + count_rev`. When `FALSE`
-  (default), the 5-column BED format is unchanged.
+  `corrected_count`, `corrected_fwd`, `corrected_rev`) where
+  `count = count_fwd + count_rev`. When `FALSE` (default), the 5-column
+  BED format is unchanged.
 
 ### SeparatedStrands support
 

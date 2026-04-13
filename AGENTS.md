@@ -70,7 +70,8 @@ real-world NIPT pipelines (e.g. `mapq=40L, exclude_flags=1024L`). -
 [`nipter_bin_bam_bed()`](https://sounkou-bioinfo.github.io/RWisecondorX/reference/nipter_bin_bam_bed.md):
 BED output with `separate_strands` support. When `FALSE` (default):
 5-column BED (`chrom`, `start`, `end`, `count`, `corrected_count`). When
-`TRUE`: 7-column BED adding `count_fwd` and `count_rev` columns.
+`TRUE`: 9-column BED (`chrom`, `start`, `end`, `count`, `count_fwd`,
+`count_rev`, `corrected_count`, `corrected_fwd`, `corrected_rev`).
 
 **Tests** - `inst/tinytest/test_fixtures.R` (41 assertions): synthetic
 BAM/CRAM fixtures, all three `rmdup` modes, CRAM reference round-trip. -
@@ -260,14 +261,16 @@ Python runtime dependency.
   /
   [`rwisecondorx_predict()`](https://sounkou-bioinfo.github.io/RWisecondorX/reference/rwisecondorx_predict.md).
   [`bed_to_nipter_sample()`](https://sounkou-bioinfo.github.io/RWisecondorX/reference/bed_to_nipter_sample.md):
-  reads a 5-column (CombinedStrands) or 7-column (SeparatedStrands)
+  reads a 5-column (CombinedStrands) or 9-column (SeparatedStrands)
   BED.gz (from
   [`nipter_bin_bam_bed()`](https://sounkou-bioinfo.github.io/RWisecondorX/reference/nipter_bin_bam_bed.md))
-  into a `NIPTeRSample` object. Auto-detects column count; handles
-  literal “NA” in `corrected_count` via `TRY_CAST`.
-- `inst/tinytest/test_bed_reader.R` — 34 assertions covering WisecondorX
-  and NIPTeR round-trips, SeparatedStrands 7-column BED, sample name
-  inference, and
+  into a `NIPTeRSample` object. Auto-detects column count via
+  `read_tabix()` probe; handles literal “NA” in `corrected_count` via
+  `TRY_CAST`. Per-strand corrected values (`corrected_fwd`,
+  `corrected_rev`) are read independently for SeparatedStrands.
+- `inst/tinytest/test_bed_reader.R` — 46 assertions covering WisecondorX
+  and NIPTeR round-trips, SeparatedStrands 9-column BED, corrected
+  per-strand round-trip, sample name inference, and
   [`scale_sample()`](https://sounkou-bioinfo.github.io/RWisecondorX/reference/scale_sample.md)
   integration.
 
@@ -347,9 +350,12 @@ downstream analysis:
 - 5-column NIPTeR BED (CombinedStrands): `chrom`, `start`, `end`,
   `count`, `corrected_count` (written by
   [`nipter_bin_bam_bed()`](https://sounkou-bioinfo.github.io/RWisecondorX/reference/nipter_bin_bam_bed.md)).
-- 7-column NIPTeR BED (SeparatedStrands): `chrom`, `start`, `end`,
-  `count`, `count_fwd`, `count_rev`, `corrected_count` (written by
+- 9-column NIPTeR BED (SeparatedStrands): `chrom`, `start`, `end`,
+  `count`, `count_fwd`, `count_rev`, `corrected_count`, `corrected_fwd`,
+  `corrected_rev` (written by
   `nipter_bin_bam_bed(separate_strands = TRUE)`).
+  `count = count_fwd + count_rev`; `corrected_*` columns are `NA` until
+  a GC-corrected sample is supplied.
 - Coordinates are 0-based half-open intervals (BED convention).
   Chromosomes use no `chr` prefix.
 - All files are bgzipped (BGZF) and tabix-indexed via
@@ -361,9 +367,11 @@ downstream analysis:
 - [`bed_to_sample()`](https://sounkou-bioinfo.github.io/RWisecondorX/reference/bed_to_sample.md)
   reads 4-column BED.gz back into the WisecondorX in-memory format.
   [`bed_to_nipter_sample()`](https://sounkou-bioinfo.github.io/RWisecondorX/reference/bed_to_nipter_sample.md)
-  reads 5- or 7-column BED.gz back into a `NIPTeRSample`. These close
+  reads 5- or 9-column BED.gz back into a `NIPTeRSample`. These close
   the round-trip so analysis pipelines can start from pre-computed BED
-  files without re-reading the BAM.
+  files without re-reading the BAM. All BED reading uses `read_tabix()`
+  (not `read_bed()`) to avoid BED-schema type coercion issues with
+  double-valued columns.
 
 ------------------------------------------------------------------------
 

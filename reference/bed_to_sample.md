@@ -19,7 +19,7 @@ bed_to_sample(bed, binsize = NULL, con = NULL)
 
 - bed:
 
-  Path to a bgzipped (or plain) BED file.
+  Path to a bgzipped (or plain) BED file with a `.tbi` index.
 
 - binsize:
 

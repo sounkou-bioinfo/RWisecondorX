@@ -90,12 +90,14 @@ nipter_bin_bam_bed(
 When `separate_strands = FALSE` (default), the output has five columns:
 `chrom`, `start`, `end`, `count`, `corrected_count`.
 
-When `separate_strands = TRUE`, the output has seven columns: `chrom`,
-`start`, `end`, `count`, `count_fwd`, `count_rev`, `corrected_count`.
-`count` is the total (forward + reverse).
+When `separate_strands = TRUE`, the output has nine columns: `chrom`,
+`start`, `end`, `count`, `count_fwd`, `count_rev`, `corrected_count`,
+`corrected_fwd`, `corrected_rev`. `count` is the total (forward +
+reverse); `corrected_count` is the total of the per-strand corrected
+values.
 
-`corrected_count` is `NA` until a GC-corrected sample is supplied via
-the `corrected` parameter.
+`corrected_count` (and `corrected_fwd`/`corrected_rev`) is `NA` until a
+GC-corrected sample is supplied via the `corrected` parameter.
 
 ## See also
 
@@ -113,7 +115,7 @@ nipter_bin_bam_bed("sample.bam", "sample.nipter.bed.gz")
 nipter_bin_bam_bed("sample.dm.bam", "sample.nipter.bed.gz",
                    mapq = 40L, exclude_flags = 1024L)
 
-# Strand-separated output (7 columns)
+# Strand-separated output (9 columns)
 nipter_bin_bam_bed("sample.bam", "sample.stranded.bed.gz",
                    separate_strands = TRUE)
 } # }

@@ -1,6 +1,6 @@
 # Read a NIPTeR-format BED file into a NIPTeRSample
 
-Reads a 5-column or 7-column bgzipped BED file (as written by
+Reads a 5-column or 9-column bgzipped BED file (as written by
 [`nipter_bin_bam_bed()`](https://sounkou-bioinfo.github.io/RWisecondorX/reference/nipter_bin_bam_bed.md))
 and returns a `NIPTeRSample` object suitable for all NIPTeR statistical
 functions:
@@ -22,7 +22,7 @@ bed_to_nipter_sample(bed, name = NULL, binsize = NULL, con = NULL)
 
 - bed:
 
-  Path to a bgzipped (or plain) BED file.
+  Path to a bgzipped (or plain) BED file with a `.tbi` index.
 
 - name:
 
@@ -46,17 +46,25 @@ An object of class `c("NIPTeRSample", <strand_type>)`:
 [`nipter_bin_bam()`](https://sounkou-bioinfo.github.io/RWisecondorX/reference/nipter_bin_bam.md)
 with `separate_strands = FALSE`.
 
-**`SeparatedStrands`** (from 7-column BED): same structure as
+**`SeparatedStrands`** (from 9-column BED): same structure as
 [`nipter_bin_bam()`](https://sounkou-bioinfo.github.io/RWisecondorX/reference/nipter_bin_bam.md)
 with `separate_strands = TRUE`.
 
 ## Details
 
 A 5-column BED (`chrom`, `start`, `end`, `count`, `corrected_count`)
-produces a `CombinedStrands` sample. A 7-column BED (`chrom`, `start`,
-`end`, `count`, `count_fwd`, `count_rev`, `corrected_count`) produces a
-`SeparatedStrands` sample with independent forward/reverse count
-matrices. The number of columns is detected automatically.
+produces a `CombinedStrands` sample. A 9-column BED (`chrom`, `start`,
+`end`, `count`, `count_fwd`, `count_rev`, `corrected_count`,
+`corrected_fwd`, `corrected_rev`) produces a `SeparatedStrands` sample
+with independent forward/reverse count matrices. The number of columns
+is detected automatically.
+
+When the corrected columns contain non-NA values (i.e. the BED was
+written with a GC-corrected `corrected` argument), the returned sample's
+count matrices are replaced with the corrected values and the correction
+status is set to `"GC Corrected"`. For `SeparatedStrands`, the
+per-strand corrected values (`corrected_fwd`, `corrected_rev`) are used
+to populate the forward and reverse matrices independently.
 
 ## See also
 

@@ -130,7 +130,7 @@ sample <- bed_to_sample("sample.bed.gz", binsize = 5000L)
 ```
 
 [`bed_to_nipter_sample()`](https://sounkou-bioinfo.github.io/RWisecondorX/reference/bed_to_nipter_sample.md)
-reads a 5-column (CombinedStrands) or 7-column (SeparatedStrands) NIPTeR
+reads a 5-column (CombinedStrands) or 9-column (SeparatedStrands) NIPTeR
 BED.gz into a `NIPTeRSample` object compatible with all NIPTeR
 statistical functions. Column count is auto-detected:
 

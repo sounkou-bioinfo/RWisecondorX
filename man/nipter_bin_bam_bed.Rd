@@ -12,6 +12,7 @@ nipter_bin_bam_bed(
   require_flags = 0L,
   exclude_flags = 0L,
   rmdup = c("none", "flag"),
+  separate_strands = FALSE,
   corrected = NULL,
   con = NULL,
   reference = NULL,
@@ -38,6 +39,10 @@ reads (\verb{samtools view -F 1024}).}
 
 \item{rmdup}{Duplicate removal strategy: \code{"none"} (default) or \code{"flag"}.}
 
+\item{separate_strands}{Logical; when \code{TRUE}, includes separate
+\code{count_fwd} and \code{count_rev} columns for forward- and reverse-strand
+counts. Default \code{FALSE}.}
+
 \item{corrected}{Optional \code{NIPTeRSample} already processed by
 \code{nipter_gc_correct()}. When supplied, its corrected counts populate the
 \code{corrected_count} column; otherwise the column is \code{NA}.}
@@ -53,14 +58,18 @@ reads (\verb{samtools view -F 1024}).}
 }
 \description{
 Bins a BAM/CRAM file with NIPTeR defaults and writes the result to a
-bgzipped, tabix-indexed BED file with five columns:
-\code{chrom}, \code{start}, \code{end}, \code{count}, \code{corrected_count}.
+bgzipped, tabix-indexed BED file.
 }
 \details{
-\code{corrected_count} is filled with \code{NA} until \code{nipter_gc_correct()} is
-available. Once GC correction is ported, the typical workflow will be:
-\code{nipter_bin_bam()} → \code{nipter_gc_correct()} → \code{nipter_bin_bam_bed()} with
-the corrected sample passed as \code{corrected}.
+When \code{separate_strands = FALSE} (default), the output has five columns:
+\code{chrom}, \code{start}, \code{end}, \code{count}, \code{corrected_count}.
+
+When \code{separate_strands = TRUE}, the output has seven columns:
+\code{chrom}, \code{start}, \code{end}, \code{count}, \code{count_fwd}, \code{count_rev},
+\code{corrected_count}. \code{count} is the total (forward + reverse).
+
+\code{corrected_count} is \code{NA} until a GC-corrected sample is supplied via the
+\code{corrected} parameter.
 }
 \examples{
 \dontrun{
@@ -69,6 +78,10 @@ nipter_bin_bam_bed("sample.bam", "sample.nipter.bed.gz")
 # With pre-filtering matching a typical NIPT pipeline
 nipter_bin_bam_bed("sample.dm.bam", "sample.nipter.bed.gz",
                    mapq = 40L, exclude_flags = 1024L)
+
+# Strand-separated output (7 columns)
+nipter_bin_bam_bed("sample.bam", "sample.stranded.bed.gz",
+                   separate_strands = TRUE)
 }
 
 }

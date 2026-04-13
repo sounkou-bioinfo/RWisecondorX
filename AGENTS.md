@@ -32,7 +32,7 @@ Design priorities:
 
 **NIPTeR binning layer — `R/nipter_bin.R`**
 - `nipter_bin_bam()`: produces `NIPTeRSample` objects. With `separate_strands = FALSE` (default), class is `c("NIPTeRSample", "CombinedStrands")`; with `separate_strands = TRUE`, class is `c("NIPTeRSample", "SeparatedStrands")` with `autosomal_chromosome_reads` as a list of two matrices (forward/reverse, rownames `"1F".."22F"` / `"1R".."22R"`). Exposes `mapq`, `require_flags`, `exclude_flags`, `rmdup` for pre-filtering matching real-world NIPT pipelines (e.g. `mapq=40L, exclude_flags=1024L`).
-- `nipter_bin_bam_bed()`: 5-column BED (`chrom`, `start`, `end`, `count`, `corrected_count`). `corrected_count` is `NA` until GC correction is ported; column is present so downstream tools can rely on the schema now.
+- `nipter_bin_bam_bed()`: BED output with `separate_strands` support. When `FALSE` (default): 5-column BED (`chrom`, `start`, `end`, `count`, `corrected_count`). When `TRUE`: 7-column BED adding `count_fwd` and `count_rev` columns.
 
 **Tests**
 - `inst/tinytest/test_fixtures.R` (41 assertions): synthetic BAM/CRAM fixtures, all three `rmdup` modes, CRAM reference round-trip.
@@ -56,14 +56,17 @@ Each file is strictly separate; never mix NIPTeR and WisecondorX code. All stati
 - `R/nipter_chi.R` — `nipter_chi_correct()`: chi-squared overdispersion correction applied simultaneously to sample and control group. SeparatedStrands: chi computed on summed strand counts, correction applied per-strand via `lapply()`.
 - `R/nipter_score.R` — `nipter_z_score()`: chromosomal fraction Z-score with Shapiro-Wilk normality test. Uses collapsed fractions for SeparatedStrands. `nipter_ncv_score()`: normalised chromosome value with brute-force denominator search using `utils::combn()` (replaces `sets::set_combn()` dependency).
 - `R/nipter_regression.R` — `nipter_regression()`: forward stepwise regression Z-score with train/test split, practical vs theoretical CV selection. Supports both CombinedStrands and SeparatedStrands. SeparatedStrands doubles the predictor pool (44 candidates: `"1F".."22F","1R".."22R"`) with complementary exclusion (selecting `"5F"` excludes both `"5F"` and `"5R"` from the same model).
+- `R/nipter_sex.R` — `nipter_sex_model()`: 2-component GMM sex prediction via `mclust::Mclust()`, supporting `"y_fraction"` and `"xy_fraction"` methods. `nipter_predict_sex()`: classifies a sample as male/female using one or more models with majority-vote consensus. Internal `.mclust_fit()` wrapper evaluates in mclust namespace to work around `mclustBIC()` not being namespace-qualified in upstream mclust.
 - `inst/tinytest/test_nipter_stats.R` — 105 assertions covering all statistical functions including SeparatedStrands variants.
+- `inst/tinytest/test_nipter_sex.R` — 26 assertions covering sex model building, classification accuracy, prediction, consensus, and edge cases.
 
 ### Open architectural questions
 
-- **Gender/sex prediction**: WisecondorX uses `sklearn.GaussianMixture` on Y-read fractions; NIPTeR has no gender prediction. Investigate native R gender prediction using `mclust::Mclust()` as the R equivalent.
+- **Sex-stratified NCV for X/Y chromosomes**: The user's clinical pipeline computes sex-stratified NCV denominators for X and Y (separate models for males vs females). Not yet implemented.
+- **Sex-stratified regression for X/Y**: Forward stepwise `lm()` models for X and Y fractions, stratified by predicted sex. Not yet implemented.
+- **Y-unique ratio model**: The user's pipeline uses `YUniqueRatioFiltered` from samtools idxstats as a third sex prediction feature. Would require an `idxstats`-like function in duckhts/Rduckhts.
 - **DNACopy replacement**: the segmentation step in `wisecondorx_predict` uses DNACopy internally; evaluate whether to expose or replace it.
 - **Multi-chromosome NIPTeR conformance fixture**: `make fixtures` currently produces a chr11-only BAM. A multi-chromosome synthetic BAM (all 24 chroms, no unmapped reads, no same-position collisions) would allow `NIPTER_CONFORMANCE_BAM` to be populated automatically in CI without a real patient BAM.
-- **`nipter_bin_bam_bed()` SeparatedStrands output**: currently flattens to CombinedStrands for BED output. May need updating if stranded BED output is desired.
 
 ---
 
@@ -76,6 +79,7 @@ Each file is strictly separate; never mix NIPTeR and WisecondorX code. All stati
 - `R/nipter_chi.R` — chi-squared overdispersion correction.
 - `R/nipter_control.R` — control group construction, diagnostics, and matching.
 - `R/nipter_regression.R` — forward stepwise regression Z-score.
+- `R/nipter_sex.R` — sex prediction via Gaussian mixture models (mclust).
 - `R/wisecondorx_cli.R` — CLI wrappers.
 - `R/npz.R` — NPZ output.
 - `R/aaa.R` — SRA metadata helpers.
@@ -93,7 +97,8 @@ Each file is strictly separate; never mix NIPTeR and WisecondorX code. All stati
 The BED.gz format is the language-agnostic handoff between binning and downstream analysis:
 
 - 4-column WisecondorX BED: `chrom`, `start`, `end`, `count` (written by `bam_convert_bed()`).
-- 5-column NIPTeR BED: `chrom`, `start`, `end`, `count`, `corrected_count` (written by `nipter_bin_bam_bed()`).
+- 5-column NIPTeR BED (CombinedStrands): `chrom`, `start`, `end`, `count`, `corrected_count` (written by `nipter_bin_bam_bed()`).
+- 7-column NIPTeR BED (SeparatedStrands): `chrom`, `start`, `end`, `count`, `count_fwd`, `count_rev`, `corrected_count` (written by `nipter_bin_bam_bed(separate_strands = TRUE)`).
 - Coordinates are 0-based half-open intervals (BED convention). Chromosomes use no `chr` prefix.
 - All files are bgzipped (BGZF) and tabix-indexed via `Rduckhts::rduckhts_bgzip()` and `Rduckhts::rduckhts_tabix_index()`. Do not use `gzfile()` or external tools.
 

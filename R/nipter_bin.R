@@ -117,13 +117,17 @@ nipter_bin_bam <- function(bam,
 #' Write NIPTeR-style bin counts to a bgzipped BED file
 #'
 #' Bins a BAM/CRAM file with NIPTeR defaults and writes the result to a
-#' bgzipped, tabix-indexed BED file with five columns:
+#' bgzipped, tabix-indexed BED file.
+#'
+#' When `separate_strands = FALSE` (default), the output has five columns:
 #' `chrom`, `start`, `end`, `count`, `corrected_count`.
 #'
-#' `corrected_count` is filled with `NA` until `nipter_gc_correct()` is
-#' available. Once GC correction is ported, the typical workflow will be:
-#' `nipter_bin_bam()` → `nipter_gc_correct()` → `nipter_bin_bam_bed()` with
-#' the corrected sample passed as `corrected`.
+#' When `separate_strands = TRUE`, the output has seven columns:
+#' `chrom`, `start`, `end`, `count`, `count_fwd`, `count_rev`,
+#' `corrected_count`. `count` is the total (forward + reverse).
+#'
+#' `corrected_count` is `NA` until a GC-corrected sample is supplied via the
+#' `corrected` parameter.
 #'
 #' @param bam Path to an indexed BAM or CRAM file.
 #' @param bed Path for the output `.bed.gz` file. The tabix index is written
@@ -137,6 +141,9 @@ nipter_bin_bam <- function(bam,
 #'   (samtools `-F`). Default `0L`. Set to `1024L` to exclude duplicate-flagged
 #'   reads (`samtools view -F 1024`).
 #' @param rmdup Duplicate removal strategy: `"none"` (default) or `"flag"`.
+#' @param separate_strands Logical; when `TRUE`, includes separate
+#'   `count_fwd` and `count_rev` columns for forward- and reverse-strand
+#'   counts. Default `FALSE`.
 #' @param corrected Optional `NIPTeRSample` already processed by
 #'   `nipter_gc_correct()`. When supplied, its corrected counts populate the
 #'   `corrected_count` column; otherwise the column is `NA`.
@@ -155,24 +162,30 @@ nipter_bin_bam <- function(bam,
 #' # With pre-filtering matching a typical NIPT pipeline
 #' nipter_bin_bam_bed("sample.dm.bam", "sample.nipter.bed.gz",
 #'                    mapq = 40L, exclude_flags = 1024L)
+#'
+#' # Strand-separated output (7 columns)
+#' nipter_bin_bam_bed("sample.bam", "sample.stranded.bed.gz",
+#'                    separate_strands = TRUE)
 #' }
 #'
 #' @export
 nipter_bin_bam_bed <- function(bam,
                                bed,
-                               binsize       = 50000L,
-                               mapq          = 0L,
-                               require_flags = 0L,
-                               exclude_flags = 0L,
-                               rmdup         = c("none", "flag"),
-                               corrected     = NULL,
-                               con           = NULL,
-                               reference     = NULL,
-                               index         = TRUE) {
+                               binsize          = 50000L,
+                               mapq             = 0L,
+                               require_flags    = 0L,
+                               exclude_flags    = 0L,
+                               rmdup            = c("none", "flag"),
+                               separate_strands = FALSE,
+                               corrected        = NULL,
+                               con              = NULL,
+                               reference        = NULL,
+                               index            = TRUE) {
   rmdup <- match.arg(rmdup)
   stopifnot(is.character(bam), length(bam) == 1L, nzchar(bam))
   stopifnot(file.exists(bam))
   stopifnot(is.character(bed), length(bed) == 1L, nzchar(bed))
+  stopifnot(is.logical(separate_strands), length(separate_strands) == 1L)
   if (!is.null(reference)) {
     stopifnot(is.character(reference), length(reference) == 1L, nzchar(reference))
     stopifnot(file.exists(reference))
@@ -205,31 +218,13 @@ nipter_bin_bam_bed <- function(bam,
   sample <- nipter_bin_bam(bam, binsize = binsize, mapq = mapq,
                            require_flags = require_flags,
                            exclude_flags = exclude_flags,
-                           rmdup = rmdup, con = con, reference = reference)
+                           rmdup = rmdup, separate_strands = separate_strands,
+                           con = con, reference = reference)
 
-  # Flatten autosomal + sex into a single data.frame ordered chr 1-22, X, Y.
-  raw_auto <- sample$autosomal_chromosome_reads[[1L]]
-  raw_sex  <- sample$sex_chromosome_reads[[1L]]
-  combined <- rbind(raw_auto, raw_sex)   # 24 rows, n_bins columns
-
-  chr_names <- c(as.character(1:22), "X", "Y")
-  n_bins    <- ncol(combined)
-  starts    <- as.integer(seq(0L, by = binsize, length.out = n_bins))
-
-  df <- data.frame(
-    chrom           = rep(chr_names, each = n_bins),
-    start           = rep(starts, times = 24L),
-    end             = rep(starts + binsize, times = 24L),
-    count           = as.integer(t(combined)),
-    corrected_count = NA_real_,
-    stringsAsFactors = FALSE
-  )
-
-  # If a GC-corrected sample is supplied, overwrite corrected_count.
-  if (!is.null(corrected)) {
-    corr_auto <- corrected$autosomal_chromosome_reads[[1L]]
-    corr_sex  <- corrected$sex_chromosome_reads[[1L]]
-    df$corrected_count <- as.numeric(t(rbind(corr_auto, corr_sex)))
+  if (isTRUE(separate_strands)) {
+    df <- .nipter_bed_separated_strands(sample, binsize, corrected)
+  } else {
+    df <- .nipter_bed_combined_strands(sample, binsize, corrected)
   }
 
   tmp <- tempfile(fileext = ".bed")
@@ -357,4 +352,79 @@ nipter_bin_bam_bed <- function(bam,
     ),
     class = c("NIPTeRSample", "SeparatedStrands")
   )
+}
+
+
+# CombinedStrands BED data.frame: 5 columns
+# chrom, start, end, count, corrected_count
+.nipter_bed_combined_strands <- function(sample, binsize, corrected = NULL) {
+  raw_auto <- sample$autosomal_chromosome_reads[[1L]]
+  raw_sex  <- sample$sex_chromosome_reads[[1L]]
+  combined <- rbind(raw_auto, raw_sex)   # 24 rows, n_bins columns
+
+  chr_names <- c(as.character(1:22), "X", "Y")
+  n_bins    <- ncol(combined)
+  starts    <- as.integer(seq(0L, by = binsize, length.out = n_bins))
+
+  df <- data.frame(
+    chrom           = rep(chr_names, each = n_bins),
+    start           = rep(starts, times = 24L),
+    end             = rep(starts + binsize, times = 24L),
+    count           = as.integer(t(combined)),
+    corrected_count = NA_real_,
+    stringsAsFactors = FALSE
+  )
+
+  if (!is.null(corrected)) {
+    corr_auto <- corrected$autosomal_chromosome_reads[[1L]]
+    corr_sex  <- corrected$sex_chromosome_reads[[1L]]
+    df$corrected_count <- as.numeric(t(rbind(corr_auto, corr_sex)))
+  }
+
+  df
+}
+
+
+# SeparatedStrands BED data.frame: 7 columns
+# chrom, start, end, count, count_fwd, count_rev, corrected_count
+# count = count_fwd + count_rev (total)
+.nipter_bed_separated_strands <- function(sample, binsize, corrected = NULL) {
+  fwd_auto <- sample$autosomal_chromosome_reads[[1L]]  # "1F".."22F"
+  rev_auto <- sample$autosomal_chromosome_reads[[2L]]   # "1R".."22R"
+  fwd_sex  <- sample$sex_chromosome_reads[[1L]]          # "XF","YF"
+  rev_sex  <- sample$sex_chromosome_reads[[2L]]          # "XR","YR"
+
+  fwd_combined <- rbind(fwd_auto, fwd_sex)   # 24 rows
+  rev_combined <- rbind(rev_auto, rev_sex)    # 24 rows
+  total        <- fwd_combined + rev_combined
+
+  chr_names <- c(as.character(1:22), "X", "Y")
+  n_bins    <- ncol(total)
+  starts    <- as.integer(seq(0L, by = binsize, length.out = n_bins))
+
+  df <- data.frame(
+    chrom           = rep(chr_names, each = n_bins),
+    start           = rep(starts, times = 24L),
+    end             = rep(starts + binsize, times = 24L),
+    count           = as.integer(t(total)),
+    count_fwd       = as.integer(t(fwd_combined)),
+    count_rev       = as.integer(t(rev_combined)),
+    corrected_count = NA_real_,
+    stringsAsFactors = FALSE
+  )
+
+  # Corrected counts from a GC-corrected SeparatedStrands sample
+  if (!is.null(corrected) && inherits(corrected, "SeparatedStrands")) {
+    corr_fwd <- rbind(corrected$autosomal_chromosome_reads[[1L]],
+                      corrected$sex_chromosome_reads[[1L]])
+    corr_rev <- rbind(corrected$autosomal_chromosome_reads[[2L]],
+                      corrected$sex_chromosome_reads[[2L]])
+    df$corrected_count <- as.numeric(t(corr_fwd + corr_rev))
+  } else if (!is.null(corrected)) {
+    corr_auto <- corrected$autosomal_chromosome_reads[[1L]]
+    corr_sex  <- corrected$sex_chromosome_reads[[1L]]
+    df$corrected_count <- as.numeric(t(rbind(corr_auto, corr_sex)))
+  }
+
+  df
 }

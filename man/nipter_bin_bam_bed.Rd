@@ -8,6 +8,9 @@ nipter_bin_bam_bed(
   bam,
   bed,
   binsize = 50000L,
+  mapq = 0L,
+  require_flags = 0L,
+  exclude_flags = 0L,
   rmdup = c("none", "flag"),
   corrected = NULL,
   con = NULL,
@@ -22,6 +25,16 @@ nipter_bin_bam_bed(
 alongside as \code{paste0(bed, ".tbi")}.}
 
 \item{binsize}{Bin size in base pairs (default 50000).}
+
+\item{mapq}{Minimum mapping quality (default \code{0L}). Set to \code{40L} to match
+common NIPT pre-filtering (\verb{samtools view --min-MQ 40}).}
+
+\item{require_flags}{Integer bitmask; only reads with all bits set are kept
+(samtools \code{-f}). Default \code{0L}.}
+
+\item{exclude_flags}{Integer bitmask; reads with any bit set are dropped
+(samtools \code{-F}). Default \code{0L}. Set to \code{1024L} to exclude duplicate-flagged
+reads (\verb{samtools view -F 1024}).}
 
 \item{rmdup}{Duplicate removal strategy: \code{"none"} (default) or \code{"flag"}.}
 
@@ -52,6 +65,10 @@ the corrected sample passed as \code{corrected}.
 \examples{
 \dontrun{
 nipter_bin_bam_bed("sample.bam", "sample.nipter.bed.gz")
+
+# With pre-filtering matching a typical NIPT pipeline
+nipter_bin_bam_bed("sample.dm.bam", "sample.nipter.bed.gz",
+                   mapq = 40L, exclude_flags = 1024L)
 }
 
 }

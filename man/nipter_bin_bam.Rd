@@ -7,6 +7,9 @@
 nipter_bin_bam(
   bam,
   binsize = 50000L,
+  mapq = 0L,
+  require_flags = 0L,
+  exclude_flags = 0L,
   rmdup = c("none", "flag"),
   separate_strands = FALSE,
   con = NULL,
@@ -19,9 +22,21 @@ nipter_bin_bam(
 \item{binsize}{Bin size in base pairs. Default 50000 (NIPTeR's fixed bin
 size). Must match the binsize used when building any control group.}
 
+\item{mapq}{Minimum mapping quality. Default \code{0L} (NIPTeR original: all
+mapped reads). Set to \code{40L} to match common NIPT pipeline pre-filtering
+(\verb{samtools view --min-MQ 40}).}
+
+\item{require_flags}{Integer bitmask; only reads with all bits set are kept
+(samtools \code{-f}). Default \code{0L} (no requirement).}
+
+\item{exclude_flags}{Integer bitmask; reads with any bit set are dropped
+(samtools \code{-F}). Default \code{0L}. Set to \code{1024L} (\code{0x400}) to exclude
+reads marked as duplicates (\verb{samtools view -F 1024}).}
+
 \item{rmdup}{Duplicate removal strategy. \code{"none"} (default, NIPTeR standard)
-or \code{"flag"} (for BAMs already processed by Picard / sambamba). NIPTeR does
-not perform streaming deduplication.}
+or \code{"flag"} (equivalent to \code{exclude_flags = 1024L}; for BAMs already
+processed by Picard / sambamba). NIPTeR does not perform streaming
+deduplication.}
 
 \item{separate_strands}{Not yet implemented. Set \code{FALSE} (default).}
 
@@ -39,16 +54,16 @@ one 2-row integer matrix, rows named \code{"X"} and \code{"Y"}),
 }
 \description{
 Replicates NIPTeR's \code{bin_bam_sample()}: counts reads in fixed-width bins
-across chromosomes 1-22, X, and Y, with no MAPQ filter and no pair-status
-filter (all mapped reads are counted), matching the Rsamtools \code{scanBam}
-defaults used by the original.
+across chromosomes 1-22, X, and Y. The original NIPTeR counts all mapped
+reads with no MAPQ filter; real-world NIPT pipelines typically pre-filter
+with \verb{samtools view --min-MQ 40 -F 1024} before binning. Both modes are
+supported through the \code{mapq}, \code{exclude_flags}, and \code{require_flags}
+parameters.
 }
 \details{
-Internally calls \code{\link[=bam_convert]{bam_convert()}} with \code{mapq = 0L},
-\code{filter_improper_pairs = FALSE}, and the caller-supplied \code{rmdup}. The result
-is reshaped into a \code{NIPTeRSample} object whose structure parallels
-NIPTeR's \code{NIPTSample}: autosomal reads as a chromosome-by-bin matrix and sex
-chromosome reads as a separate two-row matrix.
+The result is reshaped into a \code{NIPTeRSample} object whose structure
+parallels NIPTeR's \code{NIPTSample}: autosomal reads as a chromosome-by-bin
+matrix and sex chromosome reads as a separate two-row matrix.
 
 Strand separation (\code{separate_strands = TRUE}) is not yet implemented; it
 requires a forward/reverse split in the SQL layer and will be added when the
@@ -56,7 +71,13 @@ NIPTeR regression layer is ported.
 }
 \examples{
 \dontrun{
+# NIPTeR original defaults: all mapped reads, no dedup
 sample <- nipter_bin_bam("sample.bam", binsize = 50000L)
+
+# Common NIPT pipeline: MAPQ >= 40, exclude duplicate-flagged reads
+sample <- nipter_bin_bam("sample.dm.bam", binsize = 50000L,
+                         mapq = 40L, exclude_flags = 1024L)
+
 sample$autosomal_chromosome_reads[[1]]["21", ]   # chr21 bin counts
 }
 

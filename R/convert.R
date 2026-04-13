@@ -84,9 +84,133 @@ bam_convert <- function(bam,
 }
 
 
+#' Convert BAM/CRAM to a bgzipped BED bin-count file
+#'
+#' Runs [bam_convert()] and writes the per-bin read counts to a bgzipped,
+#' tab-delimited BED file (four columns: `chrom`, `start`, `end`, `count`),
+#' then creates a tabix index (`.tbi`) alongside it via Rduckhts.
+#' This is the language-agnostic intermediate format for the RWisecondorX
+#' native pipeline; the file can be queried directly with duckhts/DuckDB or
+#' any tabix-aware tool.
+#'
+#' Coordinates are 0-based half-open intervals matching the BED convention
+#' (`start = bin_index * binsize`, `end = start + binsize`). Chromosomes are
+#' written as `1`–`22`, `X`, `Y` (no `chr` prefix) in numeric order. All
+#' bins are written, including those with a count of zero.
+#'
+#' bgzip and tabix indexing are performed via [Rduckhts::rduckhts_bgzip()] and
+#' [Rduckhts::rduckhts_tabix_index()], so no external tools are required.
+#'
+#' @param bam Path to an indexed BAM or CRAM file.
+#' @param bed Path for the output `.bed.gz` file (created or overwritten).
+#'   The tabix index is written to `paste0(bed, ".tbi")`.
+#' @param binsize Bin size in base pairs (default 5000).
+#' @param rmdup Duplicate-removal strategy passed to [bam_convert()].
+#' @param con Optional open DBI connection with duckhts already loaded.
+#'   If `NULL` (default), a temporary in-memory DuckDB connection is created.
+#' @param reference Optional FASTA reference path for CRAM inputs.
+#' @param index Logical; when `TRUE` (default) a tabix index is created
+#'   alongside the bgzipped output.
+#'
+#' @return `bed` (invisibly).
+#'
+#' @seealso [bam_convert()], [bam_convert_npz()], `wisecondorx_convert()`
+#'
+#' @examples
+#' \dontrun{
+#' bam_convert_bed("sample.bam", "sample.bed.gz", binsize = 5000, rmdup = "streaming")
+#' }
+#'
+#' @export
+bam_convert_bed <- function(bam,
+                            bed,
+                            binsize   = 5000L,
+                            rmdup     = c("streaming", "none", "flag"),
+                            con       = NULL,
+                            reference = NULL,
+                            index     = TRUE) {
+  rmdup <- match.arg(rmdup)
+  stopifnot(is.character(bam), length(bam) == 1L, nzchar(bam))
+  stopifnot(file.exists(bam))
+  stopifnot(is.character(bed), length(bed) == 1L, nzchar(bed))
+  if (!is.null(reference)) {
+    stopifnot(is.character(reference), length(reference) == 1L, nzchar(reference))
+    stopifnot(file.exists(reference))
+  }
+  stopifnot(is.numeric(binsize), length(binsize) == 1L, binsize >= 1L)
+  stopifnot(is.logical(index), length(index) == 1L)
+  binsize <- as.integer(binsize)
+
+  # Manage connection lifecycle here so the same con is used for bam_convert,
+  # rduckhts_bgzip, and rduckhts_tabix_index.
+  own_con <- is.null(con)
+  if (own_con) {
+    if (!requireNamespace("Rduckhts", quietly = TRUE)) {
+      stop(
+        "Rduckhts is required. Install it with: ",
+        "remotes::install_github('RGenomicsETL/duckhts/r/Rduckhts')",
+        call. = FALSE
+      )
+    }
+    drv <- duckdb::duckdb(config = list(allow_unsigned_extensions = "true"))
+    con <- DBI::dbConnect(drv)
+    Rduckhts::rduckhts_load(con)
+    on.exit(DBI::dbDisconnect(con, shutdown = TRUE), add = TRUE)
+  }
+
+  bins <- bam_convert(bam, binsize = binsize, rmdup = rmdup, con = con,
+                      reference = reference)
+
+  frames <- vector("list", 24L)
+  for (i in seq_len(24L)) {
+    key    <- as.character(i)
+    counts <- bins[[key]]
+    if (is.null(counts)) next
+    n_bins <- length(counts)
+    starts <- as.integer(seq(0L, by = binsize, length.out = n_bins))
+    frames[[i]] <- data.frame(
+      chrom = .bin_chr_name(key),
+      start = starts,
+      end   = starts + binsize,
+      count = counts,
+      stringsAsFactors = FALSE
+    )
+  }
+
+  df <- do.call(rbind, Filter(Negate(is.null), frames))
+  if (is.null(df) || nrow(df) == 0L) {
+    stop("bam_convert returned no data for ", bam, call. = FALSE)
+  }
+
+  # Write uncompressed BED to a temp file, then bgzip → tabix via Rduckhts.
+  tmp <- tempfile(fileext = ".bed")
+  on.exit(unlink(tmp), add = TRUE)
+  write.table(df, tmp, sep = "\t", quote = FALSE, row.names = FALSE,
+              col.names = FALSE)
+
+  Rduckhts::rduckhts_bgzip(con, tmp,
+                           output_path = bed,
+                           threads     = 1L,
+                           keep        = TRUE,
+                           overwrite   = TRUE)
+
+  if (isTRUE(index)) {
+    Rduckhts::rduckhts_tabix_index(con, bed,
+                                   preset  = "bed",
+                                   threads = 1L)
+  }
+
+  invisible(bed)
+}
+
+
 # ---------------------------------------------------------------------------
 # Internal helpers
 # ---------------------------------------------------------------------------
+
+.bin_chr_name <- function(key) {
+  switch(key, "23" = "X", "24" = "Y", key)
+}
 
 .valid_chr_map <- c(
   as.character(1:22),

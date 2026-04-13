@@ -19,6 +19,7 @@ if (!is.na(src_convert) && !is.na(src_npz) && !is.na(src_pipeline)) {
   source(src_pipeline)
 } else if (requireNamespace("RWisecondorX", quietly = TRUE)) {
   .read_bam_call <- getFromNamespace(".read_bam_call", "RWisecondorX")
+  .wisecondorx_convert_args <- getFromNamespace(".wisecondorx_convert_args", "RWisecondorX")
   .wisecondorx_newref_args <- getFromNamespace(".wisecondorx_newref_args", "RWisecondorX")
   .wisecondorx_predict_args <- getFromNamespace(".wisecondorx_predict_args", "RWisecondorX")
   .format_ylim <- getFromNamespace(".format_ylim", "RWisecondorX")
@@ -43,6 +44,60 @@ expect_identical(
 expect_identical(
   .read_bam_call("a'b.cram", reference = "r'e.fa"),
   "read_bam('a''b.cram', reference := 'r''e.fa')"
+)
+
+# ---------------------------------------------------------------------------
+# convert CLI argument mapping
+# ---------------------------------------------------------------------------
+
+tmp_bam <- tempfile(tmpdir = tempdir(), fileext = ".bam")
+tmp_ref <- tempfile(tmpdir = tempdir(), fileext = ".fa")
+tmp_npz_out <- file.path(tempdir(), "sample.npz")
+
+file.create(tmp_bam)
+file.create(tmp_ref)
+
+# Minimal: no reference, no normdup
+convert_args_basic <- .wisecondorx_convert_args(
+  bam        = tmp_bam,
+  npz        = tmp_npz_out,
+  reference  = NULL,
+  binsize    = 5000L,
+  normdup    = FALSE,
+  extra_args = character(0)
+)
+
+expect_identical(
+  convert_args_basic,
+  c(
+    "convert",
+    normalizePath(tmp_bam, mustWork = TRUE),
+    normalizePath(tmp_npz_out, mustWork = FALSE),
+    "--binsize", "5000"
+  )
+)
+
+# With reference and normdup
+convert_args_full <- .wisecondorx_convert_args(
+  bam        = tmp_bam,
+  npz        = tmp_npz_out,
+  reference  = tmp_ref,
+  binsize    = 10000L,
+  normdup    = TRUE,
+  extra_args = c("--extra", "val")
+)
+
+expect_identical(
+  convert_args_full,
+  c(
+    "convert",
+    normalizePath(tmp_bam, mustWork = TRUE),
+    normalizePath(tmp_npz_out, mustWork = FALSE),
+    "--reference", normalizePath(tmp_ref, mustWork = TRUE),
+    "--binsize", "10000",
+    "--normdup",
+    "--extra", "val"
+  )
 )
 
 # ---------------------------------------------------------------------------

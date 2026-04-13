@@ -13,12 +13,23 @@ from R on top of `Rduckhts` and DuckDB.
 
 The package is intentionally split into two layers:
 
-- `bam_convert()` runs the convert step in R/SQL and does not require
-  Python at runtime.
-- `bam_convert_npz()` optionally uses `reticulate` plus `numpy` to write
-  WisecondorX-compatible `.npz` files.
-- `wisecondorx_newref()` and `wisecondorx_predict()` optionally call the
-  official `wisecondorx` CLI through `condathis`.
+**Native R / Rduckhts layer** (no Python required):
+
+- `bam_convert()` — convert step in R/SQL, returns per-bin counts in
+  memory.
+- `bam_convert_bed()` — same, but writes a bgzipped BED file with a
+  tabix index (`.tbi`), ready for DuckDB / duckhts queries.
+- `bam_convert_npz()` — same, but serialises to a WisecondorX-compatible
+  `.npz` via `reticulate` + `numpy`.
+
+**Upstream CLI wrappers** (via `condathis`, optional):
+
+- `wisecondorx_convert()` — calls `wisecondorx convert` to produce an
+  `.npz` from a BAM/CRAM.
+- `wisecondorx_newref()` — calls `wisecondorx newref` to build a
+  reference panel.
+- `wisecondorx_predict()` — calls `wisecondorx predict` to call
+  copy-number aberrations.
 
 The convert implementation is designed for exact conformance with
 upstream WisecondorX duplicate handling, including the streaming `larp`
@@ -46,10 +57,14 @@ The current workflow surface is:
 
 1.  Convert BAM/CRAM alignments to WisecondorX-style per-bin counts with
     `bam_convert()`.
-2.  Optionally serialise those counts to `.npz` with
+2.  Optionally write those counts to a bgzipped, tabix-indexed BED file
+    with `bam_convert_bed()`.
+3.  Optionally serialise those counts to `.npz` with
     `bam_convert_npz()`.
-3.  Optionally build a reference panel with `wisecondorx_newref()`.
-4.  Optionally run predictions with `wisecondorx_predict()`.
+4.  Optionally run the upstream `wisecondorx convert` CLI with
+    `wisecondorx_convert()`.
+5.  Optionally build a reference panel with `wisecondorx_newref()`.
+6.  Optionally run predictions with `wisecondorx_predict()`.
 
 This keeps the core counting step in R while still allowing conformance
 checks and downstream use of the official Python CLI when needed.
@@ -93,11 +108,40 @@ modes:
   `wisecondorx convert --normdup`
 - `"flag"`: use the SAM duplicate flag (`0x400`) for pre-marked BAMs
 
+## Optional BED.gz Output
+
+`bam_convert_bed()` writes a bgzipped, tabix-indexed BED file that can
+be queried directly with DuckDB or any tabix-aware tool, with no Python
+dependency:
+
+``` r
+bam_convert_bed(
+  bam     = "sample.bam",
+  bed     = "sample.bed.gz",   # → sample.bed.gz + sample.bed.gz.tbi
+  binsize = 5000L,
+  rmdup   = "streaming"
+)
+```
+
 ## Optional NPZ And CLI Workflow
 
 When you want to continue into the original WisecondorX reference and
-prediction steps, the package provides an optional NPZ bridge via
-`reticulate` and CLI wrappers via `condathis`.
+prediction steps, the package provides an upstream CLI wrapper for the
+convert step, an NPZ bridge via `reticulate`, and full CLI wrappers via
+`condathis`.
+
+`wisecondorx_convert()` wraps the upstream `wisecondorx convert` command
+and produces an `.npz` directly through the official Python
+implementation:
+
+``` r
+wisecondorx_convert(
+  bam    = "sample.bam",
+  npz    = "sample.npz",
+  binsize = 5000L,
+  normdup = FALSE          # TRUE → --normdup (NIPT)
+)
+```
 
 ``` r
 library(RWisecondorX)

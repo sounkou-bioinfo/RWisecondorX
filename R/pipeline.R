@@ -1,3 +1,81 @@
+#' Convert BAM/CRAM to WisecondorX NPZ format (upstream CLI wrapper)
+#'
+#' Calls `wisecondorx convert` via [condathis::run()] to convert an aligned
+#' BAM or CRAM file to a `.npz` file for downstream use with
+#' [wisecondorx_newref()] or [wisecondorx_predict()].
+#'
+#' This wrapper exposes the upstream `wisecondorx convert` CLI flags:
+#' `--reference`, `--binsize`, and `--normdup`.
+#'
+#' For a fully native R implementation (no Python dependency) that uses
+#' Rduckhts instead of pysam, see [bam_convert()] and [bam_convert_npz()].
+#'
+#' @param bam Path to an indexed BAM or CRAM file.
+#' @param npz Path for the output `.npz` file (created or overwritten).
+#' @param reference Optional path to a FASTA reference file. Required when
+#'   `bam` is a CRAM file. Passed to upstream `--reference`.
+#' @param binsize Bin size in base pairs (default 5000). The reference bin
+#'   size should be a multiple of this value. Passed to upstream `--binsize`.
+#' @param normdup Logical; when `TRUE`, passes `--normdup` to skip duplicate
+#'   removal. Recommended for NIPT data where read depth is low.
+#' @param env_name Name of the conda environment containing `wisecondorx`
+#'   (default `"wisecondorx"`). Created automatically by condathis on first
+#'   use via the `bioconda` channel.
+#' @param extra_args Character vector of additional arguments passed verbatim
+#'   after the mapped CLI flags. For forward compatibility with future upstream
+#'   WisecondorX releases.
+#'
+#' @return `npz` (invisibly).
+#'
+#' @seealso [bam_convert()], [bam_convert_npz()], [wisecondorx_newref()],
+#'   [wisecondorx_predict()]
+#'
+#' @examples
+#' \dontrun{
+#' wisecondorx_convert(
+#'   bam = "sample.bam",
+#'   npz = "sample.npz",
+#'   binsize = 5000L,
+#'   normdup = FALSE
+#' )
+#' }
+#'
+#' @export
+wisecondorx_convert <- function(bam,
+                                npz,
+                                reference  = NULL,
+                                binsize    = 5000L,
+                                normdup    = FALSE,
+                                env_name   = "wisecondorx",
+                                extra_args = character(0)) {
+  .check_condathis()
+  stopifnot(is.character(bam), length(bam) == 1L, nzchar(bam))
+  stopifnot(file.exists(bam))
+  stopifnot(is.character(npz), length(npz) == 1L, nzchar(npz))
+  stopifnot(is.numeric(binsize), length(binsize) == 1L, binsize >= 1L)
+  stopifnot(is.logical(normdup), length(normdup) == 1L)
+  if (!is.null(reference)) {
+    stopifnot(is.character(reference), length(reference) == 1L, nzchar(reference))
+    stopifnot(file.exists(reference))
+  }
+
+  .ensure_wisecondorx_env(env_name)
+
+  args <- .wisecondorx_convert_args(
+    bam        = bam,
+    npz        = npz,
+    reference  = reference,
+    binsize    = binsize,
+    normdup    = normdup,
+    extra_args = extra_args
+  )
+
+  do.call(condathis::run, c(list("wisecondorx"), as.list(args),
+                            list(env_name = env_name)))
+  invisible(npz)
+}
+
+
 #' Build a WisecondorX reference panel
 #'
 #' Calls `wisecondorx newref` via [condathis::run()] on a set of NPZ files
@@ -248,6 +326,22 @@ wisecondorx_predict <- function(npz,
       )
     }
   )
+}
+
+.wisecondorx_convert_args <- function(bam,
+                                      npz,
+                                      reference,
+                                      binsize,
+                                      normdup,
+                                      extra_args = character(0)) {
+  bam_abs <- normalizePath(bam, mustWork = TRUE)
+  npz_abs <- normalizePath(npz, mustWork = FALSE)
+
+  args <- c("convert", bam_abs, npz_abs)
+  args <- .append_optional_path(args, "--reference", reference, must_work = TRUE)
+  args <- .append_value(args, "--binsize", as.integer(binsize))
+  args <- .append_flag(args, "--normdup", isTRUE(normdup))
+  c(args, extra_args)
 }
 
 .wisecondorx_newref_args <- function(npz_files,

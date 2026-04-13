@@ -32,11 +32,27 @@
   npz_out <- tempfile(fileext = ".npz")
   on.exit(unlink(npz_out), add = TRUE)
 
+  # Ensure the wisecondorx conda environment exists before running.
+  env_ok <- tryCatch({
+    condathis::create_env(
+      packages = "wisecondorx",
+      channels = c("bioconda", "conda-forge"),
+      env_name = "wisecondorx"
+    )
+    TRUE
+  }, error = function(e) FALSE)
+
+  if (!env_ok) return(NULL)
+
   status <- tryCatch(
-    condathis::run(
-      "wisecondorx",
-      args    = c("convert", bam, npz_out, "--binsize", as.character(binsize)),
-      channel = "bioconda"
+    do.call(
+      condathis::run,
+      c(
+        list("wisecondorx"),
+        as.list(c("convert", bam, npz_out,
+                  "--binsize", as.character(binsize))),
+        list(env_name = "wisecondorx")
+      )
     ),
     error = function(e) NULL
   )

@@ -1,5 +1,32 @@
 # RWisecondorX (development version)
 
+## BED.gz reader functions — close the round-trip
+
+* New `bed_to_sample()` reads a 4-column BED.gz file (written by
+  `bam_convert_bed()`) back into the named-list-of-integer-vectors format
+  expected by `rwisecondorx_newref()` and `rwisecondorx_predict()`. This
+  closes the WisecondorX round-trip: bin once with `bam_convert_bed()`, store
+  the BED.gz, and reload for analysis without re-reading the BAM.
+
+* New `bed_to_nipter_sample()` reads a 5-column (CombinedStrands) or 7-column
+  (SeparatedStrands) BED.gz file (written by `nipter_bin_bam_bed()`) into a
+  `NIPTeRSample` object compatible with all NIPTeR statistical functions. Column
+  count is auto-detected: if the `strand` field in `read_bed()` contains
+  non-null integers it is a 7-column SeparatedStrands file, otherwise 5-column
+  CombinedStrands. Handles literal `"NA"` strings in the `corrected_count` field
+  via `TRY_CAST`. Sample name is inferred from the filename or set explicitly.
+
+* Both functions accept an optional DuckDB connection for reuse across multiple
+  files, creating one internally (with `allow_unsigned_extensions = "true"`)
+  when none is supplied.
+
+* New `inst/tinytest/test_bed_reader.R` — 34 assertions covering WisecondorX
+  4-column round-trip, NIPTeR CombinedStrands 5-column round-trip,
+  SeparatedStrands 7-column round-trip (all four matrices), sample name
+  inference, and integration with `scale_sample()`.
+
+* Total test count: 379 assertions, all passing.
+
 ## Native WisecondorX implementation
 
 * New `rwisecondorx_newref()` — pure-R/Rcpp implementation of the WisecondorX

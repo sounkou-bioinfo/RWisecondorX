@@ -84,6 +84,11 @@ Pure R/Rcpp port of the WisecondorX `newref` and `predict` pipelines, with perfo
 - `inst/tinytest/test_rwisecondorx.R` — 76 assertions: reference building (gender model, masking, PCA, KNN indexes and distances, null ratios), prediction (normalization, CBS, Z-scores, aberration calling), trisomy detection sensitivity (T21/T18/T13 detected as gains, euploid negative control clean).
 - `inst/tinytest/test_cohort_pipeline.R` — 31 assertions: end-to-end pipeline (cohort generation → binning → newref → predict → aberration detection). All test files use `library(RWisecondorX)` instead of `source()` hacks.
 
+**BED.gz reader functions — round-trip from stored BED files**
+
+- `R/bed_reader.R` — `bed_to_sample()`: reads a 4-column BED.gz (from `bam_convert_bed()`) into the named-list-of-integer-vectors format for `rwisecondorx_newref()` / `rwisecondorx_predict()`. `bed_to_nipter_sample()`: reads a 5-column (CombinedStrands) or 7-column (SeparatedStrands) BED.gz (from `nipter_bin_bam_bed()`) into a `NIPTeRSample` object. Auto-detects column count; handles literal "NA" in `corrected_count` via `TRY_CAST`.
+- `inst/tinytest/test_bed_reader.R` — 34 assertions covering WisecondorX and NIPTeR round-trips, SeparatedStrands 7-column BED, sample name inference, and `scale_sample()` integration.
+
 ### Open architectural questions
 
 - **Sex-stratified NCV for X/Y chromosomes**: The user's clinical pipeline computes sex-stratified NCV denominators for X and Y (separate models for males vs females). Not yet implemented.
@@ -108,6 +113,7 @@ Pure R/Rcpp port of the WisecondorX `newref` and `predict` pipelines, with perfo
 - `R/rwisecondorx_predict.R` — native WisecondorX prediction pipeline.
 - `R/rwisecondorx_cbs.R` — CBS segmentation wrapper (DNAcopy/ParDNAcopy).
 - `R/rwisecondorx_output.R` — BED/statistics output generation.
+- `R/bed_reader.R` — BED.gz reader functions (`bed_to_sample()`, `bed_to_nipter_sample()`) for round-tripping from stored BED files.
 - `R/cohort.R` — synthetic cohort generator for testing.
 - `R/wisecondorx_cli.R` — CLI wrappers (condathis-based conformance tools).
 - `R/npz.R` — NPZ output.
@@ -136,6 +142,7 @@ The BED.gz format is the language-agnostic handoff between binning and downstrea
 - 7-column NIPTeR BED (SeparatedStrands): `chrom`, `start`, `end`, `count`, `count_fwd`, `count_rev`, `corrected_count` (written by `nipter_bin_bam_bed(separate_strands = TRUE)`).
 - Coordinates are 0-based half-open intervals (BED convention). Chromosomes use no `chr` prefix.
 - All files are bgzipped (BGZF) and tabix-indexed via `Rduckhts::rduckhts_bgzip()` and `Rduckhts::rduckhts_tabix_index()`. Do not use `gzfile()` or external tools.
+- `bed_to_sample()` reads 4-column BED.gz back into the WisecondorX in-memory format. `bed_to_nipter_sample()` reads 5- or 7-column BED.gz back into a `NIPTeRSample`. These close the round-trip so analysis pipelines can start from pre-computed BED files without re-reading the BAM.
 
 ---
 

@@ -1,33 +1,33 @@
 # RWisecondorX
 
-`RWisecondorX` exposes WisecondorX-style copy number analysis workflows
-from R on top of `Rduckhts` and DuckDB.
+`RWisecondorX` is an R port of
+[WisecondorX](https://github.com/CenterForMedicalGeneticsGhent/WisecondorX)
+built on top of `Rduckhts` and DuckDB. It follows the
+[rewrites.bio](https://rewrites.bio) principles: exact emulation of
+upstream outputs, full credit to the original authors, and transparency
+about AI assistance.
 
-The package is intentionally split into two layers:
+The core convert step runs entirely in R/SQL via `Rduckhts` with no
+Python dependency.
+[`bam_convert()`](https://sounkou-bioinfo.github.io/RWisecondorX/reference/bam_convert.md)
+returns per-bin read counts in memory;
+[`bam_convert_bed()`](https://sounkou-bioinfo.github.io/RWisecondorX/reference/bam_convert_bed.md)
+writes them to a bgzipped, tabix-indexed BED file readable by DuckDB or
+any tabix-aware tool; and
+[`bam_convert_npz()`](https://sounkou-bioinfo.github.io/RWisecondorX/reference/bam_convert_npz.md)
+serialises them to a WisecondorX-compatible `.npz` via `reticulate`. The
+convert implementation exactly replicates the upstream `larp` / `larp2`
+streaming deduplication behaviour, achieving bin-for-bin agreement with
+the Python implementation.
 
-**Native R / Rduckhts layer** (no Python required):
-
-- [`bam_convert()`](https://sounkou-bioinfo.github.io/RWisecondorX/reference/bam_convert.md)
-  — convert step in R/SQL, returns per-bin counts in memory.
-- [`bam_convert_bed()`](https://sounkou-bioinfo.github.io/RWisecondorX/reference/bam_convert_bed.md)
-  — same, but writes a bgzipped BED file with a tabix index (`.tbi`),
-  ready for DuckDB / duckhts queries.
-- [`bam_convert_npz()`](https://sounkou-bioinfo.github.io/RWisecondorX/reference/bam_convert_npz.md)
-  — same, but serialises to a WisecondorX-compatible `.npz` via
-  `reticulate` + `numpy`.
-
-**Upstream CLI wrappers** (via `condathis`, optional):
-
-- [`wisecondorx_convert()`](https://sounkou-bioinfo.github.io/RWisecondorX/reference/wisecondorx_convert.md)
-  — calls `wisecondorx convert` to produce an `.npz` from a BAM/CRAM.
-- [`wisecondorx_newref()`](https://sounkou-bioinfo.github.io/RWisecondorX/reference/wisecondorx_newref.md)
-  — calls `wisecondorx newref` to build a reference panel.
-- [`wisecondorx_predict()`](https://sounkou-bioinfo.github.io/RWisecondorX/reference/wisecondorx_predict.md)
-  — calls `wisecondorx predict` to call copy-number aberrations.
-
-The convert implementation is designed for exact conformance with
-upstream WisecondorX duplicate handling, including the streaming `larp`
-/ `larp2` behaviour used during bin counting.
+For pipelines that need the full upstream toolchain, thin `condathis`
+wrappers cover every stage:
+[`wisecondorx_convert()`](https://sounkou-bioinfo.github.io/RWisecondorX/reference/wisecondorx_convert.md),
+[`wisecondorx_newref()`](https://sounkou-bioinfo.github.io/RWisecondorX/reference/wisecondorx_newref.md),
+and
+[`wisecondorx_predict()`](https://sounkou-bioinfo.github.io/RWisecondorX/reference/wisecondorx_predict.md)
+each delegate to the official bioconda package without requiring a
+manual conda setup.
 
 ## Installation
 
@@ -38,33 +38,9 @@ Install the development version from GitHub:
 pak::pak("sounkou-bioinfo/RWisecondorX")
 ```
 
-`RWisecondorX` imports `Rduckhts`, `DBI`, and `duckdb`. Optional
-features use:
-
-- `reticulate` for writing `.npz` files
-- `condathis` for creating a reproducible conformance environment with
-  the official bioconda `wisecondorx` package
-
-## What The Package Covers
-
-The current workflow surface is:
-
-1.  Convert BAM/CRAM alignments to WisecondorX-style per-bin counts with
-    [`bam_convert()`](https://sounkou-bioinfo.github.io/RWisecondorX/reference/bam_convert.md).
-2.  Optionally write those counts to a bgzipped, tabix-indexed BED file
-    with
-    [`bam_convert_bed()`](https://sounkou-bioinfo.github.io/RWisecondorX/reference/bam_convert_bed.md).
-3.  Optionally serialise those counts to `.npz` with
-    [`bam_convert_npz()`](https://sounkou-bioinfo.github.io/RWisecondorX/reference/bam_convert_npz.md).
-4.  Optionally run the upstream `wisecondorx convert` CLI with
-    [`wisecondorx_convert()`](https://sounkou-bioinfo.github.io/RWisecondorX/reference/wisecondorx_convert.md).
-5.  Optionally build a reference panel with
-    [`wisecondorx_newref()`](https://sounkou-bioinfo.github.io/RWisecondorX/reference/wisecondorx_newref.md).
-6.  Optionally run predictions with
-    [`wisecondorx_predict()`](https://sounkou-bioinfo.github.io/RWisecondorX/reference/wisecondorx_predict.md).
-
-This keeps the core counting step in R while still allowing conformance
-checks and downstream use of the official Python CLI when needed.
+`RWisecondorX` imports `Rduckhts`, `DBI`, and `duckdb`. `reticulate` is
+needed only to write `.npz` files; `condathis` is needed only for the
+upstream CLI wrappers. Neither is required for the core convert step.
 
 ## Convert A BAM To Bin Counts
 
@@ -96,20 +72,21 @@ sum(bins[["11"]])
 #> [1] 982
 ```
 
-The `rmdup` argument supports the three intended duplicate-handling
-modes:
-
-- `"streaming"`: exact replication of upstream WisecondorX `larp` /
-  `larp2`
-- `"none"`: no duplicate removal, corresponding to
-  `wisecondorx convert --normdup`
-- `"flag"`: use the SAM duplicate flag (`0x400`) for pre-marked BAMs
+The `rmdup` argument controls duplicate handling. `"streaming"` exactly
+replicates the upstream WisecondorX `larp` / `larp2` state machine and
+is the default. `"none"` skips deduplication entirely, matching
+`wisecondorx convert --normdup` for NIPT data where read depth is low.
+`"flag"` uses the SAM duplicate flag (`0x400`) for BAMs already
+processed by Picard or sambamba.
 
 ## Optional BED.gz Output
 
 [`bam_convert_bed()`](https://sounkou-bioinfo.github.io/RWisecondorX/reference/bam_convert_bed.md)
-writes a bgzipped, tabix-indexed BED file that can be queried directly
-with DuckDB or any tabix-aware tool, with no Python dependency:
+is the language-agnostic output path. It produces a bgzipped BED file
+(`chrom`, `start`, `end`, `count`; 0-based coordinates) and a tabix
+index alongside it, using `rduckhts_bgzip` and `rduckhts_tabix_index`
+from `Rduckhts` — no external tools or Python required. The resulting
+file can be queried by region directly from DuckDB.
 
 ``` r
 bam_convert_bed(
@@ -122,19 +99,20 @@ bam_convert_bed(
 
 ## Optional NPZ And CLI Workflow
 
-When you want to continue into the original WisecondorX reference and
-prediction steps, the package provides an upstream CLI wrapper for the
-convert step, an NPZ bridge via `reticulate`, and full CLI wrappers via
-`condathis`.
-
+When the full upstream WisecondorX pipeline is needed,
 [`wisecondorx_convert()`](https://sounkou-bioinfo.github.io/RWisecondorX/reference/wisecondorx_convert.md)
-wraps the upstream `wisecondorx convert` command and produces an `.npz`
-directly through the official Python implementation:
+wraps `wisecondorx convert` via `condathis` and produces an `.npz`
+through the official Python implementation.
+[`wisecondorx_newref()`](https://sounkou-bioinfo.github.io/RWisecondorX/reference/wisecondorx_newref.md)
+and
+[`wisecondorx_predict()`](https://sounkou-bioinfo.github.io/RWisecondorX/reference/wisecondorx_predict.md)
+cover the remaining stages. All three handle conda environment creation
+automatically on first use.
 
 ``` r
 wisecondorx_convert(
-  bam    = "sample.bam",
-  npz    = "sample.npz",
+  bam     = "sample.bam",
+  npz     = "sample.npz",
   binsize = 5000L,
   normdup = FALSE          # TRUE → --normdup (NIPT)
 )
@@ -255,8 +233,12 @@ if (!cli_enabled) {
 
 ## SRA Metadata Helpers
 
-The package also includes small helpers for staging SRA run metadata
-used by conformance fixtures.
+[`sra_runinfo_url()`](https://sounkou-bioinfo.github.io/RWisecondorX/reference/sra_runinfo.md),
+[`download_sra_runinfo()`](https://sounkou-bioinfo.github.io/RWisecondorX/reference/sra_runinfo.md),
+and
+[`read_sra_runinfo()`](https://sounkou-bioinfo.github.io/RWisecondorX/reference/sra_runinfo.md)
+are small helpers for staging NCBI SRA run metadata used by conformance
+fixtures.
 
 ``` r
 library(RWisecondorX)
@@ -267,11 +249,6 @@ sra_runinfo_url("PRJNA400134")
 
 ## Development
 
-`README.Rmd` is the editable source for this document. Regenerate
-`README.md` with the repository `Makefile`:
-
-``` sh
-make readme
-make fixtures
-make rd
-```
+`README.Rmd` is the editable source for this document. Run `make readme`
+to rerender `README.md`, `make rd` to regenerate documentation from
+roxygen2 comments, and `make fixtures` to rebuild the bundled test data.

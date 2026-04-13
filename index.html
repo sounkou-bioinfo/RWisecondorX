@@ -49,27 +49,9 @@
 </h1></div>
 <!-- badges: start -->
 
-<p><code>RWisecondorX</code> exposes WisecondorX-style copy number analysis workflows from R on top of <code>Rduckhts</code> and DuckDB.</p>
-<p>The package is intentionally split into two layers:</p>
-<p><strong>Native R / Rduckhts layer</strong> (no Python required):</p>
-<ul>
-<li>
-<code><a href="reference/bam_convert.html">bam_convert()</a></code> — convert step in R/SQL, returns per-bin counts in memory.</li>
-<li>
-<code><a href="reference/bam_convert_bed.html">bam_convert_bed()</a></code> — same, but writes a bgzipped BED file with a tabix index (<code>.tbi</code>), ready for DuckDB / duckhts queries.</li>
-<li>
-<code><a href="reference/bam_convert_npz.html">bam_convert_npz()</a></code> — same, but serialises to a WisecondorX-compatible <code>.npz</code> via <code>reticulate</code> + <code>numpy</code>.</li>
-</ul>
-<p><strong>Upstream CLI wrappers</strong> (via <code>condathis</code>, optional):</p>
-<ul>
-<li>
-<code><a href="reference/wisecondorx_convert.html">wisecondorx_convert()</a></code> — calls <code>wisecondorx convert</code> to produce an <code>.npz</code> from a BAM/CRAM.</li>
-<li>
-<code><a href="reference/wisecondorx_newref.html">wisecondorx_newref()</a></code> — calls <code>wisecondorx newref</code> to build a reference panel.</li>
-<li>
-<code><a href="reference/wisecondorx_predict.html">wisecondorx_predict()</a></code> — calls <code>wisecondorx predict</code> to call copy-number aberrations.</li>
-</ul>
-<p>The convert implementation is designed for exact conformance with upstream WisecondorX duplicate handling, including the streaming <code>larp</code> / <code>larp2</code> behaviour used during bin counting.</p>
+<p><code>RWisecondorX</code> is an R port of <a href="https://github.com/CenterForMedicalGeneticsGhent/WisecondorX" class="external-link">WisecondorX</a> built on top of <code>Rduckhts</code> and DuckDB. It follows the <a href="https://rewrites.bio" class="external-link">rewrites.bio</a> principles: exact emulation of upstream outputs, full credit to the original authors, and transparency about AI assistance.</p>
+<p>The core convert step runs entirely in R/SQL via <code>Rduckhts</code> with no Python dependency. <code><a href="reference/bam_convert.html">bam_convert()</a></code> returns per-bin read counts in memory; <code><a href="reference/bam_convert_bed.html">bam_convert_bed()</a></code> writes them to a bgzipped, tabix-indexed BED file readable by DuckDB or any tabix-aware tool; and <code><a href="reference/bam_convert_npz.html">bam_convert_npz()</a></code> serialises them to a WisecondorX-compatible <code>.npz</code> via <code>reticulate</code>. The convert implementation exactly replicates the upstream <code>larp</code> / <code>larp2</code> streaming deduplication behaviour, achieving bin-for-bin agreement with the Python implementation.</p>
+<p>For pipelines that need the full upstream toolchain, thin <code>condathis</code> wrappers cover every stage: <code><a href="reference/wisecondorx_convert.html">wisecondorx_convert()</a></code>, <code><a href="reference/wisecondorx_newref.html">wisecondorx_newref()</a></code>, and <code><a href="reference/wisecondorx_predict.html">wisecondorx_predict()</a></code> each delegate to the official bioconda package without requiring a manual conda setup.</p>
 <div class="section level2">
 <h2 id="installation">Installation<a class="anchor" aria-label="anchor" href="#installation"></a>
 </h2>
@@ -77,27 +59,7 @@
 <div class="sourceCode" id="cb1"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="co"># install.packages("pak")</span></span>
 <span><span class="fu">pak</span><span class="fu">::</span><span class="fu"><a href="https://pak.r-lib.org/reference/pak.html" class="external-link">pak</a></span><span class="op">(</span><span class="st">"sounkou-bioinfo/RWisecondorX"</span><span class="op">)</span></span></code></pre></div>
-<p><code>RWisecondorX</code> imports <code>Rduckhts</code>, <code>DBI</code>, and <code>duckdb</code>. Optional features use:</p>
-<ul>
-<li>
-<code>reticulate</code> for writing <code>.npz</code> files</li>
-<li>
-<code>condathis</code> for creating a reproducible conformance environment with the official bioconda <code>wisecondorx</code> package</li>
-</ul>
-</div>
-<div class="section level2">
-<h2 id="what-the-package-covers">What The Package Covers<a class="anchor" aria-label="anchor" href="#what-the-package-covers"></a>
-</h2>
-<p>The current workflow surface is:</p>
-<ol style="list-style-type: decimal">
-<li>Convert BAM/CRAM alignments to WisecondorX-style per-bin counts with <code><a href="reference/bam_convert.html">bam_convert()</a></code>.</li>
-<li>Optionally write those counts to a bgzipped, tabix-indexed BED file with <code><a href="reference/bam_convert_bed.html">bam_convert_bed()</a></code>.</li>
-<li>Optionally serialise those counts to <code>.npz</code> with <code><a href="reference/bam_convert_npz.html">bam_convert_npz()</a></code>.</li>
-<li>Optionally run the upstream <code>wisecondorx convert</code> CLI with <code><a href="reference/wisecondorx_convert.html">wisecondorx_convert()</a></code>.</li>
-<li>Optionally build a reference panel with <code><a href="reference/wisecondorx_newref.html">wisecondorx_newref()</a></code>.</li>
-<li>Optionally run predictions with <code><a href="reference/wisecondorx_predict.html">wisecondorx_predict()</a></code>.</li>
-</ol>
-<p>This keeps the core counting step in R while still allowing conformance checks and downstream use of the official Python CLI when needed.</p>
+<p><code>RWisecondorX</code> imports <code>Rduckhts</code>, <code>DBI</code>, and <code>duckdb</code>. <code>reticulate</code> is needed only to write <code>.npz</code> files; <code>condathis</code> is needed only for the upstream CLI wrappers. Neither is required for the core convert step.</p>
 </div>
 <div class="section level2">
 <h2 id="convert-a-bam-to-bin-counts">Convert A BAM To Bin Counts<a class="anchor" aria-label="anchor" href="#convert-a-bam-to-bin-counts"></a>
@@ -126,22 +88,12 @@
 <span></span>
 <span><span class="fu"><a href="https://rdrr.io/r/base/sum.html" class="external-link">sum</a></span><span class="op">(</span><span class="va">bins</span><span class="op">[[</span><span class="st">"11"</span><span class="op">]</span><span class="op">]</span><span class="op">)</span></span>
 <span><span class="co">#&gt; [1] 982</span></span></code></pre></div>
-<p>The <code>rmdup</code> argument supports the three intended duplicate-handling modes:</p>
-<ul>
-<li>
-<code>"streaming"</code>: exact replication of upstream WisecondorX <code>larp</code> / <code>larp2</code>
-</li>
-<li>
-<code>"none"</code>: no duplicate removal, corresponding to <code>wisecondorx convert --normdup</code>
-</li>
-<li>
-<code>"flag"</code>: use the SAM duplicate flag (<code>0x400</code>) for pre-marked BAMs</li>
-</ul>
+<p>The <code>rmdup</code> argument controls duplicate handling. <code>"streaming"</code> exactly replicates the upstream WisecondorX <code>larp</code> / <code>larp2</code> state machine and is the default. <code>"none"</code> skips deduplication entirely, matching <code>wisecondorx convert --normdup</code> for NIPT data where read depth is low. <code>"flag"</code> uses the SAM duplicate flag (<code>0x400</code>) for BAMs already processed by Picard or sambamba.</p>
 </div>
 <div class="section level2">
 <h2 id="optional-bedgz-output">Optional BED.gz Output<a class="anchor" aria-label="anchor" href="#optional-bedgz-output"></a>
 </h2>
-<p><code><a href="reference/bam_convert_bed.html">bam_convert_bed()</a></code> writes a bgzipped, tabix-indexed BED file that can be queried directly with DuckDB or any tabix-aware tool, with no Python dependency:</p>
+<p><code><a href="reference/bam_convert_bed.html">bam_convert_bed()</a></code> is the language-agnostic output path. It produces a bgzipped BED file (<code>chrom</code>, <code>start</code>, <code>end</code>, <code>count</code>; 0-based coordinates) and a tabix index alongside it, using <code>rduckhts_bgzip</code> and <code>rduckhts_tabix_index</code> from <code>Rduckhts</code> — no external tools or Python required. The resulting file can be queried by region directly from DuckDB.</p>
 <div class="sourceCode" id="cb3"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="fu"><a href="reference/bam_convert_bed.html">bam_convert_bed</a></span><span class="op">(</span></span>
 <span>  bam     <span class="op">=</span> <span class="st">"sample.bam"</span>,</span>
@@ -153,12 +105,11 @@
 <div class="section level2">
 <h2 id="optional-npz-and-cli-workflow">Optional NPZ And CLI Workflow<a class="anchor" aria-label="anchor" href="#optional-npz-and-cli-workflow"></a>
 </h2>
-<p>When you want to continue into the original WisecondorX reference and prediction steps, the package provides an upstream CLI wrapper for the convert step, an NPZ bridge via <code>reticulate</code>, and full CLI wrappers via <code>condathis</code>.</p>
-<p><code><a href="reference/wisecondorx_convert.html">wisecondorx_convert()</a></code> wraps the upstream <code>wisecondorx convert</code> command and produces an <code>.npz</code> directly through the official Python implementation:</p>
+<p>When the full upstream WisecondorX pipeline is needed, <code><a href="reference/wisecondorx_convert.html">wisecondorx_convert()</a></code> wraps <code>wisecondorx convert</code> via <code>condathis</code> and produces an <code>.npz</code> through the official Python implementation. <code><a href="reference/wisecondorx_newref.html">wisecondorx_newref()</a></code> and <code><a href="reference/wisecondorx_predict.html">wisecondorx_predict()</a></code> cover the remaining stages. All three handle conda environment creation automatically on first use.</p>
 <div class="sourceCode" id="cb4"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="fu"><a href="reference/wisecondorx_convert.html">wisecondorx_convert</a></span><span class="op">(</span></span>
-<span>  bam    <span class="op">=</span> <span class="st">"sample.bam"</span>,</span>
-<span>  npz    <span class="op">=</span> <span class="st">"sample.npz"</span>,</span>
+<span>  bam     <span class="op">=</span> <span class="st">"sample.bam"</span>,</span>
+<span>  npz     <span class="op">=</span> <span class="st">"sample.npz"</span>,</span>
 <span>  binsize <span class="op">=</span> <span class="fl">5000L</span>,</span>
 <span>  normdup <span class="op">=</span> <span class="cn">FALSE</span>          <span class="co"># TRUE → --normdup (NIPT)</span></span>
 <span><span class="op">)</span></span></code></pre></div>
@@ -271,7 +222,7 @@
 <div class="section level2">
 <h2 id="sra-metadata-helpers">SRA Metadata Helpers<a class="anchor" aria-label="anchor" href="#sra-metadata-helpers"></a>
 </h2>
-<p>The package also includes small helpers for staging SRA run metadata used by conformance fixtures.</p>
+<p><code><a href="reference/sra_runinfo.html">sra_runinfo_url()</a></code>, <code><a href="reference/sra_runinfo.html">download_sra_runinfo()</a></code>, and <code><a href="reference/sra_runinfo.html">read_sra_runinfo()</a></code> are small helpers for staging NCBI SRA run metadata used by conformance fixtures.</p>
 <div class="sourceCode" id="cb7"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="kw"><a href="https://rdrr.io/r/base/library.html" class="external-link">library</a></span><span class="op">(</span><span class="va"><a href="https://sounkou-bioinfo.github.io/RWisecondorX/">RWisecondorX</a></span><span class="op">)</span></span>
 <span></span>
@@ -281,10 +232,7 @@
 <div class="section level2">
 <h2 id="development">Development<a class="anchor" aria-label="anchor" href="#development"></a>
 </h2>
-<p><code>README.Rmd</code> is the editable source for this document. Regenerate <code>README.md</code> with the repository <code>Makefile</code>:</p>
-<div class="sourceCode" id="cb8"><pre class="sourceCode sh"><code class="sourceCode bash"><span id="cb8-1"><a href="#cb8-1" tabindex="-1"></a><span class="fu">make</span> readme</span>
-<span id="cb8-2"><a href="#cb8-2" tabindex="-1"></a><span class="fu">make</span> fixtures</span>
-<span id="cb8-3"><a href="#cb8-3" tabindex="-1"></a><span class="fu">make</span> rd</span></code></pre></div>
+<p><code>README.Rmd</code> is the editable source for this document. Run <code>make readme</code> to rerender <code>README.md</code>, <code>make rd</code> to regenerate documentation from roxygen2 comments, and <code>make fixtures</code> to rebuild the bundled test data.</p>
 </div>
 </div>
   </main><aside class="col-md-3"><div class="license">

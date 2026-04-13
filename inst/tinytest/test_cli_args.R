@@ -11,7 +11,7 @@ library(tinytest)
 
 src_convert <- .source_candidate("R/convert.R")
 src_npz <- .source_candidate("R/npz.R")
-src_pipeline <- .source_candidate("R/pipeline.R")
+src_pipeline <- .source_candidate("R/wisecondorx_cli.R")
 
 if (!is.na(src_convert) && !is.na(src_npz) && !is.na(src_pipeline)) {
   source(src_convert)

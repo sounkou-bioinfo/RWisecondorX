@@ -2,12 +2,14 @@
 % Please edit documentation in R/convert.R
 \name{bam_convert}
 \alias{bam_convert}
-\title{Convert BAM/CRAM to WisecondorX bin counts}
+\title{Count reads per bin from a BAM or CRAM file}
 \usage{
 bam_convert(
   bam,
   binsize = 5000L,
-  rmdup = c("streaming", "none", "flag"),
+  mapq = 1L,
+  rmdup = c("streaming", "flag", "none"),
+  filter_improper_pairs = TRUE,
   con = NULL,
   reference = NULL
 )
@@ -15,60 +17,63 @@ bam_convert(
 \arguments{
 \item{bam}{Path to an indexed BAM or CRAM file.}
 
-\item{binsize}{Bin size in base pairs (default 5000, matching WisecondorX
-convert default). The reference bin size should be a multiple of this value.}
+\item{binsize}{Bin size in base pairs. Default 5000 (WisecondorX); use
+50000 for NIPTeR-style workflows.}
 
-\item{rmdup}{Duplicate removal strategy. One of:
-\describe{
-\item{\code{"streaming"}}{Consecutive-position dedup matching WisecondorX's
-larp/larp2 streaming state machine (default). Recommended when the BAM
-has not been pre-processed with a dedup tool.}
-\item{\code{"none"}}{No duplicate removal. Use for NIPT where read depth is low
-and duplicate removal is not recommended (corresponds to WisecondorX
-\code{--normdup} flag).}
-\item{\code{"flag"}}{Use the SAM 0x400 duplicate flag. Use when the BAM has
-been processed with Picard, sambamba, or similar tools.}
-}}
+\item{mapq}{Minimum mapping quality to retain a read. Default \code{1L}
+(WisecondorX). Set to \code{0L} to disable MAPQ filtering (NIPTeR).}
+
+\item{rmdup}{Duplicate removal strategy:
+\code{"streaming"} — WisecondorX larp/larp2 consecutive-position dedup
+(default; not meaningful when \code{filter_improper_pairs = FALSE});
+\code{"flag"} — exclude reads with SAM flag \code{0x400} (pre-marked by Picard /
+sambamba); \code{"none"} — no duplicate removal.}
+
+\item{filter_improper_pairs}{When \code{TRUE} (default, WisecondorX behaviour)
+paired reads that are not properly paired (\code{FLAG & 0x2 == 0}) are
+excluded. Set to \code{FALSE} to include all mapped reads regardless of pair
+status (NIPTeR behaviour).}
 
 \item{con}{An optional open DBI connection with the duckhts extension already
 loaded. If \code{NULL} (default), a temporary in-memory DuckDB connection is
 created for this call.}
 
-\item{reference}{Optional FASTA reference path for CRAM inputs. Passed to
-\code{read_bam(..., reference := ...)}. Leave \code{NULL} for BAM inputs.}
+\item{reference}{Optional FASTA reference path for CRAM inputs.}
 }
 \value{
-A named list with one integer vector per chromosome key ("1"-"22",
-"23" for X, "24" for Y). Each vector has length
-\code{floor(chr_length / binsize) + 1} and contains per-bin read counts.
-Chromosomes with no reads present in the BAM are \code{NULL}.
+A named list with one integer vector per chromosome key (\code{"1"}–\code{"22"},
+\code{"23"} for X, \code{"24"} for Y). Each vector contains per-bin read counts
+(bin 0 = positions 0 to binsize-1). Chromosomes absent from the BAM are
+\code{NULL}.
 }
 \description{
-Replicates the WisecondorX \code{convert} step: reads aligned reads from a
-BAM or CRAM file, applies the same filtering and duplicate-removal strategy
-as the upstream Python implementation, and returns per-bin read counts for
-chromosomes 1-22, X (as 23), and Y (as 24).
+Core read-counting engine shared by the WisecondorX and NIPTeR layers.
+Reads aligned reads from a BAM or CRAM file and returns per-bin read counts
+for chromosomes 1-22 and the sex chromosomes (X mapped to key "23", Y to "24").
 }
 \details{
-The default \code{rmdup = "streaming"} exactly reproduces the pysam larp/larp2
-deduplication used by WisecondorX. Key subtleties preserved:
-\itemize{
-\item Improper pairs are invisible to the dedup state machine (they never
-update larp/larp2 in pysam's \code{continue} branch).
-\item Unpaired reads update larp but NOT larp2.
-\item larp is never reset between chromosomes.
-\item Bin assignment matches Python's \code{int(pos / binsize)} (truncating division).
-}
+Filter parameters let callers replicate the exact behaviour of both tools.
+WisecondorX defaults: \code{mapq = 1}, \code{rmdup = "streaming"},
+\code{filter_improper_pairs = TRUE}.  NIPTeR defaults: \code{mapq = 0},
+\code{rmdup = "none"}, \code{filter_improper_pairs = FALSE}.
+
+When \code{rmdup = "streaming"} the WisecondorX larp/larp2 state machine is
+reproduced exactly: improper pairs are invisible to the dedup logic (they
+do not update larp2), unpaired reads update larp but not larp2, and larp
+is never reset between chromosomes.  Bin assignment uses truncating integer
+division matching Python's \code{int(pos / binsize)}.
 }
 \examples{
 \dontrun{
-bins <- bam_convert("sample.bam", binsize = 5000, rmdup = "streaming")
-bins[["11"]]  # bin counts for chromosome 11
+# WisecondorX defaults
+bins <- bam_convert("sample.bam", binsize = 5000L, rmdup = "streaming")
+
+# NIPTeR defaults
+bins <- bam_convert("sample.bam", binsize = 50000L, mapq = 0L,
+                    rmdup = "none", filter_improper_pairs = FALSE)
 }
 
 }
 \seealso{
-WisecondorX paper: Huijsdens-van Amsterdam et al. (2018).
-Conformance reference: \code{wisecondorx_convert_conformance.py} in the duckhts
-repository, which validates exact bin-for-bin agreement on real NIPT data.
+\code{\link[=bam_convert_bed]{bam_convert_bed()}}, \code{\link[=bam_convert_npz]{bam_convert_npz()}}, \code{nipter_bin_bam()}
 }

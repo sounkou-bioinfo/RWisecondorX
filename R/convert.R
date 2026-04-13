@@ -1,60 +1,64 @@
-#' Convert BAM/CRAM to WisecondorX bin counts
+#' Count reads per bin from a BAM or CRAM file
 #'
-#' Replicates the WisecondorX `convert` step: reads aligned reads from a
-#' BAM or CRAM file, applies the same filtering and duplicate-removal strategy
-#' as the upstream Python implementation, and returns per-bin read counts for
-#' chromosomes 1-22, X (as 23), and Y (as 24).
+#' Core read-counting engine shared by the WisecondorX and NIPTeR layers.
+#' Reads aligned reads from a BAM or CRAM file and returns per-bin read counts
+#' for chromosomes 1-22 and the sex chromosomes (X mapped to key "23", Y to "24").
 #'
-#' The default `rmdup = "streaming"` exactly reproduces the pysam larp/larp2
-#' deduplication used by WisecondorX. Key subtleties preserved:
-#' - Improper pairs are invisible to the dedup state machine (they never
-#'   update larp/larp2 in pysam's `continue` branch).
-#' - Unpaired reads update larp but NOT larp2.
-#' - larp is never reset between chromosomes.
-#' - Bin assignment matches Python's `int(pos / binsize)` (truncating division).
+#' Filter parameters let callers replicate the exact behaviour of both tools.
+#' WisecondorX defaults: `mapq = 1`, `rmdup = "streaming"`,
+#' `filter_improper_pairs = TRUE`.  NIPTeR defaults: `mapq = 0`,
+#' `rmdup = "none"`, `filter_improper_pairs = FALSE`.
+#'
+#' When `rmdup = "streaming"` the WisecondorX larp/larp2 state machine is
+#' reproduced exactly: improper pairs are invisible to the dedup logic (they
+#' do not update larp2), unpaired reads update larp but not larp2, and larp
+#' is never reset between chromosomes.  Bin assignment uses truncating integer
+#' division matching Python's `int(pos / binsize)`.
 #'
 #' @param bam Path to an indexed BAM or CRAM file.
-#' @param reference Optional FASTA reference path for CRAM inputs. Passed to
-#'   `read_bam(..., reference := ...)`. Leave `NULL` for BAM inputs.
-#' @param binsize Bin size in base pairs (default 5000, matching WisecondorX
-#'   convert default). The reference bin size should be a multiple of this value.
-#' @param rmdup Duplicate removal strategy. One of:
-#'   \describe{
-#'     \item{`"streaming"`}{Consecutive-position dedup matching WisecondorX's
-#'       larp/larp2 streaming state machine (default). Recommended when the BAM
-#'       has not been pre-processed with a dedup tool.}
-#'     \item{`"none"`}{No duplicate removal. Use for NIPT where read depth is low
-#'       and duplicate removal is not recommended (corresponds to WisecondorX
-#'       `--normdup` flag).}
-#'     \item{`"flag"`}{Use the SAM 0x400 duplicate flag. Use when the BAM has
-#'       been processed with Picard, sambamba, or similar tools.}
-#'   }
+#' @param binsize Bin size in base pairs. Default 5000 (WisecondorX); use
+#'   50000 for NIPTeR-style workflows.
+#' @param mapq Minimum mapping quality to retain a read. Default `1L`
+#'   (WisecondorX). Set to `0L` to disable MAPQ filtering (NIPTeR).
+#' @param rmdup Duplicate removal strategy:
+#'   `"streaming"` — WisecondorX larp/larp2 consecutive-position dedup
+#'   (default; not meaningful when `filter_improper_pairs = FALSE`);
+#'   `"flag"` — exclude reads with SAM flag `0x400` (pre-marked by Picard /
+#'   sambamba); `"none"` — no duplicate removal.
+#' @param filter_improper_pairs When `TRUE` (default, WisecondorX behaviour)
+#'   paired reads that are not properly paired (`FLAG & 0x2 == 0`) are
+#'   excluded. Set to `FALSE` to include all mapped reads regardless of pair
+#'   status (NIPTeR behaviour).
 #' @param con An optional open DBI connection with the duckhts extension already
 #'   loaded. If `NULL` (default), a temporary in-memory DuckDB connection is
 #'   created for this call.
+#' @param reference Optional FASTA reference path for CRAM inputs.
 #'
-#' @return A named list with one integer vector per chromosome key ("1"-"22",
-#'   "23" for X, "24" for Y). Each vector has length
-#'   `floor(chr_length / binsize) + 1` and contains per-bin read counts.
-#'   Chromosomes with no reads present in the BAM are `NULL`.
+#' @return A named list with one integer vector per chromosome key (`"1"`–`"22"`,
+#'   `"23"` for X, `"24"` for Y). Each vector contains per-bin read counts
+#'   (bin 0 = positions 0 to binsize-1). Chromosomes absent from the BAM are
+#'   `NULL`.
 #'
-#' @seealso
-#' WisecondorX paper: Huijsdens-van Amsterdam et al. (2018).
-#' Conformance reference: `wisecondorx_convert_conformance.py` in the duckhts
-#' repository, which validates exact bin-for-bin agreement on real NIPT data.
+#' @seealso [bam_convert_bed()], [bam_convert_npz()], `nipter_bin_bam()`
 #'
 #' @examples
 #' \dontrun{
-#' bins <- bam_convert("sample.bam", binsize = 5000, rmdup = "streaming")
-#' bins[["11"]]  # bin counts for chromosome 11
+#' # WisecondorX defaults
+#' bins <- bam_convert("sample.bam", binsize = 5000L, rmdup = "streaming")
+#'
+#' # NIPTeR defaults
+#' bins <- bam_convert("sample.bam", binsize = 50000L, mapq = 0L,
+#'                     rmdup = "none", filter_improper_pairs = FALSE)
 #' }
 #'
 #' @export
 bam_convert <- function(bam,
-                        binsize = 5000L,
-                        rmdup   = c("streaming", "none", "flag"),
-                        con     = NULL,
-                        reference = NULL) {
+                        binsize               = 5000L,
+                        mapq                  = 1L,
+                        rmdup                 = c("streaming", "flag", "none"),
+                        filter_improper_pairs = TRUE,
+                        con                   = NULL,
+                        reference             = NULL) {
   rmdup <- match.arg(rmdup)
   stopifnot(is.character(bam), length(bam) == 1L, nzchar(bam))
   stopifnot(file.exists(bam))
@@ -63,7 +67,10 @@ bam_convert <- function(bam,
     stopifnot(file.exists(reference))
   }
   stopifnot(is.numeric(binsize), length(binsize) == 1L, binsize >= 1L)
+  stopifnot(is.numeric(mapq),    length(mapq)    == 1L, mapq    >= 0L)
+  stopifnot(is.logical(filter_improper_pairs), length(filter_improper_pairs) == 1L)
   binsize <- as.integer(binsize)
+  mapq    <- as.integer(mapq)
 
   own_con <- is.null(con)
   if (own_con) {
@@ -77,7 +84,9 @@ bam_convert <- function(bam,
     on.exit(DBI::dbDisconnect(con, shutdown = TRUE), add = TRUE)
   }
 
-  sql <- .convert_sql(bam, binsize, rmdup, reference = reference)
+  sql <- .convert_sql(bam, binsize, mapq, rmdup,
+                      filter_improper_pairs = filter_improper_pairs,
+                      reference = reference)
   rows <- DBI::dbGetQuery(con, sql)
 
   .rows_to_bins(rows, binsize)
@@ -218,14 +227,20 @@ bam_convert_bed <- function(bam,
   "Y" = "24", "y" = "24"
 )
 
-.convert_sql <- function(bam_path, binsize, rmdup, reference = NULL) {
+.convert_sql <- function(bam_path, binsize, mapq, rmdup,
+                         filter_improper_pairs = TRUE,
+                         reference = NULL) {
   read_bam_call <- .read_bam_call(bam_path, reference = reference)
 
-  # Base filtering: keep proper pairs and unpaired reads; remove improper pairs.
-  # This matches pysam's `continue` on `not read.is_proper_pair`.
-  proper_filter <- "NOT ((flag & 1) != 0 AND (flag & 2) = 0)"
+  # Optional proper-pair filter (WisecondorX behaviour).
+  # When FALSE all mapped reads are included regardless of pair status (NIPTeR).
+  pair_clause <- if (isTRUE(filter_improper_pairs)) {
+    "AND NOT ((flag & 1) != 0 AND (flag & 2) = 0)"
+  } else {
+    ""
+  }
 
-  # Apply rmdup strategy
+  # rmdup strategy
   dedup_where <- switch(rmdup,
     streaming = .dedup_where_streaming(),
     none      = "TRUE",
@@ -246,17 +261,12 @@ WITH raw AS (
         (flag & 1)       AS is_paired
     FROM %s
     WHERE rname IS NOT NULL
-      AND %s
+      AND mapq >= %d
+      %s
 ),
 with_lag AS (
     SELECT *,
-        -- prev_pos: last pos of ANY proper read (paired or unpaired)
-        -- mirrors pysam larp which is always updated
         LAG(pos0) OVER (ORDER BY file_offset) AS prev_pos,
-
-        -- prev_pnext: last pnext of a PAIRED proper read only.
-        -- In pysam, unpaired reads update larp but NOT larp2, so larp2 retains
-        -- the last paired-read pnext even when unpaired reads appear between.
         LAST_VALUE(CASE WHEN is_paired != 0 THEN pnext0 END IGNORE NULLS)
             OVER (ORDER BY file_offset ROWS BETWEEN UNBOUNDED PRECEDING AND 1 PRECEDING)
             AS prev_pnext
@@ -265,19 +275,14 @@ with_lag AS (
 deduped AS (
     SELECT * FROM with_lag
     WHERE %s
-),
-filtered AS (
-    SELECT * FROM deduped WHERE mapq >= 1
 )
 SELECT
     rname,
     (pos0 // %d)::INTEGER AS bin,
     COUNT(*)::INTEGER     AS n
-FROM filtered
+FROM deduped
 GROUP BY rname, bin
 ORDER BY
-    -- Numeric chromosome order: strip 'chr' prefix, map X->23 Y->24, sort as integer.
-    -- Lexicographic ORDER BY rname would give 1,10,11,...,2,20,... which is wrong.
     TRY_CAST(regexp_replace(
         CASE upper(regexp_replace(rname, '^[Cc][Hh][Rr]', ''))
             WHEN 'X' THEN '23'
@@ -287,7 +292,7 @@ ORDER BY
         END,
     '[^0-9]', '', 'g') AS INTEGER),
     bin
-", read_bam_call, proper_filter, dedup_where, binsize)
+", read_bam_call, mapq, pair_clause, dedup_where, binsize)
 }
 
 .read_bam_call <- function(bam_path, reference = NULL) {

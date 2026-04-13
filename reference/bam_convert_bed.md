@@ -15,6 +15,9 @@ bam_convert_bed(
   bam,
   bed,
   binsize = 5000L,
+  mapq = 1L,
+  require_flags = 0L,
+  exclude_flags = 0L,
   rmdup = c("streaming", "none", "flag"),
   con = NULL,
   reference = NULL,
@@ -36,6 +39,20 @@ bam_convert_bed(
 - binsize:
 
   Bin size in base pairs (default 5000).
+
+- mapq:
+
+  Minimum mapping quality (default `1L`).
+
+- require_flags:
+
+  Integer bitmask; only reads with all bits set are kept (samtools
+  `-f`). Default `0L` (no requirement).
+
+- exclude_flags:
+
+  Integer bitmask; reads with any bit set are dropped (samtools `-F`).
+  Default `0L` (nothing dropped).
 
 - rmdup:
 

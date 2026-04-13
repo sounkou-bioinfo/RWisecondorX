@@ -10,6 +10,10 @@
   : Convert BAM/CRAM to a bgzipped BED bin-count file
 - [`bam_convert_npz()`](https://sounkou-bioinfo.github.io/RWisecondorX/reference/bam_convert_npz.md)
   : Convert BAM/CRAM to WisecondorX NPZ format
+- [`bed_to_nipter_sample()`](https://sounkou-bioinfo.github.io/RWisecondorX/reference/bed_to_nipter_sample.md)
+  : Read a NIPTeR-format BED file into a NIPTeRSample
+- [`bed_to_sample()`](https://sounkou-bioinfo.github.io/RWisecondorX/reference/bed_to_sample.md)
+  : Read a WisecondorX-format BED file into a sample list
 - [`generate_cohort()`](https://sounkou-bioinfo.github.io/RWisecondorX/reference/generate_cohort.md)
   : Generate a synthetic BAM cohort for testing
 - [`nipter_as_control_group()`](https://sounkou-bioinfo.github.io/RWisecondorX/reference/nipter_as_control_group.md)

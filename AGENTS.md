@@ -249,6 +249,28 @@ Python runtime dependency.
   [`library(RWisecondorX)`](https://sounkou-bioinfo.github.io/RWisecondorX/)
   instead of [`source()`](https://rdrr.io/r/base/source.html) hacks.
 
+**BED.gz reader functions — round-trip from stored BED files**
+
+- `R/bed_reader.R` —
+  [`bed_to_sample()`](https://sounkou-bioinfo.github.io/RWisecondorX/reference/bed_to_sample.md):
+  reads a 4-column BED.gz (from
+  [`bam_convert_bed()`](https://sounkou-bioinfo.github.io/RWisecondorX/reference/bam_convert_bed.md))
+  into the named-list-of-integer-vectors format for
+  [`rwisecondorx_newref()`](https://sounkou-bioinfo.github.io/RWisecondorX/reference/rwisecondorx_newref.md)
+  /
+  [`rwisecondorx_predict()`](https://sounkou-bioinfo.github.io/RWisecondorX/reference/rwisecondorx_predict.md).
+  [`bed_to_nipter_sample()`](https://sounkou-bioinfo.github.io/RWisecondorX/reference/bed_to_nipter_sample.md):
+  reads a 5-column (CombinedStrands) or 7-column (SeparatedStrands)
+  BED.gz (from
+  [`nipter_bin_bam_bed()`](https://sounkou-bioinfo.github.io/RWisecondorX/reference/nipter_bin_bam_bed.md))
+  into a `NIPTeRSample` object. Auto-detects column count; handles
+  literal “NA” in `corrected_count` via `TRY_CAST`.
+- `inst/tinytest/test_bed_reader.R` — 34 assertions covering WisecondorX
+  and NIPTeR round-trips, SeparatedStrands 7-column BED, sample name
+  inference, and
+  [`scale_sample()`](https://sounkou-bioinfo.github.io/RWisecondorX/reference/scale_sample.md)
+  integration.
+
 ### Open architectural questions
 
 - **Sex-stratified NCV for X/Y chromosomes**: The user’s clinical
@@ -288,6 +310,10 @@ Python runtime dependency.
 - `R/rwisecondorx_cbs.R` — CBS segmentation wrapper
   (DNAcopy/ParDNAcopy).
 - `R/rwisecondorx_output.R` — BED/statistics output generation.
+- `R/bed_reader.R` — BED.gz reader functions
+  ([`bed_to_sample()`](https://sounkou-bioinfo.github.io/RWisecondorX/reference/bed_to_sample.md),
+  [`bed_to_nipter_sample()`](https://sounkou-bioinfo.github.io/RWisecondorX/reference/bed_to_nipter_sample.md))
+  for round-tripping from stored BED files.
 - `R/cohort.R` — synthetic cohort generator for testing.
 - `R/wisecondorx_cli.R` — CLI wrappers (condathis-based conformance
   tools).
@@ -332,6 +358,12 @@ downstream analysis:
   [`Rduckhts::rduckhts_tabix_index()`](https://rgenomicsetl.r-universe.dev/Rduckhts/reference/rduckhts_tabix_index.html).
   Do not use [`gzfile()`](https://rdrr.io/r/base/connections.html) or
   external tools.
+- [`bed_to_sample()`](https://sounkou-bioinfo.github.io/RWisecondorX/reference/bed_to_sample.md)
+  reads 4-column BED.gz back into the WisecondorX in-memory format.
+  [`bed_to_nipter_sample()`](https://sounkou-bioinfo.github.io/RWisecondorX/reference/bed_to_nipter_sample.md)
+  reads 5- or 7-column BED.gz back into a `NIPTeRSample`. These close
+  the round-trip so analysis pipelines can start from pre-computed BED
+  files without re-reading the BAM.
 
 ------------------------------------------------------------------------
 

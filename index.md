@@ -107,6 +107,60 @@ bam_convert_bed(
 )
 ```
 
+## BED.gz Round-Trip
+
+Once bin counts have been written to BED.gz,
+[`bed_to_sample()`](https://sounkou-bioinfo.github.io/RWisecondorX/reference/bed_to_sample.md)
+and
+[`bed_to_nipter_sample()`](https://sounkou-bioinfo.github.io/RWisecondorX/reference/bed_to_nipter_sample.md)
+read them back into the in-memory formats expected by the analysis
+pipelines. This means you can bin once, store the compact BED.gz files,
+and reload them for any number of downstream analyses without touching
+the original BAM again.
+
+[`bed_to_sample()`](https://sounkou-bioinfo.github.io/RWisecondorX/reference/bed_to_sample.md)
+reads a 4-column WisecondorX BED.gz into the named list of integer
+vectors consumed by
+[`rwisecondorx_newref()`](https://sounkou-bioinfo.github.io/RWisecondorX/reference/rwisecondorx_newref.md)
+and
+[`rwisecondorx_predict()`](https://sounkou-bioinfo.github.io/RWisecondorX/reference/rwisecondorx_predict.md):
+
+``` r
+sample <- bed_to_sample("sample.bed.gz", binsize = 5000L)
+```
+
+[`bed_to_nipter_sample()`](https://sounkou-bioinfo.github.io/RWisecondorX/reference/bed_to_nipter_sample.md)
+reads a 5-column (CombinedStrands) or 7-column (SeparatedStrands) NIPTeR
+BED.gz into a `NIPTeRSample` object compatible with all NIPTeR
+statistical functions. Column count is auto-detected:
+
+``` r
+ns <- bed_to_nipter_sample("sample_nipter.bed.gz", binsize = 50000L)
+class(ns)  # "NIPTeRSample" "CombinedStrands"
+```
+
+A typical production workflow bins BAMs once and stores the results,
+then loads them for analysis across multiple sessions:
+
+``` r
+library(RWisecondorX)
+
+bam_files <- list.files("bams/", "\\.bam$", full.names = TRUE)
+bed_dir   <- "bed_counts/"
+dir.create(bed_dir, showWarnings = FALSE)
+
+for (bam in bam_files) {
+  bed <- file.path(bed_dir, sub("\\.bam$", ".bed.gz", basename(bam)))
+  bam_convert_bed(bam, bed, binsize = 5000L, rmdup = "streaming")
+}
+
+bed_files <- list.files(bed_dir, "\\.bed\\.gz$", full.names = TRUE)
+samples   <- lapply(bed_files, bed_to_sample, binsize = 5000L)
+
+ref <- rwisecondorx_newref(samples, binsize = 100000L, nipt = TRUE, cpus = 4L)
+saveRDS(ref, "reference.rds")
+```
+
 ## Optional NPZ And CLI Workflow
 
 When the full upstream WisecondorX pipeline is needed,

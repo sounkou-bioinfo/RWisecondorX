@@ -10,6 +10,8 @@
 <url><loc>https://sounkou-bioinfo.github.io/RWisecondorX/reference/bam_convert.html</loc></url>
 <url><loc>https://sounkou-bioinfo.github.io/RWisecondorX/reference/bam_convert_bed.html</loc></url>
 <url><loc>https://sounkou-bioinfo.github.io/RWisecondorX/reference/bam_convert_npz.html</loc></url>
+<url><loc>https://sounkou-bioinfo.github.io/RWisecondorX/reference/bed_to_nipter_sample.html</loc></url>
+<url><loc>https://sounkou-bioinfo.github.io/RWisecondorX/reference/bed_to_sample.html</loc></url>
 <url><loc>https://sounkou-bioinfo.github.io/RWisecondorX/reference/dot-apply_blacklist.html</loc></url>
 <url><loc>https://sounkou-bioinfo.github.io/RWisecondorX/reference/dot-build_sub_reference.html</loc></url>
 <url><loc>https://sounkou-bioinfo.github.io/RWisecondorX/reference/dot-call_aberrations.html</loc></url>

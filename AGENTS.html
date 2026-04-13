@@ -108,6 +108,11 @@
 <code>inst/tinytest/test_rwisecondorx.R</code> — 76 assertions: reference building (gender model, masking, PCA, KNN indexes and distances, null ratios), prediction (normalization, CBS, Z-scores, aberration calling), trisomy detection sensitivity (T21/T18/T13 detected as gains, euploid negative control clean).</li>
 <li>
 <code>inst/tinytest/test_cohort_pipeline.R</code> — 31 assertions: end-to-end pipeline (cohort generation → binning → newref → predict → aberration detection). All test files use <code><a href="https://sounkou-bioinfo.github.io/RWisecondorX/">library(RWisecondorX)</a></code> instead of <code><a href="https://rdrr.io/r/base/source.html" class="external-link">source()</a></code> hacks.</li>
+</ul><p><strong>BED.gz reader functions — round-trip from stored BED files</strong></p>
+<ul><li>
+<code>R/bed_reader.R</code> — <code><a href="reference/bed_to_sample.html">bed_to_sample()</a></code>: reads a 4-column BED.gz (from <code><a href="reference/bam_convert_bed.html">bam_convert_bed()</a></code>) into the named-list-of-integer-vectors format for <code><a href="reference/rwisecondorx_newref.html">rwisecondorx_newref()</a></code> / <code><a href="reference/rwisecondorx_predict.html">rwisecondorx_predict()</a></code>. <code><a href="reference/bed_to_nipter_sample.html">bed_to_nipter_sample()</a></code>: reads a 5-column (CombinedStrands) or 7-column (SeparatedStrands) BED.gz (from <code><a href="reference/nipter_bin_bam_bed.html">nipter_bin_bam_bed()</a></code>) into a <code>NIPTeRSample</code> object. Auto-detects column count; handles literal “NA” in <code>corrected_count</code> via <code>TRY_CAST</code>.</li>
+<li>
+<code>inst/tinytest/test_bed_reader.R</code> — 34 assertions covering WisecondorX and NIPTeR round-trips, SeparatedStrands 7-column BED, sample name inference, and <code><a href="reference/scale_sample.html">scale_sample()</a></code> integration.</li>
 </ul></div>
 <div class="section level3">
 <h3 id="open-architectural-questions">Open architectural questions<a class="anchor" aria-label="anchor" href="#open-architectural-questions"></a></h3>
@@ -150,6 +155,8 @@
 <li>
 <code>R/rwisecondorx_output.R</code> — BED/statistics output generation.</li>
 <li>
+<code>R/bed_reader.R</code> — BED.gz reader functions (<code><a href="reference/bed_to_sample.html">bed_to_sample()</a></code>, <code><a href="reference/bed_to_nipter_sample.html">bed_to_nipter_sample()</a></code>) for round-tripping from stored BED files.</li>
+<li>
 <code>R/cohort.R</code> — synthetic cohort generator for testing.</li>
 <li>
 <code>R/wisecondorx_cli.R</code> — CLI wrappers (condathis-based conformance tools).</li>
@@ -186,6 +193,8 @@
 <li>7-column NIPTeR BED (SeparatedStrands): <code>chrom</code>, <code>start</code>, <code>end</code>, <code>count</code>, <code>count_fwd</code>, <code>count_rev</code>, <code>corrected_count</code> (written by <code>nipter_bin_bam_bed(separate_strands = TRUE)</code>).</li>
 <li>Coordinates are 0-based half-open intervals (BED convention). Chromosomes use no <code>chr</code> prefix.</li>
 <li>All files are bgzipped (BGZF) and tabix-indexed via <code><a href="https://rgenomicsetl.r-universe.dev/Rduckhts/reference/rduckhts_bgzip.html" class="external-link">Rduckhts::rduckhts_bgzip()</a></code> and <code><a href="https://rgenomicsetl.r-universe.dev/Rduckhts/reference/rduckhts_tabix_index.html" class="external-link">Rduckhts::rduckhts_tabix_index()</a></code>. Do not use <code><a href="https://rdrr.io/r/base/connections.html" class="external-link">gzfile()</a></code> or external tools.</li>
+<li>
+<code><a href="reference/bed_to_sample.html">bed_to_sample()</a></code> reads 4-column BED.gz back into the WisecondorX in-memory format. <code><a href="reference/bed_to_nipter_sample.html">bed_to_nipter_sample()</a></code> reads 5- or 7-column BED.gz back into a <code>NIPTeRSample</code>. These close the round-trip so analysis pipelines can start from pre-computed BED files without re-reading the BAM.</li>
 </ul><hr></div>
 <div class="section level2">
 <h2 id="convert-step-exact-sql-replication-of-pysam-larplarp2">Convert Step: Exact SQL Replication of pysam larp/larp2<a class="anchor" aria-label="anchor" href="#convert-step-exact-sql-replication-of-pysam-larplarp2"></a></h2>

@@ -51,8 +51,8 @@ Design priorities:
 
 Each file is strictly separate; never mix NIPTeR and WisecondorX code. All statistical functions support both CombinedStrands and SeparatedStrands samples.
 
-- `R/nipter_control.R` — `nipter_as_control_group()`: constructs a `NIPTeRControlGroup` from a list of `NIPTeRSample` objects with validation and dedup. `nipter_diagnose_control_group()`: per-chromosome Z-scores and Shapiro-Wilk normality tests across the control group. `nipter_match_control_group()`: selects the best-fit control samples for a test sample by sum-of-squares chromosomal fraction distance. Internal helpers `.sample_chr_fractions()` (44-element for SeparatedStrands, 22 for Combined) and `.sample_chr_fractions_collapsed()` (always 22-element) handle strand dispatch.
-- `R/nipter_gc.R` — `nipter_gc_correct()`: LOESS and bin-weight GC correction. GC content derived from the FASTA reference via `rduckhts_fasta_nuc()` — **no bundled correction tables** (unlike the original NIPTeR `sysdata.rda`). SeparatedStrands: LOESS fitted on `Reduce("+", auto_list)` summed counts, corrections applied independently to each strand matrix via `lapply()`. Sex chromosome correction via nearest-neighbour (LOESS) or same-bucket weights (bin-weight).
+- `R/nipter_control.R` — `nipter_as_control_group()`: constructs a `NIPTeRControlGroup` from a list of `NIPTeRSample` objects with validation and dedup. `nipter_diagnose_control_group()`: per-chromosome Z-scores and Shapiro-Wilk normality tests across the control group. `nipter_match_control_group()`: selects the best-fit control samples for a test sample; distance computation is an Rcpp+OpenMP `nipter_ssd_scores_cpp()` kernel (one query vs N columns of the pre-extracted 22×N fractions matrix). `nipter_match_matrix()`: computes the full N×N pairwise SSD matrix via `nipter_ssd_matrix_cpp()` — replaces the production `lapply(1:N, match_control_group(..., mode="report"))` hot loop with a single vectorized call. `nipter_control_group_from_beds()`: loads a directory of TSV.bgz files into a control group in one DuckDB pass via `rduckhts_tabix_multi()`. Internal helpers `.sample_chr_fractions()` (44-element for SeparatedStrands, 22 for Combined) and `.sample_chr_fractions_collapsed()` (always 22-element) handle strand dispatch.
+- `R/nipter_gc.R` — `nipter_gc_precompute()`: runs `rduckhts_fasta_nuc()` once and writes a 5-column TSV.bgz+tbi (`chrom`, `start`, `end`, `pct_gc`, `seq_len`); use this to pay the FASTA scan cost once per reference build rather than once per sample. `nipter_gc_correct()`: LOESS and bin-weight GC correction accepting a `gc_table` parameter — either a path to the precomputed TSV.bgz, an in-memory list, or `NULL` (falls back to the `fasta` path). When correcting a `NIPTeRControlGroup`, the GC table is resolved once and reused for every sample. SeparatedStrands: LOESS fitted on `Reduce("+", auto_list)` summed counts, corrections applied independently to each strand matrix via `lapply()`. Sex chromosome correction via nearest-neighbour (LOESS) or same-bucket weights (bin-weight).
 - `R/nipter_chi.R` — `nipter_chi_correct()`: chi-squared overdispersion correction applied simultaneously to sample and control group. SeparatedStrands: chi computed on summed strand counts, correction applied per-strand via `lapply()`.
 - `R/nipter_score.R` — `nipter_z_score()`: chromosomal fraction Z-score with Shapiro-Wilk normality test. Uses collapsed fractions for SeparatedStrands. `nipter_ncv_score()`: normalised chromosome value with brute-force denominator search using `utils::combn()` (replaces `sets::set_combn()` dependency).
 - `R/nipter_regression.R` — `nipter_regression()`: forward stepwise regression Z-score with train/test split, practical vs theoretical CV selection. Supports both CombinedStrands and SeparatedStrands. SeparatedStrands doubles the predictor pool (44 candidates: `"1F".."22F","1R".."22R"`) with complementary exclusion (selecting `"5F"` excludes both `"5F"` and `"5R"` from the same model).
@@ -67,9 +67,10 @@ Pure R/Rcpp port of the WisecondorX `newref` and `predict` pipelines, with perfo
 - `R/rwisecondorx_utils.R` — Shared utilities: `.train_gender_model()` (2-component GMM on Y-fractions with zero-variance fallback), `.gender_correct()`, `.get_mask()` (5% median coverage threshold), `.normalize_and_mask()`, `.train_pca()` (5 components, ratio correction), `.project_pc()`, `.predict_gender()`. Also exports `scale_sample()` for rescaling bin sizes.
 - `R/rwisecondorx_newref.R` — `rwisecondorx_newref()`: reference building pipeline. Gender model training → global bin mask → per-partition (A/F/M) normalize/PCA/distance-filter/KNN/null-ratios. `.build_sub_reference()` orchestrates each partition. `.get_reference()` delegates to Rcpp.
 - `R/rwisecondorx_predict.R` — `rwisecondorx_predict()`: prediction pipeline. Rescale → predict gender → normalize autosomes (coverage + PCA + weights + optimal cutoff + 3-pass within-sample normalization with aberration masking) → normalize gonosomes → combine → inflate → log-transform → blacklist → CBS → segment Z-scores → aberration calling. `.normalize()`, `.normalize_repeat()`, `.normalize_once()` implement the multi-pass normalization. Global-to-local index conversion in `.normalize_once()` handles the index-space mapping correctly.
-- `R/rwisecondorx_cbs.R` — `.exec_cbs()`: DNAcopy/ParDNAcopy wrapper matching upstream conventions (0→NA, 0 weights→1e-99, split segments at large NA gaps, recalculate weighted means). `.get_segment_zscores()`: segment-level Z-scores from null ratio distributions.
+- `R/rwisecondorx_cbs.R` — `.exec_cbs()`: CBS wrapper; `parallel = TRUE` (now the default) uses `ParDNAcopy::parSegment(num.cores = cpus)` with an explicit thread count; falls back to `DNAcopy::segment()` with a message if ParDNAcopy is absent. Matches upstream conventions (0→NA, 0 weights→1e-99, split segments at large NA gaps, recalculate weighted means). `.get_segment_zscores()`: segment-level Z-scores from null ratio distributions.
 - `R/rwisecondorx_output.R` — BED and statistics output writers for `WisecondorXPrediction` objects.
 - `src/knn_reference.cpp` — `knn_reference_cpp()`: OpenMP-parallelized KNN reference bin finding (leave-one-chromosome-out squared Euclidean distance, partial sort for K nearest). Stores **global** 1-based indexes. `null_ratios_cpp()`: OpenMP-parallelized null ratio computation using global indexes directly against full sample vectors.
+- `src/nipter_matching.cpp` — `nipter_ssd_scores_cpp()`: one query vs N columns of a fractions matrix, returns N SSD scores (OpenMP). `nipter_ssd_matrix_cpp()`: symmetric N×N pairwise SSD matrix (OpenMP, symmetric schedule). Both accept `cpus` for thread count.
 - `src/RcppExports.cpp`, `R/RcppExports.R` — auto-generated Rcpp glue.
 - `R/zzz_rcpp.R` — `@useDynLib RWisecondorX, .registration = TRUE` and `@importFrom Rcpp sourceCpp` roxygen directives.
 - `src/Makevars`, `src/Makevars.win` — OpenMP compilation flags.
@@ -91,10 +92,21 @@ Pure R/Rcpp port of the WisecondorX `newref` and `predict` pipelines, with perfo
 
 ### Open architectural questions
 
+**NIPTeR layer**
+
 - **Sex-stratified NCV for X/Y chromosomes**: The user's clinical pipeline computes sex-stratified NCV denominators for X and Y (separate models for males vs females). Not yet implemented.
 - **Sex-stratified regression for X/Y**: Forward stepwise `lm()` models for X and Y fractions, stratified by predicted sex. Not yet implemented.
-- **End-to-end conformance testing vs upstream Python**: Full newref + predict conformance testing against the official WisecondorX Python package. Requires real multi-sample BAMs; not yet automated.
 - **Multi-chromosome NIPTeR conformance fixture**: `make fixtures` currently produces a chr11-only BAM. A multi-chromosome synthetic BAM (all 24 chroms, no unmapped reads, no same-position collisions) would allow `NIPTER_CONFORMANCE_BAM` to be populated automatically in CI without a real patient BAM.
+
+**Native WisecondorX layer — what remains**
+
+The pipeline (`newref` + `predict`) is functionally complete and all 76 unit tests + 31 cohort pipeline tests pass. The remaining work is validation and extension:
+
+- **End-to-end conformance vs upstream Python**: Bin-for-bin comparison of `rwisecondorx_newref()` + `rwisecondorx_predict()` output against the official Python `wisecondorx newref` + `predict` on real multi-sample BAMs. The reference object (PCA components, KNN indexes, null ratios) and final aberration calls both need to match. Requires a controlled multi-sample BAM set and the bioconda `wisecondorx` package via `condathis`. Not yet automated.
+- **WisecondorX reference as interoperable file**: The `WisecondorXReference` object is currently serialized as an RDS file. The matrices (PCA components, mask, indexes, distances, null_ratios) are dense numeric arrays that don't map naturally to a flat BED/TSV. A structured HDF5 or multiple-TSV.bgz serialization would allow Python tooling to read the reference. Not a priority unless the user has a Python consumer.
+- **`rwisecondorx_newref()` multi-file input via tabix_multi**: Currently takes a list of in-memory sample lists. Could accept a bed_dir argument using `rduckhts_tabix_multi()` to load all WisecondorX 4-column BEDs at once, analogous to `nipter_control_group_from_beds()`.
+- **Threading budget propagation**: `rwisecondorx_newref()` accepts `cpus` for KNN finding. `rwisecondorx_predict()` now accepts `cpus` and passes it to `parSegment()`. Both should be wired together coherently when called from a pipeline script — use the same `cpus` value throughout.
+- **Beta-mode aberration calling**: `rwisecondorx_predict()` supports `zscore` and `beta` (purity-based) cutoffs. The `beta` path (`ratio > 2^beta`) is implemented but not yet tested with real data.
 
 ---
 
@@ -135,14 +147,15 @@ Pure R/Rcpp port of the WisecondorX `newref` and `predict` pipelines, with perfo
 
 ## Interoperable File Formats
 
-The BED.gz format is the language-agnostic handoff between binning and downstream analysis:
+Our "BED.gz" files are **BGZF-compressed, tabix-indexed TSV files** that use BED coordinate conventions (0-based half-open intervals, no `chr` prefix). They are not strict BED files — they have more than 3 columns and the extra columns are not standard BED fields. Always read them with `read_tabix()` (DuckDB SQL) or `Rduckhts::rduckhts_tabix_multi()`, never with `read.table()` or BED-aware parsers that assume 3-column BED semantics.
 
-- 4-column WisecondorX BED: `chrom`, `start`, `end`, `count` (written by `bam_convert_bed()`).
-- 5-column NIPTeR BED (CombinedStrands): `chrom`, `start`, `end`, `count`, `corrected_count` (written by `nipter_bin_bam_bed()`).
-- 9-column NIPTeR BED (SeparatedStrands): `chrom`, `start`, `end`, `count`, `count_fwd`, `count_rev`, `corrected_count`, `corrected_fwd`, `corrected_rev` (written by `nipter_bin_bam_bed(separate_strands = TRUE)`). `count = count_fwd + count_rev`; `corrected_*` columns are `NA` until a GC-corrected sample is supplied.
-- Coordinates are 0-based half-open intervals (BED convention). Chromosomes use no `chr` prefix.
+- **4-column WisecondorX TSV.bgz**: `chrom`, `start`, `end`, `count` (written by `bam_convert_bed()`).
+- **5-column NIPTeR TSV.bgz (CombinedStrands)**: `chrom`, `start`, `end`, `count`, `corrected_count` (written by `nipter_bin_bam_bed()`).
+- **9-column NIPTeR TSV.bgz (SeparatedStrands)**: `chrom`, `start`, `end`, `count`, `count_fwd`, `count_rev`, `corrected_count`, `corrected_fwd`, `corrected_rev` (written by `nipter_bin_bam_bed(separate_strands = TRUE)`). `count = count_fwd + count_rev`; `corrected_*` columns are `NA` until a GC-corrected sample is supplied.
+- **5-column GC table TSV.bgz**: `chrom`, `start`, `end`, `pct_gc`, `seq_len` (written by `nipter_gc_precompute()`). Precompute once per reference genome + bin size, pass path to `nipter_gc_correct(gc_table = ...)`.
 - All files are bgzipped (BGZF) and tabix-indexed via `Rduckhts::rduckhts_bgzip()` and `Rduckhts::rduckhts_tabix_index()`. Do not use `gzfile()` or external tools.
-- `bed_to_sample()` reads 4-column BED.gz back into the WisecondorX in-memory format. `bed_to_nipter_sample()` reads 5- or 9-column BED.gz back into a `NIPTeRSample`. These close the round-trip so analysis pipelines can start from pre-computed BED files without re-reading the BAM. All BED reading uses `read_tabix()` (not `read_bed()`) to avoid BED-schema type coercion issues with double-valued columns.
+- `bed_to_sample()` reads 4-column TSV.bgz back into the WisecondorX in-memory format. `bed_to_nipter_sample()` reads 5- or 9-column TSV.bgz back into a `NIPTeRSample`. `nipter_control_group_from_beds()` loads a whole directory via `rduckhts_tabix_multi()` in one DuckDB pass. All reading uses the SQL `read_tabix()` table function — never `read_bed()`.
+- The WisecondorX reference (`WisecondorXReference`) is still RDS-only. Its matrices (PCA, KNN indexes, null ratios) are dense numeric arrays that cannot sensibly be represented in a flat TSV. Use `saveRDS()` / `readRDS()`.
 
 ---
 

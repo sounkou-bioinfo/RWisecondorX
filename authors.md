@@ -8,6 +8,12 @@
 - **WisecondorX Authors**. Contributor.  
   Authors of the original WisecondorX tool implemented in Python
 
+- **Dirk de Weerd**. Copyright holder.  
+  Author of the original NIPTeR package
+
+- **Lennart Johansson**. Copyright holder.  
+  Author of the original NIPTeR package
+
 ## Citation
 
 Toure S (2026). *RWisecondorX: An 'R' Port of 'WisecondorX' for Copy

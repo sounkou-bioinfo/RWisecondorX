@@ -162,7 +162,6 @@ predict_args <- .wisecondorx_predict_args(
   npz = sample_npz,
   ref = reference_npz,
   output_prefix = output_prefix,
-  ref_binsize = 50000L,
   minrefbins = 150L,
   maskrepeats = 5L,
   zscore = 5,
@@ -176,6 +175,7 @@ predict_args <- .wisecondorx_predict_args(
   ylim = c(-2, 2),
   cairo = TRUE,
   seed = 7L,
+  add_plot_title = TRUE,
   extra_args = c("--future-flag", "future-value")
 )
 
@@ -186,7 +186,6 @@ expect_identical(
     normalizePath(sample_npz, mustWork = TRUE),
     normalizePath(reference_npz, mustWork = TRUE),
     normalizePath(output_prefix, mustWork = FALSE),
-    "--binsize", "50000",
     "--minrefbins", "150",
     "--maskrepeats", "5",
     "--zscore", "5",
@@ -196,6 +195,7 @@ expect_identical(
     "--gender", "M",
     "--bed",
     "--plot",
+    "--add-plot-title",
     "--regions", normalizePath(regions, mustWork = TRUE),
     "--ylim", "[-2,2]",
     "--cairo",

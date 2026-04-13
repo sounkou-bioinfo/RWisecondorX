@@ -8,7 +8,6 @@ wisecondorx_predict(
   npz,
   ref,
   output_prefix,
-  ref_binsize = 50000L,
   minrefbins = 150L,
   maskrepeats = 5L,
   zscore = 5,
@@ -22,6 +21,7 @@ wisecondorx_predict(
   ylim = NULL,
   cairo = FALSE,
   seed = NULL,
+  add_plot_title = FALSE,
   env_name = "wisecondorx",
   extra_args = character(0)
 )
@@ -33,10 +33,6 @@ wisecondorx_predict(
 
 \item{output_prefix}{Output prefix for all \verb{wisecondorx predict} output
 files (e.g. \code{"results/sample1"}).}
-
-\item{ref_binsize}{Reference bin size in base pairs (default 50000).
-Passed to upstream \code{--binsize}. Must match the \code{ref_binsize} used when
-building the reference.}
 
 \item{minrefbins}{Minimum number of sensible reference bins per target bin.
 Passed to upstream \code{--minrefbins}.}
@@ -75,6 +71,10 @@ e.g. \code{c(-2, 2)}. Passed to upstream \code{--ylim} as \verb{[a,b]}.}
 \item{seed}{Optional integer random seed for segmentation. Passed to
 upstream \code{--seed}.}
 
+\item{add_plot_title}{Logical; when \code{TRUE}, adds the output basename as the
+plot title. Passed to upstream \code{--add-plot-title}. Only effective when
+\code{plot = TRUE}.}
+
 \item{env_name}{Name of the conda environment containing \code{wisecondorx}
 (default \code{"wisecondorx"}).}
 
@@ -93,7 +93,8 @@ file against a reference panel built by \code{\link[=wisecondorx_newref]{wisecon
 This wrapper exposes the current upstream \verb{wisecondorx predict} CLI flags
 documented in the WisecondorX README: \code{--minrefbins}, \code{--maskrepeats},
 \code{--zscore}, \code{--alpha}, \code{--beta}, \code{--blacklist}, \code{--gender}, \code{--bed},
-\code{--plot}, \code{--regions}, \code{--ylim}, \code{--cairo}, and \code{--seed}.
+\code{--plot}, \code{--add-plot-title}, \code{--regions}, \code{--ylim}, \code{--cairo}, and
+\code{--seed}.
 }
 \examples{
 \dontrun{
@@ -101,7 +102,6 @@ wisecondorx_predict(
   npz = "sample.npz",
   ref = "reference.npz",
   output_prefix = "results/sample",
-  ref_binsize = 50000L,
   minrefbins = 150L,
   maskrepeats = 5L,
   zscore = 5,
@@ -110,7 +110,8 @@ wisecondorx_predict(
   blacklist = NULL,
   gender = "F",
   bed = TRUE,
-  plot = FALSE,
+  plot = TRUE,
+  add_plot_title = TRUE,
   regions = NULL,
   ylim = c(-2, 2),
   cairo = FALSE,

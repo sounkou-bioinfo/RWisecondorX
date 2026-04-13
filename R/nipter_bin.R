@@ -11,9 +11,10 @@
 #' parallels NIPTeR's `NIPTSample`: autosomal reads as a chromosome-by-bin
 #' matrix and sex chromosome reads as a separate two-row matrix.
 #'
-#' Strand separation (`separate_strands = TRUE`) is not yet implemented; it
-#' requires a forward/reverse split in the SQL layer and will be added when the
-#' NIPTeR regression layer is ported.
+#' When `separate_strands = TRUE`, forward (`+`) and reverse (`-`) reads are
+#' counted independently, producing two matrices per chromosome set (class
+#' `"SeparatedStrands"`). This doubles the predictor pool for
+#' [nipter_regression()] — see NIPTeR documentation for details.
 #'
 #' @param bam Path to an indexed BAM or CRAM file.
 #' @param binsize Bin size in base pairs. Default 50000 (NIPTeR's fixed bin
@@ -30,18 +31,26 @@
 #'   or `"flag"` (equivalent to `exclude_flags = 1024L`; for BAMs already
 #'   processed by Picard / sambamba). NIPTeR does not perform streaming
 #'   deduplication.
-#' @param separate_strands Not yet implemented. Set `FALSE` (default).
+#' @param separate_strands Logical; when `TRUE`, produces a
+#'   `SeparatedStrands` object with independent forward/reverse count matrices.
+#'   Default `FALSE` (`CombinedStrands`).
 #' @param con Optional open DBI connection with duckhts already loaded.
 #' @param reference Optional FASTA reference path for CRAM inputs.
 #'
-#' @return An object of class `NIPTeRSample`: a named list with
-#'   `autosomal_chromosome_reads` (a list of one 22-row integer matrix, rows
-#'   named `"1"`–`"22"`, columns are bins), `sex_chromosome_reads` (a list of
-#'   one 2-row integer matrix, rows named `"X"` and `"Y"`),
-#'   `correction_status_autosomal` (`"Uncorrected"`),
-#'   `correction_status_sex` (`"Uncorrected"`), and `sample_name`.
+#' @return An object of class `c("NIPTeRSample", <strand_type>)`:
 #'
-#' @seealso [bam_convert()], [nipter_bin_bam_bed()], `nipter_gc_correct()`
+#'   **`CombinedStrands`** (default): `autosomal_chromosome_reads` is a
+#'   list of one 22-row integer matrix (rows `"1"`–`"22"`);
+#'   `sex_chromosome_reads` is a list of one 2-row matrix (rows `"X"`, `"Y"`).
+#'
+#'   **`SeparatedStrands`** (`separate_strands = TRUE`):
+#'   `autosomal_chromosome_reads` is a list of two matrices — element 1 is
+#'   forward (rows `"1F"`–`"22F"`), element 2 is reverse (rows `"1R"`–`"22R"`);
+#'   `sex_chromosome_reads` similarly contains forward (`"XF"`, `"YF"`) and
+#'   reverse (`"XR"`, `"YR"`) matrices.
+#'
+#' @seealso [bam_convert()], [nipter_bin_bam_bed()], [nipter_gc_correct()],
+#'   [nipter_regression()]
 #'
 #' @examples
 #' \dontrun{
@@ -51,6 +60,9 @@
 #' # Common NIPT pipeline: MAPQ >= 40, exclude duplicate-flagged reads
 #' sample <- nipter_bin_bam("sample.dm.bam", binsize = 50000L,
 #'                          mapq = 40L, exclude_flags = 1024L)
+#'
+#' # SeparatedStrands for regression with doubled predictor pool
+#' sample_ss <- nipter_bin_bam("sample.bam", separate_strands = TRUE)
 #'
 #' sample$autosomal_chromosome_reads[[1]]["21", ]   # chr21 bin counts
 #' }
@@ -66,13 +78,7 @@ nipter_bin_bam <- function(bam,
                            con              = NULL,
                            reference        = NULL) {
   rmdup <- match.arg(rmdup)
-  if (isTRUE(separate_strands)) {
-    stop(
-      "separate_strands = TRUE is not yet implemented. ",
-      "It will be added when the NIPTeR regression layer is ported.",
-      call. = FALSE
-    )
-  }
+  stopifnot(is.logical(separate_strands), length(separate_strands) == 1L)
   stopifnot(is.character(bam), length(bam) == 1L, nzchar(bam))
   stopifnot(file.exists(bam))
   stopifnot(is.numeric(binsize),       length(binsize)       == 1L, binsize       >= 1L)
@@ -89,16 +95,22 @@ nipter_bin_bam <- function(bam,
   exclude_flags <- as.integer(exclude_flags)
 
   bins <- bam_convert(bam,
-                      binsize       = binsize,
-                      mapq          = mapq,
-                      require_flags = require_flags,
-                      exclude_flags = exclude_flags,
-                      rmdup         = rmdup,
-                      con           = con,
-                      reference     = reference)
+                      binsize          = binsize,
+                      mapq             = mapq,
+                      require_flags    = require_flags,
+                      exclude_flags    = exclude_flags,
+                      rmdup            = rmdup,
+                      separate_strands = separate_strands,
+                      con              = con,
+                      reference        = reference)
 
   name <- sub("\\.cram$|\\.bam$", "", basename(bam), ignore.case = TRUE)
-  .bins_to_nipter_sample(bins, binsize, name)
+
+  if (isTRUE(separate_strands)) {
+    .stranded_bins_to_nipter_sample(bins$fwd, bins$rev, binsize, name)
+  } else {
+    .bins_to_nipter_sample(bins, binsize, name)
+  }
 }
 
 
@@ -283,5 +295,66 @@ nipter_bin_bam_bed <- function(bam,
       sample_name                          = name
     ),
     class = c("NIPTeRSample", "CombinedStrands")
+  )
+}
+
+
+# SeparatedStrands variant: fwd_bins and rev_bins are each structured like
+# bam_convert()'s default return (one integer vector per chromosome key).
+# Produces two matrices per chromosome set: [[1]] = forward, [[2]] = reverse.
+# Rownames follow NIPTeR convention: "1F".."22F"/"1R".."22R" for autosomes,
+# "XF"/"YF" and "XR"/"YR" for sex chromosomes.
+.stranded_bins_to_nipter_sample <- function(fwd_bins, rev_bins, binsize, name) {
+  auto_keys <- as.character(1:22)
+  sex_keys  <- c("23", "24")
+  all_keys  <- c(auto_keys, sex_keys)
+
+  n_bins <- max(
+    vapply(fwd_bins[all_keys], length, integer(1L)),
+    vapply(rev_bins[all_keys], length, integer(1L)),
+    na.rm = TRUE
+  )
+  if (is.infinite(n_bins) || n_bins == 0L) {
+    stop("No reads found in chromosomes 1-22/X/Y.", call. = FALSE)
+  }
+
+  .pad <- function(v) {
+    if (is.null(v)) return(integer(n_bins))
+    length(v) <- n_bins
+    v[is.na(v)] <- 0L
+    v
+  }
+
+  col_names <- as.character(seq_len(n_bins))
+
+  # Forward autosomal: rows "1F".."22F"
+  fwd_auto <- do.call(rbind, lapply(fwd_bins[auto_keys], .pad))
+  rownames(fwd_auto) <- paste0(auto_keys, "F")
+  colnames(fwd_auto) <- col_names
+
+  # Reverse autosomal: rows "1R".."22R"
+  rev_auto <- do.call(rbind, lapply(rev_bins[auto_keys], .pad))
+  rownames(rev_auto) <- paste0(auto_keys, "R")
+  colnames(rev_auto) <- col_names
+
+  # Forward sex: rows "XF", "YF"
+  fwd_sex <- do.call(rbind, lapply(fwd_bins[sex_keys], .pad))
+  rownames(fwd_sex) <- c("XF", "YF")
+  colnames(fwd_sex) <- col_names
+
+  # Reverse sex: rows "XR", "YR"
+  rev_sex <- do.call(rbind, lapply(rev_bins[sex_keys], .pad))
+  rownames(rev_sex) <- c("XR", "YR")
+  colnames(rev_sex) <- col_names
+
+  structure(
+    list(
+      autosomal_chromosome_reads  = list(fwd_auto, rev_auto),
+      sex_chromosome_reads        = list(fwd_sex, rev_sex),
+      correction_status_autosomal = "Uncorrected",
+      correction_status_sex       = "Uncorrected",
+      sample_name                 = name
+    ),
+    class = c("NIPTeRSample", "SeparatedStrands")
   )
 }

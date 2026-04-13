@@ -91,7 +91,7 @@ wisecondorx_convert <- function(bam,
 #' @param output Path for the output reference `.npz` file.
 #' @param binsize Convert-step bin size in base pairs (default 5000).
 #'   Must match the `binsize` used when calling [bam_convert_npz()].
-#' @param ref_binsize Reference bin size in base pairs (default 50000).
+#' @param ref_binsize Reference bin size in base pairs (default 100000).
 #'   Passed to upstream `--binsize`. Must be a multiple of `binsize`.
 #' @param nipt Logical; pass upstream `--nipt`.
 #' @param refsize Number of reference locations per target bin. Passed to
@@ -118,7 +118,7 @@ wisecondorx_convert <- function(bam,
 #'   npz_files = list.files("controls/", "\\.npz$", full.names = TRUE),
 #'   output = "reference.npz",
 #'   binsize = 5000L,
-#'   ref_binsize = 50000L,
+#'   ref_binsize = 100000L,
 #'   nipt = TRUE,
 #'   refsize = 300L,
 #'   yfrac = 0.05,
@@ -130,7 +130,7 @@ wisecondorx_convert <- function(bam,
 wisecondorx_newref <- function(npz_files,
                                output,
                                binsize     = 5000L,
-                               ref_binsize = 50000L,
+                               ref_binsize = 100000L,
                                nipt        = FALSE,
                                refsize     = 300L,
                                yfrac       = NULL,
@@ -174,15 +174,13 @@ wisecondorx_newref <- function(npz_files,
 #' This wrapper exposes the current upstream `wisecondorx predict` CLI flags
 #' documented in the WisecondorX README: `--minrefbins`, `--maskrepeats`,
 #' `--zscore`, `--alpha`, `--beta`, `--blacklist`, `--gender`, `--bed`,
-#' `--plot`, `--regions`, `--ylim`, `--cairo`, and `--seed`.
+#' `--plot`, `--add-plot-title`, `--regions`, `--ylim`, `--cairo`, and
+#' `--seed`.
 #'
 #' @param npz Path to the sample `.npz` file (from [bam_convert_npz()]).
 #' @param ref Path to the reference `.npz` file (from [wisecondorx_newref()]).
 #' @param output_prefix Output prefix for all `wisecondorx predict` output
 #'   files (e.g. `"results/sample1"`).
-#' @param ref_binsize Reference bin size in base pairs (default 50000).
-#'   Passed to upstream `--binsize`. Must match the `ref_binsize` used when
-#'   building the reference.
 #' @param minrefbins Minimum number of sensible reference bins per target bin.
 #'   Passed to upstream `--minrefbins`.
 #' @param maskrepeats Number of repeat-masking cycles. Passed to upstream
@@ -207,6 +205,9 @@ wisecondorx_newref <- function(npz_files,
 #' @param cairo Logical; use Cairo bitmap output. Passed to upstream `--cairo`.
 #' @param seed Optional integer random seed for segmentation. Passed to
 #'   upstream `--seed`.
+#' @param add_plot_title Logical; when `TRUE`, adds the output basename as the
+#'   plot title. Passed to upstream `--add-plot-title`. Only effective when
+#'   `plot = TRUE`.
 #' @param env_name Name of the conda environment containing `wisecondorx`
 #'   (default `"wisecondorx"`).
 #' @param extra_args Character vector of additional arguments passed verbatim
@@ -223,7 +224,6 @@ wisecondorx_newref <- function(npz_files,
 #'   npz = "sample.npz",
 #'   ref = "reference.npz",
 #'   output_prefix = "results/sample",
-#'   ref_binsize = 50000L,
 #'   minrefbins = 150L,
 #'   maskrepeats = 5L,
 #'   zscore = 5,
@@ -232,7 +232,8 @@ wisecondorx_newref <- function(npz_files,
 #'   blacklist = NULL,
 #'   gender = "F",
 #'   bed = TRUE,
-#'   plot = FALSE,
+#'   plot = TRUE,
+#'   add_plot_title = TRUE,
 #'   regions = NULL,
 #'   ylim = c(-2, 2),
 #'   cairo = FALSE,
@@ -244,22 +245,22 @@ wisecondorx_newref <- function(npz_files,
 wisecondorx_predict <- function(npz,
                                 ref,
                                 output_prefix,
-                                ref_binsize = 50000L,
-                                minrefbins  = 150L,
-                                maskrepeats = 5L,
-                                zscore      = 5,
-                                alpha       = 1e-4,
-                                beta        = NULL,
-                                blacklist   = NULL,
-                                gender      = NULL,
-                                bed         = FALSE,
-                                plot        = FALSE,
-                                regions     = NULL,
-                                ylim        = NULL,
-                                cairo       = FALSE,
-                                seed        = NULL,
-                                env_name    = "wisecondorx",
-                                extra_args  = character(0)) {
+                                minrefbins     = 150L,
+                                maskrepeats    = 5L,
+                                zscore         = 5,
+                                alpha          = 1e-4,
+                                beta           = NULL,
+                                blacklist      = NULL,
+                                gender         = NULL,
+                                bed            = FALSE,
+                                plot           = FALSE,
+                                regions        = NULL,
+                                ylim           = NULL,
+                                cairo          = FALSE,
+                                seed           = NULL,
+                                add_plot_title = FALSE,
+                                env_name       = "wisecondorx",
+                                extra_args     = character(0)) {
   .check_condathis()
   stopifnot(is.character(npz), length(npz) == 1L, file.exists(npz))
   stopifnot(is.character(ref), length(ref) == 1L, file.exists(ref))
@@ -271,7 +272,6 @@ wisecondorx_predict <- function(npz,
     npz = npz,
     ref = ref,
     output_prefix = output_prefix,
-    ref_binsize = ref_binsize,
     minrefbins = minrefbins,
     maskrepeats = maskrepeats,
     zscore = zscore,
@@ -285,6 +285,7 @@ wisecondorx_predict <- function(npz,
     ylim = ylim,
     cairo = cairo,
     seed = seed,
+    add_plot_title = add_plot_title,
     extra_args = extra_args
   )
 
@@ -373,7 +374,6 @@ wisecondorx_predict <- function(npz,
 .wisecondorx_predict_args <- function(npz,
                                       ref,
                                       output_prefix,
-                                      ref_binsize,
                                       minrefbins,
                                       maskrepeats,
                                       zscore,
@@ -387,12 +387,12 @@ wisecondorx_predict <- function(npz,
                                       ylim,
                                       cairo,
                                       seed,
+                                      add_plot_title,
                                       extra_args = character(0)) {
   npz_abs <- normalizePath(npz, mustWork = TRUE)
   ref_abs <- normalizePath(ref, mustWork = TRUE)
   out_abs <- normalizePath(output_prefix, mustWork = FALSE)
 
-  stopifnot(is.numeric(ref_binsize), length(ref_binsize) == 1L, ref_binsize >= 1L)
   stopifnot(is.numeric(minrefbins), length(minrefbins) == 1L, minrefbins >= 1L)
   stopifnot(is.numeric(maskrepeats), length(maskrepeats) == 1L, maskrepeats >= 0L)
   stopifnot(is.numeric(zscore), length(zscore) == 1L)
@@ -400,6 +400,7 @@ wisecondorx_predict <- function(npz,
   stopifnot(is.logical(bed), length(bed) == 1L)
   stopifnot(is.logical(plot), length(plot) == 1L)
   stopifnot(is.logical(cairo), length(cairo) == 1L)
+  stopifnot(is.logical(add_plot_title), length(add_plot_title) == 1L)
 
   if (!is.null(gender)) {
     stopifnot(is.character(gender), length(gender) == 1L, nzchar(gender))
@@ -411,7 +412,6 @@ wisecondorx_predict <- function(npz,
   }
 
   args <- c("predict", npz_abs, ref_abs, out_abs)
-  args <- .append_value(args, "--binsize", as.integer(ref_binsize))
   args <- .append_value(args, "--minrefbins", as.integer(minrefbins))
   args <- .append_value(args, "--maskrepeats", as.integer(maskrepeats))
   args <- .append_value(args, "--zscore", zscore)
@@ -421,6 +421,7 @@ wisecondorx_predict <- function(npz,
   args <- .append_optional_scalar(args, "--gender", gender)
   args <- .append_flag(args, "--bed", isTRUE(bed))
   args <- .append_flag(args, "--plot", isTRUE(plot))
+  args <- .append_flag(args, "--add-plot-title", isTRUE(add_plot_title))
   args <- .append_optional_path(args, "--regions", regions, must_work = TRUE)
   args <- .append_optional_scalar(args, "--ylim", .format_ylim(ylim))
   args <- .append_flag(args, "--cairo", isTRUE(cairo))

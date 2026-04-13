@@ -11,6 +11,7 @@ bam_convert(
   require_flags = 0L,
   exclude_flags = 0L,
   rmdup = c("streaming", "flag", "none"),
+  separate_strands = FALSE,
   con = NULL,
   reference = NULL
 )
@@ -39,16 +40,25 @@ WisecondorX larp/larp2 algorithm (also excludes improper pairs).
 \code{"flag"} drops reads with SAM flag \code{0x400}. \code{"none"} keeps all reads that
 pass the other filters.}
 
+\item{separate_strands}{Logical; when \code{TRUE}, returns per-strand counts
+(forward \code{+} and reverse \code{-}). The return value changes to a list of two
+named lists (\code{fwd} and \code{rev}), each structured like the default return.
+Used by \code{nipter_bin_bam(separate_strands = TRUE)} for the NIPTeR
+SeparatedStrands object. Default \code{FALSE}.}
+
 \item{con}{Optional open DBI connection with duckhts already loaded. If
 \code{NULL} (default) a temporary in-memory DuckDB connection is created.}
 
 \item{reference}{Optional FASTA reference path for CRAM inputs.}
 }
 \value{
-A named list with one integer vector per chromosome key (\code{"1"}–
-\code{"22"}, \code{"23"} for X, \code{"24"} for Y). Each vector contains per-bin read
-counts (bin 0 = positions 0 to \code{binsize - 1}). Chromosomes absent from
-the BAM are \code{NULL}.
+When \code{separate_strands = FALSE} (default): a named list with one
+integer vector per chromosome key (\code{"1"}–\code{"22"}, \code{"23"} for X, \code{"24"} for
+Y). Each vector contains per-bin read counts (bin 0 = positions 0 to
+\code{binsize - 1}). Chromosomes absent from the BAM are \code{NULL}.
+
+When \code{separate_strands = TRUE}: a list with two elements, \code{fwd} and \code{rev},
+each structured like the default return.
 }
 \description{
 Core read-counting engine shared by the WisecondorX and NIPTeR layers.

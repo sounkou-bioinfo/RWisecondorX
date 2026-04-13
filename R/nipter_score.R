@@ -39,9 +39,9 @@ nipter_z_score <- function(sample, control_group, chromo_focus) {
 
   chr_key <- as.character(chromo_focus)
 
-  # Chromosomal fractions
-  sample_frac  <- .sample_chr_fractions(sample)
-  control_frac <- .control_group_fractions(control_group)
+  # Chromosomal fractions (collapsed to 22 rows for SeparatedStrands)
+  sample_frac  <- .sample_chr_fractions_collapsed(sample)
+  control_frac <- .control_group_fractions_collapsed(control_group)
   # control_frac: 22 x n_controls matrix
 
   # Focus chromosome fractions

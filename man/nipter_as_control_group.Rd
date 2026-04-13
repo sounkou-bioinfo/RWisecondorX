@@ -22,10 +22,8 @@ Collects multiple \code{NIPTeRSample} objects into a
 \code{\link{nipter_chi_correct}}, and \code{\link{nipter_regression}}.
 }
 \details{
-All samples must share the same strand type (currently only
-\code{"CombinedStrands"} is supported; \code{"SeparatedStrands"} will be
-added when the regression layer is ported). Duplicate sample names are
-silently removed.
+All samples must share the same strand type (\code{"CombinedStrands"} or
+\code{"SeparatedStrands"}). Duplicate sample names are silently removed.
 }
 \examples{
 \dontrun{

@@ -5,10 +5,8 @@
 #' \code{\link{nipter_z_score}}, \code{\link{nipter_ncv_score}},
 #' \code{\link{nipter_chi_correct}}, and \code{\link{nipter_regression}}.
 #'
-#' All samples must share the same strand type (currently only
-#' \code{"CombinedStrands"} is supported; \code{"SeparatedStrands"} will be
-#' added when the regression layer is ported). Duplicate sample names are
-#' silently removed.
+#' All samples must share the same strand type (\code{"CombinedStrands"} or
+#' \code{"SeparatedStrands"}). Duplicate sample names are silently removed.
 #'
 #' @param samples A list of \code{NIPTeRSample} objects.
 #' @param description Label for the group (default
@@ -107,7 +105,7 @@ nipter_as_control_group <- function(samples,
 nipter_diagnose_control_group <- function(control_group) {
   stopifnot(inherits(control_group, "NIPTeRControlGroup"))
 
-  fracs <- .control_group_fractions(control_group)
+  fracs <- .control_group_fractions_collapsed(control_group)
   # fracs: 22 x n_samples matrix
 
   # Z-score each chromosome across samples
@@ -195,8 +193,8 @@ nipter_match_control_group <- function(sample,
   }
   compare_keys <- as.character(compare_chroms)
 
-  # Get sample fractions
-  sample_frac <- .sample_chr_fractions(sample)[compare_keys]
+  # Get sample fractions (collapsed to 22-row for SeparatedStrands)
+  sample_frac <- .sample_chr_fractions_collapsed(sample)[compare_keys]
 
   # Get control fractions and compute SSD
   n_controls <- length(control_group$samples)
@@ -206,7 +204,7 @@ nipter_match_control_group <- function(sample,
   for (i in seq_len(n_controls)) {
     ctrl <- control_group$samples[[i]]
     names_vec[i] <- ctrl$sample_name
-    ctrl_frac    <- .sample_chr_fractions(ctrl)[compare_keys]
+    ctrl_frac    <- .sample_chr_fractions_collapsed(ctrl)[compare_keys]
     scores[i]    <- sum((sample_frac - ctrl_frac)^2)
   }
   names(scores) <- names_vec
@@ -233,10 +231,29 @@ nipter_match_control_group <- function(sample,
 # Internal helpers
 # ---------------------------------------------------------------------------
 
-# Compute chromosomal fractions for one NIPTeRSample (CombinedStrands only).
-# Returns a named numeric vector: names "1"–"22", each element is the fraction
-# of total autosomal reads in that chromosome.
+# Compute chromosomal fractions for one NIPTeRSample.
+#
+# CombinedStrands: returns a named 22-element numeric vector (names "1"–"22").
+#   Each element = rowSums(auto)[chr] / sum(auto).
+#
+# SeparatedStrands: returns a named 44-element numeric vector
+#   (names "1F".."22F","1R".."22R").  Each element =
+#   rowSums(strand_mat)[row] / sum(strand_mat) / 2.
+#   This matches NIPTeR's chrfractions.SeparatedStrands, which computes
+#   sapply(auto_list, function(x) (rowSums(x) / sum(x)) / 2)  and then
+#   flattens the 22×2 result into a 44-vector via sapply over samples.
 .sample_chr_fractions <- function(sample) {
+  if (inherits(sample, "SeparatedStrands")) {
+    auto <- sample$autosomal_chromosome_reads  # list of 2 matrices (fwd, rev)
+    # Each matrix: rows = "1F".."22F" (or "1R".."22R"), cols = bins
+    fracs <- unlist(lapply(auto, function(mat) {
+      s <- sum(mat)
+      if (s == 0) return(stats::setNames(rep(0, nrow(mat)), rownames(mat)))
+      (rowSums(mat) / s) / 2
+    }))
+    return(fracs)
+  }
+  # CombinedStrands
   auto <- sample$autosomal_chromosome_reads[[1L]]
   chr_sums <- rowSums(auto)
   total <- sum(chr_sums)
@@ -244,7 +261,25 @@ nipter_match_control_group <- function(sample,
   chr_sums / total
 }
 
-# Compute a 22 x n_samples fractions matrix for a control group.
+# Compute collapsed (22-element) chromosomal fractions for any NIPTeRSample.
+# For SeparatedStrands, sums forward + reverse per chromosome (matching
+# NIPTeR's retrieve_fractions_of_interest.SeparatedStrands which sums
+# frac[paste0(chr,"F"),] + frac[paste0(chr,"R"),]).
+# Used by nipter_z_score(), nipter_ncv_score(), nipter_match_control_group().
+.sample_chr_fractions_collapsed <- function(sample) {
+  if (inherits(sample, "SeparatedStrands")) {
+    frac44 <- .sample_chr_fractions(sample)
+    keys_f <- paste0(1:22, "F")
+    keys_r <- paste0(1:22, "R")
+    collapsed <- frac44[keys_f] + frac44[keys_r]
+    names(collapsed) <- as.character(1:22)
+    return(collapsed)
+  }
+  .sample_chr_fractions(sample)
+}
+
+# Compute a fractions matrix for a control group.
+# CombinedStrands: 22 x n_samples. SeparatedStrands: 44 x n_samples.
 .control_group_fractions <- function(control_group) {
   n <- length(control_group$samples)
   frac_list <- lapply(control_group$samples, .sample_chr_fractions)
@@ -254,9 +289,25 @@ nipter_match_control_group <- function(sample,
   mat
 }
 
-# Compute total reads per chromosome (rows = chromosomes, one value per
-# chromosome) for a NIPTeRSample. Uses autosomal reads only.
+# Compute collapsed 22 x n_samples fractions matrix for any control group.
+.control_group_fractions_collapsed <- function(control_group) {
+  n <- length(control_group$samples)
+  frac_list <- lapply(control_group$samples, .sample_chr_fractions_collapsed)
+  mat <- do.call(cbind, frac_list)
+  colnames(mat) <- vapply(control_group$samples,
+                          function(s) s$sample_name, character(1L))
+  mat
+}
+
+# Compute total reads per chromosome (22-element vector, always collapsed)
+# for a NIPTeRSample. Uses autosomal reads only.
+# For SeparatedStrands, sums forward + reverse via Reduce("+", auto).
 .sample_chr_reads <- function(sample) {
-  auto <- sample$autosomal_chromosome_reads[[1L]]
-  stats::setNames(rowSums(auto), rownames(auto))
+  auto <- sample$autosomal_chromosome_reads
+  if (inherits(sample, "SeparatedStrands")) {
+    summed <- Reduce("+", auto)
+    rownames(summed) <- as.character(1:22)
+    return(stats::setNames(rowSums(summed), rownames(summed)))
+  }
+  stats::setNames(rowSums(auto[[1L]]), rownames(auto[[1L]]))
 }

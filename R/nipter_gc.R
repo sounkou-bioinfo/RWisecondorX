@@ -146,18 +146,19 @@ nipter_gc_correct <- function(object,
 
 # LOESS GC correction for a single NIPTeRSample.
 .gc_correct_loess <- function(sample, gc_table, span, include_sex) {
-  auto_mat <- sample$autosomal_chromosome_reads[[1L]]
-  n_bins   <- ncol(auto_mat)
+  auto_list <- sample$autosomal_chromosome_reads
+  is_ss     <- inherits(sample, "SeparatedStrands")
 
-  # Sum autosomal reads (all strands combined for CombinedStrands)
-  combined <- colSums(auto_mat)  # wrong — need per-row sum collapsed
-  # Actually: NIPTeR sums forward+reverse via Reduce("+", ...). For
-  # CombinedStrands there's only one matrix, so we just flatten.
-  # We need a single vector of length (22 * n_bins) matching the GC table.
-  # But NIPTeR applies LOESS to the combined (Reduce) matrix as a flat vector.
-  # Let's replicate: sum all autosomal rows → 1 × n_bins, then match to GC.
-  combined <- Reduce(`+`, lapply(seq_len(nrow(auto_mat)),
-                                 function(i) auto_mat[i, ]))
+  # For fitting: always use the summed (F+R) matrix.
+  # CombinedStrands: auto_list has 1 element.
+  # SeparatedStrands: Reduce("+", auto_list) sums fwd + rev.
+  if (is_ss) {
+    summed_auto <- Reduce("+", auto_list)
+    rownames(summed_auto) <- as.character(1:22)
+  } else {
+    summed_auto <- auto_list[[1L]]
+  }
+  n_bins <- ncol(summed_auto)
 
   # Build combined GC vector (all autosomal bins concatenated)
   gc_auto <- unlist(lapply(as.character(1:22), function(chr) {
@@ -170,11 +171,10 @@ nipter_gc_correct <- function(object,
     gc
   }))
 
-  # Combined reads: flatten auto_mat row by row (chr1 bins, chr2 bins, ...)
-  reads_flat <- as.numeric(t(auto_mat))  # 22*n_bins vector
+  # Flatten summed autosomal reads row by row (chr1 bins, chr2 bins, ...)
+  reads_flat <- as.numeric(t(summed_auto))  # 22*n_bins vector
 
   # Valid bins: known GC and non-zero reads
-
   valid <- !is.na(gc_auto) & reads_flat > 0
   if (sum(valid) < 10L) {
     warning("Too few valid bins for LOESS GC correction; returning uncorrected.",
@@ -191,48 +191,55 @@ nipter_gc_correct <- function(object,
   correction <- rep(1.0, length(reads_flat))
   correction[valid] <- median_reads / fitted_vals
 
-  # Apply correction to each autosomal matrix
-  corrected_auto <- auto_mat
-  for (i in seq_len(22L)) {
-    offset <- (i - 1L) * n_bins
-    idx <- seq(offset + 1L, offset + n_bins)
-    corrected_auto[i, ] <- auto_mat[i, ] * correction[idx]
-  }
+  # Apply correction to each autosomal matrix in the list
+  corrected_auto <- lapply(auto_list, function(mat) {
+    corrected <- mat
+    for (i in seq_len(22L)) {
+      offset <- (i - 1L) * n_bins
+      idx <- seq(offset + 1L, offset + n_bins)
+      corrected[i, ] <- mat[i, ] * correction[idx]
+    }
+    corrected
+  })
 
-  sample$autosomal_chromosome_reads <- list(corrected_auto)
+  sample$autosomal_chromosome_reads <- corrected_auto
   sample$correction_status_autosomal <- .update_correction_status(
     sample$correction_status_autosomal, "GC corrected"
   )
 
   # Sex chromosome correction (nearest-neighbour lookup)
   if (include_sex) {
-    sex_mat <- sample$sex_chromosome_reads[[1L]]
-    corrected_sex <- sex_mat
+    sex_list <- sample$sex_chromosome_reads
 
     # For each sex chromosome bin, find the nearest GC in the LOESS curve
     gc_fitted_vals <- gc_auto[valid]
     fitted_reads   <- fitted_vals
 
-    for (chr_label in c("X", "Y")) {
-      gc_sex <- gc_table[[chr_label]]
-      if (length(gc_sex) < n_bins) {
-        gc_sex <- c(gc_sex, rep(NA_real_, n_bins - length(gc_sex)))
-      } else if (length(gc_sex) > n_bins) {
-        gc_sex <- gc_sex[seq_len(n_bins)]
-      }
-      row_idx <- which(rownames(sex_mat) == chr_label)
+    corrected_sex <- lapply(sex_list, function(sex_mat) {
+      corrected <- sex_mat
+      for (chr_label in c("X", "Y")) {
+        gc_sex <- gc_table[[chr_label]]
+        if (length(gc_sex) < n_bins) {
+          gc_sex <- c(gc_sex, rep(NA_real_, n_bins - length(gc_sex)))
+        } else if (length(gc_sex) > n_bins) {
+          gc_sex <- gc_sex[seq_len(n_bins)]
+        }
+        # Find the row — for SeparatedStrands rows are "XF"/"YF" or "XR"/"YR"
+        row_idx <- grep(paste0("^", chr_label), rownames(sex_mat))
+        if (length(row_idx) == 0L) next
 
-      for (b in seq_len(n_bins)) {
-        if (is.na(gc_sex[b]) || sex_mat[row_idx, b] == 0) next
-        # Nearest-neighbour: find the autosomal GC value closest to this bin's GC
-        dists <- abs(gc_fitted_vals - gc_sex[b])
-        nearest <- which.min(dists)
-        cf <- median_reads / fitted_reads[nearest]
-        corrected_sex[row_idx, b] <- sex_mat[row_idx, b] * cf
+        for (b in seq_len(n_bins)) {
+          if (is.na(gc_sex[b]) || sex_mat[row_idx, b] == 0) next
+          dists <- abs(gc_fitted_vals - gc_sex[b])
+          nearest <- which.min(dists)
+          cf <- median_reads / fitted_reads[nearest]
+          corrected[row_idx, b] <- sex_mat[row_idx, b] * cf
+        }
       }
-    }
+      corrected
+    })
 
-    sample$sex_chromosome_reads <- list(corrected_sex)
+    sample$sex_chromosome_reads <- corrected_sex
     sample$correction_status_sex <- .update_correction_status(
       sample$correction_status_sex, "GC corrected"
     )
@@ -244,11 +251,20 @@ nipter_gc_correct <- function(object,
 
 # Bin-weight GC correction for a single NIPTeRSample.
 .gc_correct_bin <- function(sample, gc_table, include_sex) {
-  auto_mat <- sample$autosomal_chromosome_reads[[1L]]
-  n_bins   <- ncol(auto_mat)
+  auto_list <- sample$autosomal_chromosome_reads
+  is_ss     <- inherits(sample, "SeparatedStrands")
 
-  # Flatten autosomal reads and GC values
-  reads_flat <- as.numeric(t(auto_mat))
+  # Sum F+R for SeparatedStrands; use single matrix for CombinedStrands
+  if (is_ss) {
+    summed_auto <- Reduce("+", auto_list)
+    rownames(summed_auto) <- as.character(1:22)
+  } else {
+    summed_auto <- auto_list[[1L]]
+  }
+  n_bins <- ncol(summed_auto)
+
+  # Flatten summed autosomal reads and GC values
+  reads_flat <- as.numeric(t(summed_auto))
 
   gc_auto <- unlist(lapply(as.character(1:22), function(chr) {
     gc <- gc_table[[chr]]
@@ -297,45 +313,49 @@ nipter_gc_correct <- function(object,
     }
   }
 
-  # Apply weights to autosomal matrix
-  corrected_reads <- reads_flat * weights
-  corrected_auto <- auto_mat
-  for (i in seq_len(22L)) {
-    offset <- (i - 1L) * n_bins
-    idx <- seq(offset + 1L, offset + n_bins)
-    corrected_auto[i, ] <- corrected_reads[idx]
-  }
+  # Apply weights to each autosomal matrix in the list
+  corrected_auto <- lapply(auto_list, function(mat) {
+    corrected <- mat
+    for (i in seq_len(22L)) {
+      offset <- (i - 1L) * n_bins
+      idx <- seq(offset + 1L, offset + n_bins)
+      corrected[i, ] <- mat[i, ] * weights[idx]
+    }
+    corrected
+  })
 
-  sample$autosomal_chromosome_reads <- list(corrected_auto)
+  sample$autosomal_chromosome_reads <- corrected_auto
   sample$correction_status_autosomal <- .update_correction_status(
     sample$correction_status_autosomal, "GC corrected"
   )
 
   # Sex chromosome correction
   if (include_sex) {
-    sex_mat <- sample$sex_chromosome_reads[[1L]]
-    corrected_sex <- sex_mat
+    corrected_sex <- lapply(sample$sex_chromosome_reads, function(sex_mat) {
+      corrected <- sex_mat
+      for (chr_label in c("X", "Y")) {
+        gc_sex <- gc_table[[chr_label]]
+        if (length(gc_sex) < n_bins) {
+          gc_sex <- c(gc_sex, rep(NA_real_, n_bins - length(gc_sex)))
+        } else if (length(gc_sex) > n_bins) {
+          gc_sex <- gc_sex[seq_len(n_bins)]
+        }
+        row_idx <- grep(paste0("^", chr_label), rownames(sex_mat))
+        if (length(row_idx) == 0L) next
+        gc_sex_bucket <- round(gc_sex * 1000)
 
-    for (chr_label in c("X", "Y")) {
-      gc_sex <- gc_table[[chr_label]]
-      if (length(gc_sex) < n_bins) {
-        gc_sex <- c(gc_sex, rep(NA_real_, n_bins - length(gc_sex)))
-      } else if (length(gc_sex) > n_bins) {
-        gc_sex <- gc_sex[seq_len(n_bins)]
-      }
-      row_idx <- which(rownames(sex_mat) == chr_label)
-      gc_sex_bucket <- round(gc_sex * 1000)
-
-      for (b in seq_len(n_bins)) {
-        if (is.na(gc_sex_bucket[b]) || sex_mat[row_idx, b] == 0) next
-        bm <- bucket_mean[as.character(gc_sex_bucket[b])]
-        if (!is.na(bm) && bm > 0) {
-          corrected_sex[row_idx, b] <- sex_mat[row_idx, b] * (global_mean / bm)
+        for (b_pos in seq_len(n_bins)) {
+          if (is.na(gc_sex_bucket[b_pos]) || sex_mat[row_idx, b_pos] == 0) next
+          bm <- bucket_mean[as.character(gc_sex_bucket[b_pos])]
+          if (!is.na(bm) && bm > 0) {
+            corrected[row_idx, b_pos] <- sex_mat[row_idx, b_pos] * (global_mean / bm)
+          }
         }
       }
-    }
+      corrected
+    })
 
-    sample$sex_chromosome_reads <- list(corrected_sex)
+    sample$sex_chromosome_reads <- corrected_sex
     sample$correction_status_sex <- .update_correction_status(
       sample$correction_status_sex, "GC corrected"
     )

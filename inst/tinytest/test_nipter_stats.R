@@ -348,3 +348,221 @@ expect_error(
                     chromo_focus = 21L, seed = 42L),
   info = "regression rejects tiny control group"
 )
+
+
+# ===================================================================
+# SEPARATED STRANDS
+# ===================================================================
+
+# Helper: build a synthetic SeparatedStrands NIPTeRSample.
+# chr_totals: named integer vector "1"-"22" of TOTAL reads per chromosome.
+# Reads are split ~50/50 between forward and reverse.
+.make_ss_sample <- function(chr_totals, name, n_bins = 100L, seed = NULL) {
+  if (!is.null(seed)) set.seed(seed)
+
+  .build_strand_mat <- function(suffix, frac) {
+    mat <- matrix(0L, nrow = 22L, ncol = n_bins)
+    rownames(mat) <- paste0(as.character(1:22), suffix)
+    colnames(mat) <- as.character(seq_len(n_bins))
+    for (chr in names(chr_totals)) {
+      total <- as.integer(round(chr_totals[chr] * frac))
+      if (total == 0L) next
+      base <- total %/% n_bins
+      remainder <- total - base * n_bins
+      counts <- rep(base, n_bins)
+      if (remainder > 0L) {
+        bump <- sample(seq_len(n_bins), remainder)
+        counts[bump] <- counts[bump] + 1L
+      }
+      mat[paste0(chr, suffix), ] <- as.integer(counts)
+    }
+    mat
+  }
+
+  fwd_auto <- .build_strand_mat("F", 0.5)
+  rev_auto <- .build_strand_mat("R", 0.5)
+
+  fwd_sex <- matrix(0L, nrow = 2L, ncol = n_bins)
+  rownames(fwd_sex) <- c("XF", "YF")
+  colnames(fwd_sex) <- as.character(seq_len(n_bins))
+  rev_sex <- matrix(0L, nrow = 2L, ncol = n_bins)
+  rownames(rev_sex) <- c("XR", "YR")
+  colnames(rev_sex) <- as.character(seq_len(n_bins))
+
+  structure(
+    list(
+      autosomal_chromosome_reads  = list(fwd_auto, rev_auto),
+      sex_chromosome_reads        = list(fwd_sex, rev_sex),
+      correction_status_autosomal = "Uncorrected",
+      correction_status_sex       = "Uncorrected",
+      sample_name                 = name
+    ),
+    class = c("NIPTeRSample", "SeparatedStrands")
+  )
+}
+
+.make_ss_control_set <- function(n = 10L, scale = 1, seed = 42L) {
+  set.seed(seed)
+  samples <- vector("list", n)
+  for (i in seq_len(n)) {
+    noise <- runif(22, 0.95, 1.05)
+    chr_totals <- .normal_chr_totals(scale = scale)
+    chr_totals <- as.integer(round(chr_totals * noise))
+    names(chr_totals) <- as.character(1:22)
+    samples[[i]] <- .make_ss_sample(chr_totals, paste0("ss_ctrl_", i),
+                                    seed = seed + i)
+  }
+  samples
+}
+
+# --- SeparatedStrands object structure ---
+
+ss_sample <- .make_ss_sample(.normal_chr_totals(), "ss_test", seed = 500L)
+expect_true(inherits(ss_sample, "SeparatedStrands"),
+            info = "SS sample has SeparatedStrands class")
+expect_identical(length(ss_sample$autosomal_chromosome_reads), 2L,
+                 info = "SS auto has 2 matrices (fwd, rev)")
+expect_identical(nrow(ss_sample$autosomal_chromosome_reads[[1L]]), 22L,
+                 info = "SS fwd auto has 22 rows")
+expect_identical(nrow(ss_sample$autosomal_chromosome_reads[[2L]]), 22L,
+                 info = "SS rev auto has 22 rows")
+expect_true(all(grepl("F$", rownames(ss_sample$autosomal_chromosome_reads[[1L]]))),
+            info = "SS fwd rows end in F")
+expect_true(all(grepl("R$", rownames(ss_sample$autosomal_chromosome_reads[[2L]]))),
+            info = "SS rev rows end in R")
+
+# --- SeparatedStrands control group ---
+
+ss_ctrl <- .make_ss_control_set(10L)
+ss_cg <- nipter_as_control_group(ss_ctrl)
+
+expect_true(inherits(ss_cg, "SeparatedStrands"),
+            info = "SS control group inherits SeparatedStrands")
+expect_identical(length(ss_cg$samples), 10L,
+                 info = "SS control group has 10 samples")
+
+# Mixed strand types should error
+expect_error(
+  nipter_as_control_group(c(ctrl_samples[1:3], ss_ctrl[1:3])),
+  info = "mixed CombinedStrands/SeparatedStrands rejected"
+)
+
+# --- SeparatedStrands Z-score ---
+
+ss_z21 <- nipter_z_score(ss_sample, ss_cg, chromo_focus = 21L)
+expect_true(inherits(ss_z21, "NIPTeRZScore"),
+            info = "SS z_score result class")
+expect_true(is.numeric(ss_z21$sample_z_score),
+            info = "SS z_score is numeric")
+expect_true(abs(ss_z21$sample_z_score) < 5,
+            info = "SS normal sample has moderate Z-score")
+
+# Trisomy SS sample should have elevated Z
+ss_trisomy <- .make_ss_sample(
+  .normal_chr_totals(scale = 1, trisomy_chr = 21, trisomy_frac = 0.10),
+  "ss_trisomy_21", seed = 777L
+)
+ss_z21_tri <- nipter_z_score(ss_trisomy, ss_cg, chromo_focus = 21L)
+expect_true(ss_z21_tri$sample_z_score > ss_z21$sample_z_score,
+            info = "SS trisomy Z > SS normal Z")
+
+# --- SeparatedStrands NCV ---
+
+ss_ncv21 <- nipter_ncv_score(ss_sample, ss_cg, chromo_focus = 21L,
+                             max_elements = 3L)
+expect_true(inherits(ss_ncv21, "NIPTeRNCV"),
+            info = "SS NCV result class")
+expect_true(is.numeric(ss_ncv21$sample_score),
+            info = "SS NCV score is numeric")
+
+ss_ncv21_tri <- nipter_ncv_score(ss_trisomy, ss_cg, chromo_focus = 21L,
+                                 max_elements = 3L)
+expect_true(ss_ncv21_tri$sample_score > ss_ncv21$sample_score,
+            info = "SS trisomy NCV > SS normal NCV")
+
+# --- SeparatedStrands chi-squared correction ---
+
+ss_chi <- nipter_chi_correct(ss_sample, ss_cg, chi_cutoff = 3.5)
+expect_true(inherits(ss_chi$sample, "NIPTeRSample"),
+            info = "SS chi sample is NIPTeRSample")
+expect_true(inherits(ss_chi$sample, "SeparatedStrands"),
+            info = "SS chi sample retains SeparatedStrands class")
+expect_identical(length(ss_chi$sample$autosomal_chromosome_reads), 2L,
+                 info = "SS chi sample still has 2 auto matrices")
+expect_true("Chi square corrected" %in%
+            ss_chi$sample$correction_status_autosomal,
+            info = "SS chi correction status updated")
+
+# Both strand matrices should have non-negative counts
+expect_true(all(ss_chi$sample$autosomal_chromosome_reads[[1L]] >= 0),
+            info = "SS chi fwd auto counts non-negative")
+expect_true(all(ss_chi$sample$autosomal_chromosome_reads[[2L]] >= 0),
+            info = "SS chi rev auto counts non-negative")
+
+# --- SeparatedStrands regression ---
+
+ss_ctrl_large <- .make_ss_control_set(20L, seed = 200L)
+ss_cg_large   <- nipter_as_control_group(ss_ctrl_large)
+
+ss_reg21 <- nipter_regression(ss_sample, ss_cg_large, chromo_focus = 21L,
+                              n_models = 2L, n_predictors = 3L,
+                              seed = 42L)
+
+expect_true(inherits(ss_reg21, "NIPTeRRegression"),
+            info = "SS regression result class")
+expect_identical(ss_reg21$focus_chromosome, "21",
+                 info = "SS regression focus_chromosome")
+expect_true(length(ss_reg21$models) >= 1L,
+            info = "SS regression has at least 1 model")
+
+ss_m1 <- ss_reg21$models[[1L]]
+expect_true(is.numeric(ss_m1$z_score),
+            info = "SS regression z_score is numeric")
+expect_true(is.character(ss_m1$predictors),
+            info = "SS regression predictors is character")
+
+# Predictors should be strand-specific (end in F or R)
+expect_true(all(grepl("[FR]$", ss_m1$predictors)),
+            info = "SS regression predictors are strand-specific")
+
+# Complementary exclusion within model: no two predictors should be the
+# same chromosome number (one F and one R)
+ss_pred_nums <- sub("[FR]$", "", ss_m1$predictors)
+expect_true(length(ss_pred_nums) == length(unique(ss_pred_nums)),
+            info = "SS regression complementary exclusion within model")
+
+# No predictor reuse between models
+if (length(ss_reg21$models) >= 2L) {
+  ss_m2 <- ss_reg21$models[[2L]]
+  expect_true(length(intersect(ss_m1$predictors, ss_m2$predictors)) == 0L,
+              info = "SS regression no predictor reuse across models")
+  # But complementary strands CAN appear across models
+  # (e.g., "5F" in model 1, "5R" in model 2 is allowed)
+}
+
+# Trisomy SS regression should be elevated
+ss_reg21_tri <- nipter_regression(ss_trisomy, ss_cg_large,
+                                  chromo_focus = 21L,
+                                  n_models = 2L, n_predictors = 3L,
+                                  seed = 42L)
+expect_true(ss_reg21_tri$models[[1]]$z_score > ss_reg21$models[[1]]$z_score,
+            info = "SS trisomy regression Z > SS normal regression Z")
+
+# --- SeparatedStrands diagnose ---
+
+ss_diag <- nipter_diagnose_control_group(ss_cg)
+expect_true(is.matrix(ss_diag$z_scores),
+            info = "SS diagnose z_scores is matrix")
+expect_identical(nrow(ss_diag$z_scores), 22L,
+                 info = "SS diagnose z_scores has 22 rows (collapsed)")
+expect_identical(ncol(ss_diag$z_scores), 10L,
+                 info = "SS diagnose z_scores has 10 columns")
+
+# --- SeparatedStrands match ---
+
+ss_matched <- nipter_match_control_group(ss_sample, ss_cg, n = 5L,
+                                         mode = "subset")
+expect_true(inherits(ss_matched, "NIPTeRControlGroup"),
+            info = "SS matched has correct class")
+expect_identical(length(ss_matched$samples), 5L,
+                 info = "SS matched has 5 samples")

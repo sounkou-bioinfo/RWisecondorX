@@ -67,11 +67,12 @@ other chromosomal fractions, then computes Z-scores based on the
 prediction residuals.
 }
 \details{
-Currently only supports \code{CombinedStrands} samples. The
-\code{SeparatedStrands} variant (which doubles the predictor pool to
-forward/reverse per chromosome) will be added when
-\code{separate_strands = TRUE} support is implemented in
-\code{\link{nipter_bin_bam}}.
+For \code{SeparatedStrands} samples the predictor pool is doubled (each
+autosomal chromosome contributes both a forward and reverse fraction),
+and complementary-strand exclusion within each model prevents selecting
+both strands of the same chromosome as predictors in the same model.
+Across models, only the exact predictor string is excluded; the
+complementary strand remains available.
 
 The algorithm:
 \enumerate{

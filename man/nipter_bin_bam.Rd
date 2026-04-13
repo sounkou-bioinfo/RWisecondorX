@@ -38,19 +38,26 @@ or \code{"flag"} (equivalent to \code{exclude_flags = 1024L}; for BAMs already
 processed by Picard / sambamba). NIPTeR does not perform streaming
 deduplication.}
 
-\item{separate_strands}{Not yet implemented. Set \code{FALSE} (default).}
+\item{separate_strands}{Logical; when \code{TRUE}, produces a
+\code{SeparatedStrands} object with independent forward/reverse count matrices.
+Default \code{FALSE} (\code{CombinedStrands}).}
 
 \item{con}{Optional open DBI connection with duckhts already loaded.}
 
 \item{reference}{Optional FASTA reference path for CRAM inputs.}
 }
 \value{
-An object of class \code{NIPTeRSample}: a named list with
-\code{autosomal_chromosome_reads} (a list of one 22-row integer matrix, rows
-named \code{"1"}–\code{"22"}, columns are bins), \code{sex_chromosome_reads} (a list of
-one 2-row integer matrix, rows named \code{"X"} and \code{"Y"}),
-\code{correction_status_autosomal} (\code{"Uncorrected"}),
-\code{correction_status_sex} (\code{"Uncorrected"}), and \code{sample_name}.
+An object of class \verb{c("NIPTeRSample", <strand_type>)}:
+
+\strong{\code{CombinedStrands}} (default): \code{autosomal_chromosome_reads} is a
+list of one 22-row integer matrix (rows \code{"1"}–\code{"22"});
+\code{sex_chromosome_reads} is a list of one 2-row matrix (rows \code{"X"}, \code{"Y"}).
+
+\strong{\code{SeparatedStrands}} (\code{separate_strands = TRUE}):
+\code{autosomal_chromosome_reads} is a list of two matrices — element 1 is
+forward (rows \code{"1F"}–\code{"22F"}), element 2 is reverse (rows \code{"1R"}–\code{"22R"});
+\code{sex_chromosome_reads} similarly contains forward (\code{"XF"}, \code{"YF"}) and
+reverse (\code{"XR"}, \code{"YR"}) matrices.
 }
 \description{
 Replicates NIPTeR's \code{bin_bam_sample()}: counts reads in fixed-width bins
@@ -65,9 +72,10 @@ The result is reshaped into a \code{NIPTeRSample} object whose structure
 parallels NIPTeR's \code{NIPTSample}: autosomal reads as a chromosome-by-bin
 matrix and sex chromosome reads as a separate two-row matrix.
 
-Strand separation (\code{separate_strands = TRUE}) is not yet implemented; it
-requires a forward/reverse split in the SQL layer and will be added when the
-NIPTeR regression layer is ported.
+When \code{separate_strands = TRUE}, forward (\code{+}) and reverse (\code{-}) reads are
+counted independently, producing two matrices per chromosome set (class
+\code{"SeparatedStrands"}). This doubles the predictor pool for
+\code{\link[=nipter_regression]{nipter_regression()}} — see NIPTeR documentation for details.
 }
 \examples{
 \dontrun{
@@ -78,10 +86,14 @@ sample <- nipter_bin_bam("sample.bam", binsize = 50000L)
 sample <- nipter_bin_bam("sample.dm.bam", binsize = 50000L,
                          mapq = 40L, exclude_flags = 1024L)
 
+# SeparatedStrands for regression with doubled predictor pool
+sample_ss <- nipter_bin_bam("sample.bam", separate_strands = TRUE)
+
 sample$autosomal_chromosome_reads[[1]]["21", ]   # chr21 bin counts
 }
 
 }
 \seealso{
-\code{\link[=bam_convert]{bam_convert()}}, \code{\link[=nipter_bin_bam_bed]{nipter_bin_bam_bed()}}, \code{nipter_gc_correct()}
+\code{\link[=bam_convert]{bam_convert()}}, \code{\link[=nipter_bin_bam_bed]{nipter_bin_bam_bed()}}, \code{\link[=nipter_gc_correct]{nipter_gc_correct()}},
+\code{\link[=nipter_regression]{nipter_regression()}}
 }

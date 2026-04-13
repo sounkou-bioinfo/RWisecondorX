@@ -37,14 +37,22 @@
 #'   WisecondorX larp/larp2 algorithm (also excludes improper pairs).
 #'   `"flag"` drops reads with SAM flag `0x400`. `"none"` keeps all reads that
 #'   pass the other filters.
+#' @param separate_strands Logical; when `TRUE`, returns per-strand counts
+#'   (forward `+` and reverse `-`). The return value changes to a list of two
+#'   named lists (`fwd` and `rev`), each structured like the default return.
+#'   Used by `nipter_bin_bam(separate_strands = TRUE)` for the NIPTeR
+#'   SeparatedStrands object. Default `FALSE`.
 #' @param con Optional open DBI connection with duckhts already loaded. If
 #'   `NULL` (default) a temporary in-memory DuckDB connection is created.
 #' @param reference Optional FASTA reference path for CRAM inputs.
 #'
-#' @return A named list with one integer vector per chromosome key (`"1"`–
-#'   `"22"`, `"23"` for X, `"24"` for Y). Each vector contains per-bin read
-#'   counts (bin 0 = positions 0 to `binsize - 1`). Chromosomes absent from
-#'   the BAM are `NULL`.
+#' @return When `separate_strands = FALSE` (default): a named list with one
+#'   integer vector per chromosome key (`"1"`–`"22"`, `"23"` for X, `"24"` for
+#'   Y). Each vector contains per-bin read counts (bin 0 = positions 0 to
+#'   `binsize - 1`). Chromosomes absent from the BAM are `NULL`.
+#'
+#'   When `separate_strands = TRUE`: a list with two elements, `fwd` and `rev`,
+#'   each structured like the default return.
 #'
 #' @seealso [bam_convert_bed()], [bam_convert_npz()], `nipter_bin_bam()`
 #'
@@ -65,13 +73,14 @@
 #'
 #' @export
 bam_convert <- function(bam,
-                        binsize       = 5000L,
-                        mapq          = 1L,
-                        require_flags = 0L,
-                        exclude_flags = 0L,
-                        rmdup         = c("streaming", "flag", "none"),
-                        con           = NULL,
-                        reference     = NULL) {
+                        binsize          = 5000L,
+                        mapq             = 1L,
+                        require_flags    = 0L,
+                        exclude_flags    = 0L,
+                        rmdup            = c("streaming", "flag", "none"),
+                        separate_strands = FALSE,
+                        con              = NULL,
+                        reference        = NULL) {
   rmdup <- match.arg(rmdup)
   stopifnot(is.character(bam), length(bam) == 1L, nzchar(bam))
   stopifnot(file.exists(bam))
@@ -87,6 +96,7 @@ bam_convert <- function(bam,
   mapq          <- as.integer(mapq)
   require_flags <- as.integer(require_flags)
   exclude_flags <- as.integer(exclude_flags)
+  stopifnot(is.logical(separate_strands), length(separate_strands) == 1L)
 
   own_con <- is.null(con)
   if (own_con) {
@@ -101,10 +111,18 @@ bam_convert <- function(bam,
   }
 
   sql <- .convert_sql(bam, binsize, mapq, require_flags, exclude_flags,
-                      rmdup, reference = reference)
+                      rmdup, reference = reference,
+                      separate_strands = separate_strands)
   rows <- DBI::dbGetQuery(con, sql)
 
-  .rows_to_bins(rows, binsize)
+  if (isTRUE(separate_strands)) {
+    fwd_rows <- rows[rows$strand == "+", , drop = FALSE]
+    rev_rows <- rows[rows$strand == "-", , drop = FALSE]
+    list(fwd = .rows_to_bins(fwd_rows, binsize),
+         rev = .rows_to_bins(rev_rows, binsize))
+  } else {
+    .rows_to_bins(rows, binsize)
+  }
 }
 
 
@@ -258,7 +276,7 @@ bam_convert_bed <- function(bam,
 )
 
 .convert_sql <- function(bam_path, binsize, mapq, require_flags, exclude_flags,
-                         rmdup, reference = NULL) {
+                         rmdup, reference = NULL, separate_strands = FALSE) {
   read_bam_call <- .read_bam_call(bam_path, reference = reference)
 
   # User-supplied flag filters (samtools -f / -F style).
@@ -278,6 +296,11 @@ bam_convert_bed <- function(bam,
     none      = "TRUE",
     flag      = "(flag & 1024) = 0"
   )
+
+  # Strand separation support
+  strand_select <- if (isTRUE(separate_strands))
+    ",\n        CASE WHEN (flag & 16) = 0 THEN '+' ELSE '-' END AS strand" else ""
+  strand_group <- if (isTRUE(separate_strands)) ", strand" else ""
 
   # Bin assignment: (pos - 1) converts duckhts 1-based POS to 0-based.
   # Integer division `//` matches Python's int(pos / binsize) (truncation).
@@ -312,10 +335,10 @@ deduped AS (
 )
 SELECT
     rname,
-    (pos0 // %d)::INTEGER AS bin,
+    (pos0 // %d)::INTEGER AS bin%s,
     COUNT(*)::INTEGER     AS n
 FROM deduped
-GROUP BY rname, bin
+GROUP BY rname, bin%s
 ORDER BY
     TRY_CAST(regexp_replace(
         CASE upper(regexp_replace(rname, '^[Cc][Hh][Rr]', ''))
@@ -326,7 +349,8 @@ ORDER BY
         END,
     '[^0-9]', '', 'g') AS INTEGER),
     bin
-", read_bam_call, mapq, req_clause, exc_clause, improper_clause, dedup_where, binsize)
+", read_bam_call, mapq, req_clause, exc_clause, improper_clause, dedup_where,
+   binsize, strand_select, strand_group)
 }
 
 .read_bam_call <- function(bam_path, reference = NULL) {

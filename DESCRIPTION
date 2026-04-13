@@ -1,14 +1,18 @@
 Package: RWisecondorX
 Title: An 'R' Port of 'WisecondorX' for Copy Number Analysis using 'Duckhts'
 Version: 0.0.0.9000
-Authors@R: 
+Authors@R:
     c(
         person(given = "Sounkou Mahamane", family = "Toure", email = "sounkoutoure@gmail.com", comment = c( ORCID = "0009-0001-5914-6798" ),
     role = c("aut", "cre")),
-    person(given = "WisecondorX Authors", role = "ctb", comment = "Authors of the original WisecondorX tool implemented in Python")
+    person(given = "WisecondorX Authors", role = "ctb", comment = "Authors of the original WisecondorX tool implemented in Python"),
+    person(given = "Dirk", family = "de Weerd", role = "cph", comment = "Author of the original NIPTeR package"),
+    person(given = "Lennart", family = "Johansson", role = "cph", comment = "Author of the original NIPTeR package")
     )
-Description: An 'R' implementation of the 'WisecondorX' workflow for copy number analysis of cell-free DNA sequencing data, built on the 'duckhts' extension for 'DuckDB'.
-            Reads BAM/CRAM files via 'duckhts' and replicates the 'WisecondorX' convert, newref, and predict stages in R and SQL.
+Description: An 'R' toolkit for copy number analysis and trisomy prediction in non-invasive prenatal testing (NIPT), built on the 'duckhts' extension for 'DuckDB'.
+            Provides a high-performance implementation of the 'WisecondorX' convert, newref, and predict stages as well as a port of the 'NIPTeR' binning and statistical layer.
+            BAM/CRAM files are read via 'Rduckhts' without requiring 'pysam' or 'Rsamtools'.
+            Intermediate results are written in language-agnostic bgzipped BED format, queryable by any tabix-aware tool or directly by 'DuckDB'.
             Optional conformance testing against the official 'wisecondorx' bioconda package is available via 'condathis' and 'reticulate'; no Python installation is required at runtime.
 Imports: Rduckhts(>= 1.1.6-0.0.2), DBI, duckdb, utils
 Suggests: tinytest, condathis, reticulate

@@ -104,7 +104,7 @@ The pipeline (`newref` + `predict`) is functionally complete and all 76 unit tes
 
 - **End-to-end conformance vs upstream Python**: Bin-for-bin comparison of `rwisecondorx_newref()` + `rwisecondorx_predict()` output against the official Python `wisecondorx newref` + `predict` on real multi-sample BAMs. The reference object (PCA components, KNN indexes, null ratios) and final aberration calls both need to match. Requires a controlled multi-sample BAM set and the bioconda `wisecondorx` package via `condathis`. Not yet automated.
 - **WisecondorX reference as interoperable file**: The `WisecondorXReference` object is currently serialized as an RDS file. The matrices (PCA components, mask, indexes, distances, null_ratios) are dense numeric arrays that don't map naturally to a flat BED/TSV. A structured HDF5 or multiple-TSV.bgz serialization would allow Python tooling to read the reference. Not a priority unless the user has a Python consumer.
-- **`rwisecondorx_newref()` multi-file input via tabix_multi**: Currently takes a list of in-memory sample lists. Could accept a bed_dir argument using `rduckhts_tabix_multi()` to load all WisecondorX 4-column BEDs at once, analogous to `nipter_control_group_from_beds()`.
+- **`rwisecondorx_newref()` multi-file input via tabix_multi**: ~~Currently takes a list of in-memory sample lists. Could accept a bed_dir argument using `rduckhts_tabix_multi()` to load all WisecondorX 4-column BEDs at once, analogous to `nipter_control_group_from_beds()`.~~ **DONE** — `rwisecondorx_newref()` now accepts `bed_dir` and `bed_pattern` parameters.
 - **Threading budget propagation**: `rwisecondorx_newref()` accepts `cpus` for KNN finding. `rwisecondorx_predict()` now accepts `cpus` and passes it to `parSegment()`. Both should be wired together coherently when called from a pipeline script — use the same `cpus` value throughout.
 - **Beta-mode aberration calling**: `rwisecondorx_predict()` supports `zscore` and `beta` (purity-based) cutoffs. The `beta` path (`ratio > 2^beta`) is implemented but not yet tested with real data.
 
@@ -138,6 +138,7 @@ The pipeline (`newref` + `predict`) is functionally complete and all 76 unit tes
 - `inst/tinytest/` — unit tests (one file per feature family).
 - `inst/extdata/` — synthetic BAM/CRAM fixtures and bundled reference data (`grch37_Y_UniqueRegions.txt`).
 - `inst/scripts/make_cohort.R` — CLI wrapper for cohort generation.
+- `inst/scripts/build_reference.R` — optparse CLI for building WisecondorX references or NIPTeR control groups from BAM/CRAM or BED.gz files. Supports `--mode wisecondorx|nipter`, `--bam-dir` (bins then builds), `--bed-dir` (builds from pre-binned BEDs), and all key parameters (binsize, mapq, rmdup, refsize, cpus, etc.).
 - The WisecondorX upstream algorithm reference is `.sync/WisecondorX/`.
 - The NIPTeR upstream algorithm reference is `.sync/NIPTeR/`.
 - The WisecondorX conformance script is `../../duckhts/scripts/wisecondorx_convert_conformance.py`.

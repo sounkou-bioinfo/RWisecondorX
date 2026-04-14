@@ -1,0 +1,3289 @@
+DESCRIPTION:
+Package: Rduckhts
+Title: 'DuckDB' High Throughput Sequencing File Formats Reader
+        Extension
+Version: 1.1.6.9000-0.0.6
+Authors@R: c(
+        person(given = "Sounkou Mahamane", family = "Toure",
+    email = "sounkoutoure@gmail.com",
+    role = c("aut", "cre")),
+    person(given = "James K Bonfield, John Marshall,Petr Danecek ,Heng Li , Valeriu Ohan, Andrew Whitwham,Thomas Keane , Robert M Davies", role = "ctb", comment = "Htslib Authors"),
+    person(given = "Giulio", family = "Genovese", email = "giulio.genovese@gmail.com", role = "cph", comment = "Author of BCFTools munge,score,liftover plugins"),
+    person(given = "DuckDB C Extension API Authors", role = "ctb")
+    )
+Description: Bundles the 'duckhts' 'DuckDB' extension for reading High Throughput
+    Sequencing file formats with 'DuckDB'. The 'DuckDB' C extension API
+    <https://duckdb.org/docs/stable/clients/c/api> and its 'htslib' dependency are
+    compiled from vendored sources during package installation. James K Bonfield and co-authors (2021) <doi:10.1093/gigascience/giab007>.
+License: GPL-3
+Copyright: See inst/COPYRIGHT
+Encoding: UTF-8
+SystemRequirements: GNU make, cmake, zlib, libbz2, liblzma, libcurl,
+        openssl (development headers)
+Depends: R (>= 4.4.0)
+Imports: DBI, duckdb, utils
+Suggests: tinytest
+RoxygenNote: 7.3.3
+URL: https://github.com/RGenomicsETL/duckhts,
+        https://rgenomicsetl.r-universe.dev/Rduckhts
+BugReports: https://github.com/RGenomicsETL/duckhts/issues
+NeedsCompilation: no
+Packaged: 2026-04-13 19:59:24 UTC; root
+Author: Sounkou Mahamane Toure [aut, cre],
+  James K Bonfield, John Marshall,Petr Danecek ,Heng Li , Valeriu Ohan,
+    Andrew Whitwham,Thomas Keane , Robert M Davies [ctb] (Htslib
+    Authors),
+  Giulio Genovese [cph] (Author of BCFTools munge,score,liftover plugins),
+  DuckDB C Extension API Authors [ctb]
+Maintainer: Sounkou Mahamane Toure <sounkoutoure@gmail.com>
+Built: R 4.5.2; ; 2026-04-13 19:59:52 UTC; unix
+
+--------------------------------------------------------------------------------
+Function: Rduckhts()
+DuckDB HTS File Reader Extension for R
+
+Description:
+
+     The Rduckhts package provides an interface to the DuckDB HTS (High
+     Throughput Sequencing) file reader extension from within R. It
+     enables reading common bioinformatics file formats such as
+     VCF/BCF, SAM/BAM/CRAM, FASTA, FASTQ, GFF, GTF, and tabix-indexed
+     files directly from R using SQL queries via DuckDB.
+
+Author(s):
+
+     DuckHTS Contributors
+
+References:
+
+     <https://github.com/RGenomicsETL/duckhts>
+
+See Also:
+
+     Useful links:
+
+        • <https://github.com/RGenomicsETL/duckhts>
+
+        • <https://rgenomicsetl.r-universe.dev/Rduckhts>
+
+        • Report bugs at
+          <https://github.com/RGenomicsETL/duckhts/issues>
+
+
+--------------------------------------------------------------------------------
+Function: detect_complex_types()
+Detect Complex Types in DuckDB Table
+
+Description:
+
+     Identifies columns in a DuckDB table that contain complex types
+     (ARRAY or MAP) that will be returned as R lists.
+
+Usage:
+
+     detect_complex_types(con, table_name)
+     
+Arguments:
+
+     con: A DuckDB connection
+
+table_name: Name of the table to analyze
+
+Value:
+
+     A data frame with columns that have complex types, showing
+     column_name, column_type, and a description of R type.
+
+Examples:
+
+     library(DBI)
+     library(duckdb)
+     
+     con <- dbConnect(duckdb::duckdb(config = list(allow_unsigned_extensions = "true")))
+     rduckhts_load(con)
+     bcf_path <- system.file("extdata", "vcf_file.bcf", package = "Rduckhts")
+     rduckhts_bcf(con, "variants", bcf_path, overwrite = TRUE)
+     complex_cols <- detect_complex_types(con, "variants")
+     print(complex_cols)
+     dbDisconnect(con, shutdown = TRUE)
+     
+
+--------------------------------------------------------------------------------
+Function: duckdb_type_mappings()
+DuckDB to R Type Mappings
+
+Description:
+
+     The mapping covers the most common data types used in HTS file
+     processing:
+
+        • BIGINT <-> double (not integer due to 64-bit overflow
+          protection)
+
+        • DOUBLE <-> numeric/double
+
+        • VARCHAR <-> character/string
+
+        • BOOLEAN <-> logical
+
+        • ARRAY types (e.g., VARCHAR[], BIGINT[]) <-> list
+
+        • MAP types (e.g., MAP(VARCHAR, VARCHAR)) <-> data.frame
+
+     Important notes:
+
+        • 64-bit integers (BIGINT, UBIGINT) become double to prevent
+          overflow
+
+        • DATE/TIME values return as Unix epoch numbers (double)
+
+        • MAP types become data frames with 'key' and 'value' columns
+
+        • ARRAY types become vectors (which are lists in R terminology)
+
+Usage:
+
+     duckdb_type_mappings()
+     
+Details:
+
+     Returns a named list mapping between DuckDB and R data types. This
+     is useful for understanding type conversions when reading HTS
+     files or when specifying column types in tabix functions.
+
+Value:
+
+     A named list with two elements:
+
+     duckdb_to_r Named character vector mapping DuckDB types to R types
+
+     r_to_duckdb Named character vector mapping R types to DuckDB types
+
+Examples:
+
+     mappings <- duckdb_type_mappings()
+     mappings$duckdb_to_r["BIGINT"]
+     mappings$r_to_duckdb["integer"]
+     
+
+--------------------------------------------------------------------------------
+Function: duckhts_append_metadata()
+Append DuckDB extension metadata trailer to a shared library
+
+Description:
+
+     Append DuckDB extension metadata trailer to a shared library
+
+Usage:
+
+     duckhts_append_metadata(ext_file, verbose = FALSE)
+     
+
+--------------------------------------------------------------------------------
+Function: duckhts_bootstrap()
+Bootstrap the duckhts extension sources into the R package
+
+Description:
+
+     Copies extension source files from the parent duckhts repository
+     into ‘inst/duckhts_extension/’ so the R package becomes
+     self-contained. Run this before ‘R CMD build’ to prepare the
+     source tarball.
+
+Usage:
+
+     duckhts_bootstrap(repo_root = NULL)
+     
+Arguments:
+
+repo_root: Path to the duckhts repository root. Required.
+
+Value:
+
+     Invisibly returns the destination directory.
+
+
+--------------------------------------------------------------------------------
+Function: duckhts_build()
+Build the duckhts DuckDB extension
+
+Description:
+
+     Compiles htslib and the duckhts extension from the sources bundled
+     in the installed R package. The built ‘.duckdb_extension’ file is
+     placed in the extension directory.
+
+Usage:
+
+     duckhts_build(build_dir = NULL, make = NULL, force = FALSE, verbose = TRUE)
+     
+Arguments:
+
+build_dir: Where to build. Required. Use a writable location such as
+          ‘tempdir()’ when the installed package directory is
+          read-only.
+
+    make: Optional GNU make command to use (e.g., "gmake" or "make").
+          When NULL, auto-detects gmake or make. If a non-GNU make is
+          used, htslib's configure step will fail.
+
+   force: Rebuild even if the extension file already exists.
+
+ verbose: Print build output.
+
+Value:
+
+     Path to the built ‘duckhts.duckdb_extension’ file.
+
+
+--------------------------------------------------------------------------------
+Function: duckhts_detect_platform()
+Detect DuckDB platform string
+
+Description:
+
+     Detect DuckDB platform string
+
+Usage:
+
+     duckhts_detect_platform()
+     
+
+--------------------------------------------------------------------------------
+Function: duckhts_load()
+Load the duckhts extension into a DuckDB connection
+
+Description:
+
+     Load the duckhts extension into a DuckDB connection
+
+Usage:
+
+     duckhts_load(con = NULL, extension_path = NULL)
+     
+Arguments:
+
+     con: An existing DuckDB connection, or ‘NULL’ to create one.
+
+extension_path: Explicit path to the ‘.duckdb_extension’ file. If
+          ‘NULL’, uses the default location in the installed package.
+
+Value:
+
+     The DuckDB connection (invisibly).
+
+
+--------------------------------------------------------------------------------
+Function: extract_array_element()
+Extract Array Elements Safely
+
+Description:
+
+     Helper function to safely extract elements from DuckDB arrays
+     (returned as R lists) with proper error handling.
+
+Usage:
+
+     extract_array_element(array_col, index = NULL, default = NA)
+     
+Arguments:
+
+array_col: A list column from DuckDB array data
+
+   index: Numeric index (1-based). If NULL, returns full list
+
+ default: Default value if index is out of bounds
+
+Value:
+
+     The array element at the specified index, or full array if index
+     is NULL
+
+Examples:
+
+     library(DBI)
+     library(duckdb)
+     
+     con <- dbConnect(duckdb::duckdb(config = list(allow_unsigned_extensions = "true")))
+     rduckhts_load(con)
+     bcf_path <- system.file("extdata", "vcf_file.bcf", package = "Rduckhts")
+     rduckhts_bcf(con, "variants", bcf_path, overwrite = TRUE)
+     data <- dbGetQuery(con, "SELECT ALT FROM variants LIMIT 5")
+     first_alt <- extract_array_element(data$ALT, 1)
+     all_alts <- extract_array_element(data$ALT)
+     dbDisconnect(con, shutdown = TRUE)
+     
+
+--------------------------------------------------------------------------------
+Function: extract_map_data()
+Extract MAP Keys and Values
+
+Description:
+
+     Helper function to work with DuckDB MAP data (returned as data
+     frames). Can extract keys, values, or search for specific
+     key-value pairs.
+
+Usage:
+
+     extract_map_data(map_col, operation = "keys", default = NA)
+     
+Arguments:
+
+ map_col: A data frame column from DuckDB MAP data
+
+operation: What to extract: "keys", "values", or a specific key name
+
+ default: Default value if key is not found (only used when operation
+          is a key name)
+
+Value:
+
+     Extracted data based on the operation
+
+Examples:
+
+     library(DBI)
+     library(duckdb)
+     
+     con <- dbConnect(duckdb::duckdb(config = list(allow_unsigned_extensions = "true")))
+     rduckhts_load(con)
+     gff_path <- system.file("extdata", "gff_file.gff.gz", package = "Rduckhts")
+     rduckhts_gff(con, "annotations", gff_path, attributes_map = TRUE, overwrite = TRUE)
+     data <- dbGetQuery(con, "SELECT attributes FROM annotations LIMIT 5")
+     keys <- extract_map_data(data$attributes, "keys")
+     name_values <- extract_map_data(data$attributes, "Name")
+     dbDisconnect(con, shutdown = TRUE)
+     
+
+--------------------------------------------------------------------------------
+Function: normalize_tabix_types()
+Normalize R Data Types to DuckDB Types for Tabix
+
+Description:
+
+     Normalizes R data type names to their corresponding DuckDB types
+     for use with tabix readers. This function handles common R type
+     name variations and maps them to appropriate DuckDB column types.
+
+Usage:
+
+     normalize_tabix_types(types)
+     
+Arguments:
+
+   types: A character vector of R data type names to be normalized.
+
+Details:
+
+     The function performs the following normalizations:
+
+        • Integer types (integer, int, int32, int64) -> BIGINT
+
+        • Numeric types (numeric, double, float) -> DOUBLE
+
+        • Character types (character, string, chr) -> VARCHAR
+
+        • Logical types (logical, bool, boolean) -> BOOLEAN
+
+        • Other types -> Converted to uppercase as-is
+
+     If an empty vector is provided, it returns the empty vector
+     unchanged.
+
+Value:
+
+     A character vector of normalized DuckDB type names suitable for
+     tabix columns.
+
+See Also:
+
+     ‘rduckhts_tabix’ for using normalized types with tabix readers,
+     ‘duckdb_type_mappings’ for the complete type mapping table.
+
+Examples:
+
+     normalize_tabix_types(c("integer", "character", "numeric"))
+     normalize_tabix_types(c("int", "string", "float"))
+     
+
+--------------------------------------------------------------------------------
+Function: rduckhts_bam()
+Create SAM/BAM/CRAM Table
+
+Description:
+
+     Creates a DuckDB table from SAM, BAM, or CRAM files using the
+     DuckHTS extension.
+
+Usage:
+
+     rduckhts_bam(
+       con,
+       table_name,
+       path,
+       region = NULL,
+       index_path = NULL,
+       reference = NULL,
+       standard_tags = FALSE,
+       auxiliary_tags = FALSE,
+       sequence_encoding = NULL,
+       quality_representation = NULL,
+       overwrite = FALSE
+     )
+     
+Arguments:
+
+     con: A DuckDB connection with DuckHTS loaded
+
+table_name: Name for the created table
+
+    path: Path to the SAM/BAM/CRAM file
+
+  region: Optional genomic region (e.g., "chr1:1000-2000")
+
+index_path: Optional explicit path to index file (.bai/.csi/.crai)
+
+reference: Optional reference file path for CRAM files
+
+standard_tags: Logical. If TRUE, include typed standard SAMtags
+          columns. Default FALSE.
+
+auxiliary_tags: Logical. If TRUE, include AUXILIARY_TAGS map of
+          non-standard tags. Default FALSE.
+
+sequence_encoding: Character. Sequence encoding for the SEQ column:
+          ‘"string"’ (default) returns decoded bases as ‘VARCHAR’;
+          ‘"nt16"’ returns raw htslib nt16 4-bit codes as ‘UTINYINT[]’.
+
+quality_representation: Character. Quality representation for the QUAL
+          column: ‘"string"’ (default) returns canonical Phred+33 text;
+          ‘"phred"’ returns raw Phred values as ‘UTINYINT[]’.
+
+overwrite: Logical. If TRUE, overwrites existing table
+
+Value:
+
+     Invisible TRUE on success
+
+Examples:
+
+     library(DBI)
+     library(duckdb)
+     
+     con <- dbConnect(duckdb::duckdb(config = list(allow_unsigned_extensions = "true")))
+     rduckhts_load(con)
+     bam_path <- system.file("extdata", "range.bam", package = "Rduckhts")
+     rduckhts_bam(con, "reads", bam_path, overwrite = TRUE)
+     dbGetQuery(con, "SELECT COUNT(*) FROM reads WHERE FLAG & 4 = 0")
+     dbDisconnect(con, shutdown = TRUE)
+     
+
+--------------------------------------------------------------------------------
+Function: rduckhts_bam_index()
+Build BAM or CRAM Index
+
+Description:
+
+     Builds a BAM or CRAM index using the DuckHTS extension.
+
+Usage:
+
+     rduckhts_bam_index(con, path, index_path = NULL, min_shift = 0, threads = 4)
+     
+Arguments:
+
+     con: A DuckDB connection with DuckHTS loaded
+
+    path: Path to the input BAM or CRAM file
+
+index_path: Optional explicit output path for the created index
+
+min_shift: Index format selector used by htslib
+
+ threads: htslib indexing thread count
+
+Value:
+
+     A data frame with `success`, `index_path`, and `index_format`
+
+
+--------------------------------------------------------------------------------
+Function: rduckhts_bcf()
+Create VCF/BCF Table
+
+Description:
+
+     Creates a DuckDB table from a VCF or BCF file using the DuckHTS
+     extension. This follows the RBCFTools pattern of creating a table
+     that can be queried.
+
+Usage:
+
+     rduckhts_bcf(
+       con,
+       table_name,
+       path,
+       region = NULL,
+       index_path = NULL,
+       tidy_format = FALSE,
+       additional_csq_column_types = NULL,
+       overwrite = FALSE
+     )
+     
+Arguments:
+
+     con: A DuckDB connection with DuckHTS loaded
+
+table_name: Name for the created table
+
+    path: Path to the VCF/BCF file
+
+  region: Optional genomic region (e.g., "chr1:1000-2000")
+
+index_path: Optional explicit path to index file (.csi/.tbi)
+
+tidy_format: Logical. If TRUE, FORMAT columns are returned in tidy
+          format
+
+additional_csq_column_types: Optional bcftools-style `PATTERN TYPE`
+          overrides for CSQ/ANN/BCSQ subfield typing, separated by
+          newlines or `;`
+
+overwrite: Logical. If TRUE, overwrites existing table
+
+Value:
+
+     Invisible TRUE on success
+
+Examples:
+
+     library(DBI)
+     library(duckdb)
+     
+     con <- dbConnect(duckdb::duckdb(config = list(allow_unsigned_extensions = "true")))
+     rduckhts_load(con)
+     bcf_path <- system.file("extdata", "vcf_file.bcf", package = "Rduckhts")
+     rduckhts_bcf(con, "variants", bcf_path, overwrite = TRUE)
+     dbGetQuery(con, "SELECT * FROM variants LIMIT 2")
+     dbDisconnect(con, shutdown = TRUE)
+     
+
+--------------------------------------------------------------------------------
+Function: rduckhts_bcf_index()
+Build VCF or BCF Index
+
+Description:
+
+     Builds a TBI or CSI index for a VCF/BCF file using the DuckHTS
+     extension.
+
+Usage:
+
+     rduckhts_bcf_index(con, path, index_path = NULL, min_shift = NULL, threads = 4)
+     
+Arguments:
+
+     con: A DuckDB connection with DuckHTS loaded
+
+    path: Path to the input VCF/BCF file
+
+index_path: Optional explicit output path for the created index
+
+min_shift: Optional explicit min_shift passed to htslib
+
+ threads: htslib indexing thread count
+
+Value:
+
+     A data frame with `success`, `index_path`, and `index_format`
+
+
+--------------------------------------------------------------------------------
+Function: rduckhts_bed()
+Create BED Table
+
+Description:
+
+     Creates a DuckDB table from a BED file using the DuckHTS
+     extension.
+
+Usage:
+
+     rduckhts_bed(
+       con,
+       table_name,
+       path,
+       region = NULL,
+       index_path = NULL,
+       overwrite = FALSE
+     )
+     
+Arguments:
+
+     con: A DuckDB connection with DuckHTS loaded
+
+table_name: Name for the created table
+
+    path: Path to the BED file
+
+  region: Optional genomic region for tabix-backed BED queries
+
+index_path: Optional explicit path to a BED tabix index
+
+overwrite: Logical. If TRUE, overwrites an existing table
+
+Value:
+
+     Invisible TRUE on success
+
+
+--------------------------------------------------------------------------------
+Function: rduckhts_bgunzip()
+BGZF Decompress a File
+
+Description:
+
+     Decompresses a BGZF file using the DuckHTS extension.
+
+Usage:
+
+     rduckhts_bgunzip(
+       con,
+       path,
+       output_path = NULL,
+       threads = 4,
+       keep = TRUE,
+       overwrite = FALSE
+     )
+     
+Arguments:
+
+     con: A DuckDB connection with DuckHTS loaded
+
+    path: Path to the BGZF-compressed input file
+
+output_path: Optional explicit output path
+
+ threads: BGZF worker thread count
+
+    keep: Keep the compressed input file after decompression
+
+overwrite: Overwrite an existing output file
+
+Value:
+
+     A data frame describing the created output file
+
+
+--------------------------------------------------------------------------------
+Function: rduckhts_bgzip()
+BGZF Compress a File
+
+Description:
+
+     Compresses a plain file to BGZF using the DuckHTS extension.
+
+Usage:
+
+     rduckhts_bgzip(
+       con,
+       path,
+       output_path = NULL,
+       threads = 4,
+       level = -1,
+       keep = TRUE,
+       overwrite = FALSE
+     )
+     
+Arguments:
+
+     con: A DuckDB connection with DuckHTS loaded
+
+    path: Path to the input file
+
+output_path: Optional explicit output path
+
+ threads: BGZF worker thread count
+
+   level: Compression level, or -1 for the htslib default
+
+    keep: Keep the original input file after compression
+
+overwrite: Overwrite an existing output file
+
+Value:
+
+     A data frame describing the created BGZF file
+
+
+--------------------------------------------------------------------------------
+Function: rduckhts_detect_quality_encoding()
+Detect FASTQ Quality Encoding
+
+Description:
+
+     Inspects a FASTQ file's observed quality ASCII range and reports
+     compatible legacy encodings with a heuristic guessed encoding.
+
+Usage:
+
+     rduckhts_detect_quality_encoding(con, path, max_records = 10000)
+     
+Arguments:
+
+     con: A DuckDB connection with DuckHTS loaded
+
+    path: Path to the FASTQ file
+
+max_records: Maximum number of records to inspect
+
+Value:
+
+     A data frame with the detected quality encoding summary
+
+
+--------------------------------------------------------------------------------
+Function: rduckhts_fasta()
+Create FASTA Table
+
+Description:
+
+     Creates a DuckDB table from FASTA files using the DuckHTS
+     extension.
+
+Usage:
+
+     rduckhts_fasta(
+       con,
+       table_name,
+       path,
+       region = NULL,
+       index_path = NULL,
+       sequence_encoding = NULL,
+       overwrite = FALSE
+     )
+     
+Arguments:
+
+     con: A DuckDB connection with DuckHTS loaded
+
+table_name: Name for the created table
+
+    path: Path to the FASTA file
+
+  region: Optional genomic region (e.g., "chr1:1000-2000" or
+          "chr1:1-10,chr2:5-20")
+
+index_path: Optional explicit path to FASTA index file (.fai)
+
+sequence_encoding: Character. Sequence encoding for the SEQUENCE
+          column: ‘"string"’ (default) returns decoded bases as
+          ‘VARCHAR’; ‘"nt16"’ returns raw htslib nt16 4-bit codes as
+          ‘UTINYINT[]’.
+
+overwrite: Logical. If TRUE, overwrites existing table
+
+Value:
+
+     Invisible TRUE on success
+
+
+--------------------------------------------------------------------------------
+Function: rduckhts_fasta_index()
+Build FASTA Index
+
+Description:
+
+     Builds a FASTA index (.fai) using the DuckHTS extension.
+
+Usage:
+
+     rduckhts_fasta_index(con, path, index_path = NULL)
+     
+Arguments:
+
+     con: A DuckDB connection with DuckHTS loaded
+
+    path: Path to the FASTA file
+
+index_path: Optional explicit output path for FASTA index file (.fai)
+
+Value:
+
+     A data frame with columns `success` and `index_path`
+
+
+--------------------------------------------------------------------------------
+Function: rduckhts_fasta_nuc()
+Compute FASTA Interval Nucleotide Composition
+
+Description:
+
+     Computes bedtools nuc-style nucleotide composition over either a
+     BED file or generated fixed-width bins.
+
+Usage:
+
+     rduckhts_fasta_nuc(
+       con,
+       path,
+       bed_path = NULL,
+       bin_width = NULL,
+       region = NULL,
+       index_path = NULL,
+       bed_index_path = NULL,
+       include_seq = FALSE
+     )
+     
+Arguments:
+
+     con: A DuckDB connection with DuckHTS loaded
+
+    path: Path to the FASTA file
+
+bed_path: Optional BED path. Supply exactly one of `bed_path` or
+          `bin_width`.
+
+bin_width: Optional fixed bin width in base pairs
+
+  region: Optional FASTA region filter
+
+index_path: Optional explicit FASTA index path
+
+bed_index_path: Optional explicit BED tabix index path
+
+include_seq: Include the fetched interval sequence
+
+Value:
+
+     A data frame with interval composition statistics
+
+
+--------------------------------------------------------------------------------
+Function: rduckhts_fastq()
+Create FASTQ Table
+
+Description:
+
+     Creates a DuckDB table from FASTQ files using the DuckHTS
+     extension.
+
+Usage:
+
+     rduckhts_fastq(
+       con,
+       table_name,
+       path,
+       mate_path = NULL,
+       interleaved = FALSE,
+       sequence_encoding = NULL,
+       quality_representation = NULL,
+       input_quality_encoding = NULL,
+       overwrite = FALSE
+     )
+     
+Arguments:
+
+     con: A DuckDB connection with DuckHTS loaded
+
+table_name: Name for the created table
+
+    path: Path to the FASTQ file
+
+mate_path: Optional path to mate file for paired reads
+
+interleaved: Logical indicating if file is interleaved paired reads
+
+sequence_encoding: Character. Sequence encoding for the SEQUENCE
+          column: ‘"string"’ (default) returns decoded bases as
+          ‘VARCHAR’; ‘"nt16"’ returns raw htslib nt16 4-bit codes as
+          ‘UTINYINT[]’.
+
+quality_representation: Character. Quality representation for the
+          QUALITY column: ‘"string"’ (default) returns canonical
+          Phred+33 text; ‘"phred"’ returns raw Phred values as
+          ‘UTINYINT[]’.
+
+input_quality_encoding: Character. Input FASTQ quality encoding:
+          ‘"phred33"’ (default FASTQ convention), ‘"auto"’,
+          ‘"phred64"’, or ‘"solexa64"’.
+
+overwrite: Logical. If TRUE, overwrites existing table
+
+Value:
+
+     Invisible TRUE on success
+
+
+--------------------------------------------------------------------------------
+Function: rduckhts_functions()
+List DuckHTS Extension Functions
+
+Description:
+
+     Returns the package-bundled function catalog generated from the
+     top-level ‘functions.yaml’ manifest in the duckhts repository.
+
+Usage:
+
+     rduckhts_functions(category = NULL, kind = NULL)
+     
+Arguments:
+
+category: Optional function category filter.
+
+    kind: Optional function kind filter such as ‘"scalar"’, ‘"table"’,
+          or ‘"table_macro"’.
+
+Value:
+
+     A data frame describing the extension functions, including the
+     DuckDB function name, kind, category, signature, return type,
+     optional R helper wrapper, short description, and example SQL.
+
+Examples:
+
+     catalog <- rduckhts_functions()
+     subset(catalog, category == "Sequence UDFs", select = c("name", "description"))
+     subset(rduckhts_functions(kind = "table"), select = c("name", "r_wrapper"))
+     
+
+--------------------------------------------------------------------------------
+Function: rduckhts_gff()
+Create GFF3 Table
+
+Description:
+
+     Creates a DuckDB table from GFF3 files using the DuckHTS
+     extension.
+
+Usage:
+
+     rduckhts_gff(
+       con,
+       table_name,
+       path,
+       region = NULL,
+       index_path = NULL,
+       header = NULL,
+       header_names = NULL,
+       auto_detect = NULL,
+       column_types = NULL,
+       attributes_map = FALSE,
+       overwrite = FALSE
+     )
+     
+Arguments:
+
+     con: A DuckDB connection with DuckHTS loaded
+
+table_name: Name for the created table
+
+    path: Path to the GFF3 file
+
+  region: Optional genomic region (e.g., "chr1:1000-2000")
+
+index_path: Optional explicit path to index file (.tbi/.csi)
+
+  header: Logical. If TRUE, use first non-meta line as column names
+
+header_names: Character vector to override column names
+
+auto_detect: Logical. If TRUE, infer basic numeric column types
+
+column_types: Character vector of column types (e.g. "BIGINT",
+          "VARCHAR")
+
+attributes_map: Logical. If TRUE, returns attributes as a MAP column
+
+overwrite: Logical. If TRUE, overwrites existing table
+
+Value:
+
+     Invisible TRUE on success
+
+
+--------------------------------------------------------------------------------
+Function: rduckhts_gtf()
+Create GTF Table
+
+Description:
+
+     Creates a DuckDB table from GTF files using the DuckHTS extension.
+
+Usage:
+
+     rduckhts_gtf(
+       con,
+       table_name,
+       path,
+       region = NULL,
+       index_path = NULL,
+       header = NULL,
+       header_names = NULL,
+       auto_detect = NULL,
+       column_types = NULL,
+       attributes_map = FALSE,
+       overwrite = FALSE
+     )
+     
+Arguments:
+
+     con: A DuckDB connection with DuckHTS loaded
+
+table_name: Name for the created table
+
+    path: Path to the GTF file
+
+  region: Optional genomic region (e.g., "chr1:1000-2000")
+
+index_path: Optional explicit path to index file (.tbi/.csi)
+
+  header: Logical. If TRUE, use first non-meta line as column names
+
+header_names: Character vector to override column names
+
+auto_detect: Logical. If TRUE, infer basic numeric column types
+
+column_types: Character vector of column types (e.g. "BIGINT",
+          "VARCHAR")
+
+attributes_map: Logical. If TRUE, returns attributes as a MAP column
+
+overwrite: Logical. If TRUE, overwrites existing table
+
+Value:
+
+     Invisible TRUE on success
+
+
+--------------------------------------------------------------------------------
+Function: rduckhts_hts_header()
+Read HTS Header Metadata
+
+Description:
+
+     Reads file header records from HTS-supported formats using the
+     DuckHTS extension.
+
+Usage:
+
+     rduckhts_hts_header(con, path, format = NULL, mode = NULL)
+     
+Arguments:
+
+     con: A DuckDB connection with DuckHTS loaded
+
+    path: Path to input HTS file
+
+  format: Optional format hint (e.g., "auto", "vcf", "bcf", "bam",
+          "cram", "tabix")
+
+    mode: Header output mode: "parsed" (default), "raw", or "both"
+
+Value:
+
+     A data frame with parsed header metadata.
+
+
+--------------------------------------------------------------------------------
+Function: rduckhts_hts_index()
+Read HTS Index Metadata
+
+Description:
+
+     Reads index metadata from HTS-supported index files via DuckHTS.
+
+Usage:
+
+     rduckhts_hts_index(con, path, format = NULL, index_path = NULL)
+     
+Arguments:
+
+     con: A DuckDB connection with DuckHTS loaded
+
+    path: Path to input HTS file
+
+  format: Optional format hint (e.g., "auto", "vcf", "bcf", "bam",
+          "cram", "tabix")
+
+index_path: Optional explicit path to index file
+
+Value:
+
+     A data frame with index metadata.
+
+
+--------------------------------------------------------------------------------
+Function: rduckhts_hts_index_raw()
+Read Raw HTS Index Blob
+
+Description:
+
+     Returns raw index metadata blob data for a file index.
+
+Usage:
+
+     rduckhts_hts_index_raw(con, path, format = NULL, index_path = NULL)
+     
+Arguments:
+
+     con: A DuckDB connection with DuckHTS loaded
+
+    path: Path to input HTS file
+
+  format: Optional format hint
+
+index_path: Optional explicit path to index file
+
+Value:
+
+     A data frame with raw index blob metadata.
+
+
+--------------------------------------------------------------------------------
+Function: rduckhts_hts_index_spans()
+Read HTS Index Spans
+
+Description:
+
+     Returns index span-oriented metadata for planning range workloads.
+
+Usage:
+
+     rduckhts_hts_index_spans(con, path, format = NULL, index_path = NULL)
+     
+Arguments:
+
+     con: A DuckDB connection with DuckHTS loaded
+
+    path: Path to input HTS file
+
+  format: Optional format hint
+
+index_path: Optional explicit path to index file
+
+Value:
+
+     A data frame with span-oriented index metadata.
+
+
+--------------------------------------------------------------------------------
+Function: rduckhts_liftover()
+Lift Over Variant Coordinates Against a Query
+
+Description:
+
+     Applies the DuckHTS `duckdb_liftover(...)` table macro to rows
+     from a SQL query or table expression with chromosome and position
+     columns, plus optional reference and alternate alleles.
+
+Usage:
+
+     rduckhts_liftover(
+       con,
+       query,
+       chain_path,
+       dst_fasta_ref,
+       chrom_col = "chrom",
+       pos_col = "pos",
+       ref_col = NULL,
+       alt_col = NULL,
+       src_fasta_ref = NULL,
+       max_snp_gap = 1,
+       max_indel_inc = 250,
+       lift_mt = FALSE,
+       end_pos_col = NULL,
+       no_left_align = FALSE
+     )
+     
+Arguments:
+
+     con: A DuckDB connection with DuckHTS loaded
+
+   query: SQL query or table expression to lift over
+
+chain_path: Path to a UCSC chain file
+
+dst_fasta_ref: Path to the destination FASTA reference
+
+chrom_col: Source chromosome column name
+
+ pos_col: Source 1-based position column name
+
+ ref_col: Optional reference allele column name
+
+ alt_col: Optional alternate allele column name
+
+src_fasta_ref: Optional source FASTA reference
+
+max_snp_gap: Maximum chain block merge gap
+
+max_indel_inc: Maximum indel anchor expansion
+
+ lift_mt: If FALSE (default), mitochondrial variants with matching
+          source/destination contig lengths are passed through with
+          only contig rename. If TRUE, MT variants are lifted through
+          the chain like any other contig.
+
+end_pos_col: Optional column name containing INFO/END positions
+          (1-based) to lift alongside the primary position. When
+          provided, the output includes a `dest_end` column with the
+          lifted end position.
+
+no_left_align: If FALSE (default), lifted indels are left-aligned
+          against the destination reference. Set TRUE to skip
+          left-alignment, mirroring ‘--no-left-align’ in ‘bcftools
+          +liftover’.
+
+Value:
+
+     A data frame with source columns, lifted coordinates/alleles, and
+     warnings.
+
+
+--------------------------------------------------------------------------------
+Function: rduckhts_load()
+Load DuckHTS Extension
+
+Description:
+
+     Loads the DuckHTS extension into a DuckDB connection. This must be
+     called before using any of the HTS reader functions.
+
+Usage:
+
+     rduckhts_load(con, extension_path = NULL)
+     
+Arguments:
+
+     con: A DuckDB connection object
+
+extension_path: Optional path to the duckhts extension file. If NULL,
+          will try to use the bundled extension.
+
+Details:
+
+     The DuckDB connection must be created with
+     ‘allow_unsigned_extensions = "true"’.
+
+Value:
+
+     TRUE if the extension was loaded successfully
+
+Examples:
+
+     library(DBI)
+     library(duckdb)
+     
+     con <- dbConnect(duckdb::duckdb(config = list(allow_unsigned_extensions = "true")))
+     rduckhts_load(con)
+     dbDisconnect(con, shutdown = TRUE)
+     
+
+--------------------------------------------------------------------------------
+Function: rduckhts_munge()
+Munge Summary Statistics Rows
+
+Description:
+
+     Applies the DuckHTS `duckdb_munge(...)` table macro to rows from a
+     SQL query or table expression, using either an upstream-style
+     preset, a named column map, or a two-column mapping file. When no
+     mapping mode is provided, the bundled `colheaders.tsv` alias file
+     is used by default.
+
+Usage:
+
+     rduckhts_munge(
+       con,
+       query,
+       fasta_ref = NULL,
+       preset = NULL,
+       column_map = NULL,
+       column_map_file = NULL,
+       iffy_tag = "IFFY",
+       mismatch_tag = "REF_MISMATCH",
+       ns = NULL,
+       nc = NULL,
+       ne = NULL
+     )
+     
+Arguments:
+
+     con: A DuckDB connection with DuckHTS loaded
+
+   query: SQL query or table expression to normalize
+
+fasta_ref: Path to the reference FASTA. When NULL (default), operates
+          in fai-only mode: alleles pass through as-is without
+          reference matching or allele swapping, matching upstream
+          `-fai`-only behavior.
+
+  preset: Optional preset such as `"PLINK"`, `"PLINK2"`, `"REGENIE"`,
+          `"SAIGE"`, `"BOLT"`, `"METAL"`, `"PGS"`, or `"SSF"`
+
+column_map: Optional named character vector mapping canonical munge
+          names such as `"CHR"`, `"BP"`, `"A1"`, `"A2"` to source
+          column names
+
+column_map_file: Optional path to a two-column TSV mapping file in the
+          upstream `source<TAB>canonical` format
+
+iffy_tag: FILTER tag for ambiguous reference resolution
+
+mismatch_tag: FILTER tag for reference mismatches
+
+ns, nc, ne: Optional global overrides for sample counts
+
+Value:
+
+     A data frame with normalized GWAS-VCF-style variant/effect
+     columns.
+
+
+--------------------------------------------------------------------------------
+Function: rduckhts_score()
+Compute Polygenic Scores
+
+Description:
+
+     Calls the DuckHTS `bcftools_score(...)` table function to compute
+     sample-level polygenic scores from one genotype VCF/BCF file and
+     one summary-statistics file.
+
+Usage:
+
+     rduckhts_score(
+       con,
+       bcf_path,
+       summary_path,
+       use = NULL,
+       columns = "PLINK",
+       columns_file = NULL,
+       q_score_thr = NULL,
+       use_variant_id = FALSE,
+       counts = FALSE,
+       samples = NULL,
+       force_samples = FALSE,
+       regions = NULL,
+       regions_file = NULL,
+       regions_overlap = 1,
+       targets = NULL,
+       targets_file = NULL,
+       targets_overlap = 0,
+       apply_filters = NULL,
+       include = NULL,
+       exclude = NULL
+     )
+     
+Arguments:
+
+     con: A DuckDB connection with DuckHTS loaded
+
+bcf_path: Path to genotype VCF/BCF file
+
+summary_path: Path to summary-statistics file
+
+     use: Optional dosage source (`"GT"`, `"DS"`, `"HDS"`, `"AP"`,
+          `"GP"`, `"AS"`)
+
+ columns: Optional summary preset (`"PLINK"`, `"PLINK2"`, `"REGENIE"`,
+          `"SAIGE"`, `"BOLT"`, `"METAL"`, `"PGS"`, `"SSF"`,
+          `"GWAS-SSF"`)
+
+columns_file: Optional two-column summary header mapping file
+
+q_score_thr: Optional comma-separated p-value thresholds (e.g.
+          `"1e-8,1e-6,1e-4"`)
+
+use_variant_id: Logical; if TRUE, match variants by ID instead of
+          CHR+BP
+
+  counts: Logical; if TRUE, include per-threshold matched-variant
+          counts
+
+ samples: Optional comma-separated list of sample names to subset (e.g.
+          `"SAMP1,SAMP2"`)
+
+force_samples: Logical; if TRUE, ignore missing samples instead of
+          erroring
+
+ regions: Optional comma-separated region list (e.g.
+          `"1:1000-2000,2:50-90"`)
+
+regions_file: Optional path to a regions file
+
+regions_overlap: Overlap mode for regions (`0`, `1`, or `2`). Default 1
+          (trim to region).
+
+ targets: Optional comma-separated targets list
+
+targets_file: Optional path to a targets file
+
+targets_overlap: Overlap mode for targets (`0`, `1`, or `2`). Default 0
+          (record must start in region).
+
+apply_filters: Optional comma-separated FILTER names to keep (e.g.
+          `"PASS,."`)
+
+ include: Optional site expression (currently unsupported)
+
+ exclude: Optional site expression (currently unsupported)
+
+Value:
+
+     A data frame with one row per sample and score/count columns.
+
+
+--------------------------------------------------------------------------------
+Function: rduckhts_tabix()
+Create Tabix-Indexed File Table
+
+Description:
+
+     Creates a DuckDB table from any tabix-indexed file using the
+     DuckHTS extension.
+
+Usage:
+
+     rduckhts_tabix(
+       con,
+       table_name,
+       path,
+       region = NULL,
+       index_path = NULL,
+       header = NULL,
+       header_names = NULL,
+       auto_detect = NULL,
+       column_types = NULL,
+       overwrite = FALSE
+     )
+     
+Arguments:
+
+     con: A DuckDB connection with DuckHTS loaded
+
+table_name: Name for the created table
+
+    path: Path to the tabix-indexed file
+
+  region: Optional genomic region (e.g., "chr1:1000-2000")
+
+index_path: Optional explicit path to index file (.tbi/.csi)
+
+  header: Logical. If TRUE, use first non-meta line as column names
+
+header_names: Character vector to override column names
+
+auto_detect: Logical. If TRUE, infer basic numeric column types
+
+column_types: Character vector of column types (e.g. "BIGINT",
+          "VARCHAR")
+
+overwrite: Logical. If TRUE, overwrites existing table
+
+Value:
+
+     Invisible TRUE on success
+
+
+--------------------------------------------------------------------------------
+Function: rduckhts_tabix_index()
+Build Tabix Index
+
+Description:
+
+     Builds a tabix index for a BGZF-compressed text file using the
+     DuckHTS extension.
+
+Usage:
+
+     rduckhts_tabix_index(
+       con,
+       path,
+       preset = "vcf",
+       index_path = NULL,
+       min_shift = 0,
+       threads = 4,
+       seq_col = NULL,
+       start_col = NULL,
+       end_col = NULL,
+       comment_char = NULL,
+       skip_lines = NULL
+     )
+     
+Arguments:
+
+     con: A DuckDB connection with DuckHTS loaded
+
+    path: Path to the BGZF-compressed input file
+
+  preset: Optional preset such as `"vcf"`, `"bed"`, `"gff"`, or `"sam"`
+
+index_path: Optional explicit output path for the created index
+
+min_shift: Index format selector used by htslib
+
+ threads: htslib indexing thread count
+
+seq_col, start_col, end_col: Optional explicit tabix coordinate columns
+
+comment_char: Optional tabix comment/header prefix
+
+skip_lines: Optional fixed number of header lines to skip
+
+Value:
+
+     A data frame with `success`, `index_path`, and `index_format`
+
+
+--------------------------------------------------------------------------------
+Function: setup_hts_env()
+Setup HTSlib Environment
+
+Description:
+
+     Sets the `HTS_PATH` environment variable to point to the bundled
+     htslib plugins directory. This enables remote file access via
+     libcurl plugins (e.g., s3://, gs://, http://) when plugins are
+     available.
+
+Usage:
+
+     setup_hts_env(plugins_dir = NULL)
+     
+Arguments:
+
+plugins_dir: Optional path to the htslib plugins directory. When NULL,
+          uses the bundled plugins directory if available.
+
+Details:
+
+     Call this before querying remote URLs to allow htslib to locate
+     its plugins.
+
+Value:
+
+     Invisibly returns the previous value of `HTS_PATH` (or `NA` if
+     unset).
+
+Examples:
+
+     ## Not run:
+     
+     setup_hts_env()
+     
+     plugins_path <- tempfile("hts_plugins_")
+     dir.create(plugins_path)
+     setup_hts_env(plugins_dir = plugins_path)
+     unlink(plugins_path, recursive = TRUE)
+     ## End(Not run)
+     
+
+--------------------------------------------------------------------------------
+Function: .build_hts_arm()
+function (reader, file, params) 
+{
+    param_parts <- character(0)
+    if (length(params) > 0) {
+        param_parts <- vapply(names(params), function(nm) {
+            .format_hts_param(nm, params[[nm]])
+        }, character(1))
+    }
+    param_str <- if (length(param_parts) > 0) {
+        paste0(", ", paste(param_parts, collapse = ", "))
+    }
+    else {
+        ""
+    }
+    quoted_file <- sql_quote_string(file)
+    sprintf("SELECT %s AS filename, t.* FROM %s(%s%s) t", quoted_file, 
+        reader, quoted_file, param_str)
+}
+
+--------------------------------------------------------------------------------
+Function: .expand_hts_files()
+function (con, files) 
+{
+    all_files <- character(0)
+    for (pattern in files) {
+        sql <- sprintf("SELECT file FROM glob(%s) g(file)", sql_quote_string(pattern))
+        res <- DBI::dbGetQuery(con, sql)
+        if (nrow(res) == 0) {
+            warning(sprintf("Pattern '%s' matched no files", 
+                pattern), call. = FALSE)
+        }
+        else {
+            all_files <- c(all_files, res$file)
+        }
+    }
+    if (length(all_files) == 0) {
+        stop("No files matched any of the supplied patterns", 
+            call. = FALSE)
+    }
+    unique(all_files)
+}
+
+--------------------------------------------------------------------------------
+Function: .format_hts_param()
+function (name, value) 
+{
+    if (is.logical(value)) {
+        return(sprintf("%s := %s", name, if (isTRUE(value)) "true" else "false"))
+    }
+    if (is.numeric(value)) {
+        return(sprintf("%s := %s", name, value))
+    }
+    if (is.character(value) && length(value) > 1) {
+        items <- paste(sql_quote_string(value), collapse = ", ")
+        return(sprintf("%s := [%s]", name, items))
+    }
+    if (is.character(value) && length(value) == 1) {
+        return(sprintf("%s := %s", name, sql_quote_string(value)))
+    }
+    stop(sprintf("Unsupported parameter type for '%s': %s", name, 
+        class(value)[1]), call. = FALSE)
+}
+
+--------------------------------------------------------------------------------
+Function: .hts_multi_read()
+function (con, table_name, reader, files, uniform_params, .params, 
+    overwrite) 
+{
+    if (!missing(table_name) && !is.null(table_name)) {
+        if (DBI::dbExistsTable(con, table_name) && !overwrite) {
+            stop("Table '", table_name, "' already exists. Use overwrite = TRUE to replace it.")
+        }
+        if (DBI::dbExistsTable(con, table_name)) {
+            DBI::dbRemoveTable(con, table_name)
+        }
+    }
+    if (!is.null(.params)) {
+        if (!is.data.frame(.params)) {
+            stop(".params must be a data.frame or NULL", call. = FALSE)
+        }
+        if (!"file" %in% names(.params)) {
+            stop(".params must contain a 'file' column", call. = FALSE)
+        }
+    }
+    if (!is.null(.params)) {
+        expanded <- character(0)
+        row_map <- list()
+        for (i in seq_len(nrow(.params))) {
+            pat <- .params$file[i]
+            row_files <- .expand_hts_files(con, pat)
+            for (f in row_files) {
+                expanded <- c(expanded, f)
+                row_map[[f]] <- i
+            }
+        }
+        if (length(expanded) == 0) {
+            stop("No files matched any patterns in .params$file", 
+                call. = FALSE)
+        }
+        override_cols <- setdiff(names(.params), "file")
+        arms <- vapply(expanded, function(f) {
+            row_idx <- row_map[[f]]
+            merged <- uniform_params
+            for (col in override_cols) {
+                val <- .params[[col]][row_idx]
+                if (!is.na(val) && !is.null(val)) {
+                  merged[[col]] <- val
+                }
+            }
+            .build_hts_arm(reader, f, merged)
+        }, character(1), USE.NAMES = FALSE)
+    }
+    else {
+        expanded <- .expand_hts_files(con, files)
+        arms <- vapply(expanded, function(f) {
+            .build_hts_arm(reader, f, uniform_params)
+        }, character(1), USE.NAMES = FALSE)
+    }
+    union_sql <- paste(arms, collapse = " UNION ALL BY NAME ")
+    create_sql <- sprintf("CREATE TABLE %s AS %s", table_name, 
+        union_sql)
+    DBI::dbExecute(con, create_sql)
+    invisible(TRUE)
+}
+
+--------------------------------------------------------------------------------
+Function: build_param_str()
+function (params) 
+{
+    if (length(params) == 0) {
+        return("")
+    }
+    param_str <- paste(paste0(names(params), " := ", params), 
+        collapse = ", ")
+    if (nchar(param_str) > 0) {
+        return(paste0(", ", param_str))
+    }
+    ""
+}
+
+--------------------------------------------------------------------------------
+Function: detect_complex_types()
+function (con, table_name) 
+{
+    schema <- DBI::dbGetQuery(con, sprintf("DESCRIBE %s", table_name))
+    complex_mask <- grepl("\\[|MAP", schema$column_type)
+    complex_cols <- schema[complex_mask, ]
+    if (nrow(complex_cols) == 0) {
+        return(data.frame())
+    }
+    complex_cols$r_type <- ifelse(grepl("\\[", complex_cols$column_type), 
+        "vector", "data.frame")
+    complex_cols$description <- ifelse(grepl("\\[", complex_cols$column_type), 
+        "ARRAY type - will be R vector", "MAP type - will be R data frame")
+    complex_cols[, c("column_name", "column_type", "r_type", 
+        "description")]
+}
+
+--------------------------------------------------------------------------------
+Function: duckdb_type_mappings()
+function () 
+{
+    duckdb_to_r <- c(BIGINT = "double", DOUBLE = "double", VARCHAR = "character", 
+        BOOLEAN = "logical", DATE = "double", TIMESTAMP = "double", 
+        TIME = "double", BLOB = "list", INTEGER = "integer", 
+        FLOAT = "double", SMALLINT = "integer", USMALLINT = "integer", 
+        UBIGINT = "double", `VARCHAR[]` = "list", `BIGINT[]` = "list", 
+        `INTEGER[]` = "list", `DOUBLE[]` = "list", `FLOAT[]` = "list", 
+        `BOOLEAN[]` = "list", MAP = "data.frame")
+    r_to_duckdb <- c(integer = "INTEGER", int = "INTEGER", int32 = "INTEGER", 
+        int64 = "BIGINT", numeric = "DOUBLE", double = "DOUBLE", 
+        float = "DOUBLE", character = "VARCHAR", string = "VARCHAR", 
+        chr = "VARCHAR", logical = "BOOLEAN", bool = "BOOLEAN", 
+        boolean = "BOOLEAN", Date = "DATE", POSIXct = "TIMESTAMP", 
+        POSIXt = "TIMESTAMP", hms = "TIME", raw = "BLOB")
+    list(duckdb_to_r = duckdb_to_r, r_to_duckdb = r_to_duckdb)
+}
+
+--------------------------------------------------------------------------------
+Function: duckhts_append_metadata()
+function (ext_file, verbose = FALSE) 
+{
+    platform <- duckhts_detect_platform()
+    api_version <- "v1.2.0"
+    ext_version <- as.character(utils::packageVersion("Rduckhts"))
+    if (verbose) {
+        message("  Appending metadata: platform=", platform, 
+            " api=", api_version, " ext=", ext_version)
+    }
+    pad32 <- function(s) {
+        raw_s <- charToRaw(s)
+        n <- length(raw_s)
+        if (n > 32) {
+            stop("Metadata field too long: ", s, call. = FALSE)
+        }
+        c(raw_s, raw(32L - n))
+    }
+    con <- file(ext_file, open = "ab")
+    on.exit(close(con))
+    writeBin(as.raw(c(0, 147, 4, 16)), con)
+    writeBin(charToRaw("duckdb_signature"), con)
+    writeBin(as.raw(c(128, 4)), con)
+    writeBin(pad32(""), con)
+    writeBin(pad32(""), con)
+    writeBin(pad32(""), con)
+    writeBin(pad32("C_STRUCT"), con)
+    writeBin(pad32(ext_version), con)
+    writeBin(pad32(api_version), con)
+    writeBin(pad32(platform), con)
+    writeBin(pad32("4"), con)
+    writeBin(raw(256L), con)
+}
+
+--------------------------------------------------------------------------------
+Function: duckhts_bootstrap()
+function (repo_root = NULL) 
+{
+    if (is.null(repo_root)) {
+        stop("repo_root is required. Pass the duckhts repository root explicitly.", 
+            call. = FALSE)
+    }
+    repo_root <- normalizePath(repo_root, mustWork = TRUE)
+    message("Repo root: ", repo_root)
+    if (!file.exists(file.path(repo_root, "src", "duckhts.c"))) {
+        stop("Not a duckhts repo: missing src/duckhts.c", call. = FALSE)
+    }
+    pkg_src_dir <- file.path(repo_root, "r", "Rduckhts")
+    dest <- file.path(pkg_src_dir, "inst", "duckhts_extension")
+    if (dir.exists(dest)) {
+        unlink(dest, recursive = TRUE)
+    }
+    dir.create(dest, recursive = TRUE, showWarnings = FALSE)
+    message("Destination: ", dest)
+    src_dir <- file.path(repo_root, "src")
+    c_files <- c("duckhts.c", "bcf_reader.c", "bam_reader.c", 
+        "bgzip.c", "hts_index_builder.c", "liftover_udf.c", "munge_udf.c", 
+        "kmer_udf.c", "interval_udf.c", "seq_reader.c", "tabix_reader.c", 
+        "hts_meta_reader.c", "quality_encoding.c", "quality_encoding_reader.c", 
+        "bcftools_filter.c", "bcftools_shim.c", "score_udf.c", 
+        "vep_parser.c", "wasm_http_hfile.c")
+    file.copy(file.path(src_dir, c_files), dest)
+    message("  Copied ", length(c_files), " C source files")
+    inc_dest <- file.path(dest, "include")
+    dir.create(inc_dest, showWarnings = FALSE)
+    inc_files <- list.files(file.path(src_dir, "include"), full.names = FALSE)
+    file.copy(file.path(src_dir, "include", inc_files), inc_dest)
+    message("  Copied ", length(inc_files), " header files")
+    capi_dest <- file.path(dest, "duckdb_capi")
+    dir.create(capi_dest, showWarnings = FALSE)
+    file.copy(file.path(repo_root, "duckdb_capi", c("duckdb.h", 
+        "duckdb_extension.h")), capi_dest)
+    message("  Copied DuckDB C API headers")
+    patch_file <- file.path(pkg_src_dir, "inst", "patches", "duckdb_capi_strict_prototypes.patch")
+    if (file.exists(patch_file)) {
+        message("  Applying DuckDB C API patch: ", patch_file)
+        patch_status <- system2("patch", c("-p1", "-d", dest, 
+            "-i", patch_file))
+        if (!identical(patch_status, 0L)) {
+            stop("Failed to apply DuckDB C API patch: ", patch_file, 
+                call. = FALSE)
+        }
+    }
+    else {
+        message("  DuckDB C API patch not found (skipping): ", 
+            patch_file)
+    }
+    htslib_src <- file.path(repo_root, "third_party", "htslib")
+    if (!dir.exists(htslib_src)) {
+        stop("htslib source not found at: ", htslib_src, call. = FALSE)
+    }
+    htslib_dest <- file.path(dest, "htslib")
+    system2("cp", c("-a", htslib_src, htslib_dest))
+    system2("make", c("-C", htslib_dest, "distclean"), stdout = FALSE, 
+        stderr = FALSE)
+    message("  Copied htslib source tree")
+    render_script <- file.path(repo_root, "scripts", "render_function_catalog.py")
+    if (!file.exists(render_script)) {
+        stop("Function catalog renderer not found at: ", render_script, 
+            call. = FALSE)
+    }
+    python <- Sys.which("python3")
+    if (!nzchar(python)) {
+        python <- Sys.which("python")
+    }
+    if (!nzchar(python)) {
+        stop("python3/python is required to render the function catalog", 
+            call. = FALSE)
+    }
+    render_status <- system2(python, c(render_script, repo_root))
+    if (!identical(render_status, 0L)) {
+        stop("Failed to render generated documentation assets from functions.yaml", 
+            call. = FALSE)
+    }
+    message("  Rendered generated documentation assets from functions.yaml")
+    message("Bootstrap complete. Run 'R CMD build .' to create the tarball.")
+    invisible(dest)
+}
+
+--------------------------------------------------------------------------------
+Function: duckhts_build()
+function (build_dir = NULL, make = NULL, force = FALSE, verbose = TRUE) 
+{
+    ext_dir <- duckhts_extension_dir()
+    if (is.null(build_dir)) {
+        stop("build_dir is required. Use a writable location such as tempdir().", 
+            call. = FALSE)
+    }
+    dir.create(build_dir, recursive = TRUE, showWarnings = FALSE)
+    ext_file <- file.path(build_dir, "duckhts.duckdb_extension")
+    if (!force && file.exists(ext_file)) {
+        if (verbose) {
+            message("Extension already built: ", ext_file)
+        }
+        return(ext_file)
+    }
+    htslib_dir <- file.path(ext_dir, "htslib")
+    hts_a <- file.path(htslib_dir, "libhts.a")
+    if (!file.exists(hts_a)) {
+        if (verbose) {
+            message("Building htslib...")
+        }
+        if (is.null(make)) {
+            make <- Sys.which("gmake")
+            if (!nzchar(make)) {
+                make <- Sys.which("make")
+            }
+        }
+        if (!nzchar(make)) {
+            stop("GNU make not found", call. = FALSE)
+        }
+        cfg_status <- system2(file.path(htslib_dir, "configure"), 
+            c("CFLAGS=-fPIC -O2", "--disable-plugins"), stdout = if (verbose) 
+                ""
+            else FALSE, stderr = if (verbose) 
+                ""
+            else FALSE)
+        if (cfg_status != 0) {
+            stop("htslib configure failed", call. = FALSE)
+        }
+        bld_status <- system2(make, c("-C", htslib_dir, "-j1", 
+            "lib-static"), stdout = if (verbose) 
+            ""
+        else FALSE, stderr = if (verbose) 
+            ""
+        else FALSE)
+        if (bld_status != 0) 
+            stop("htslib build failed", call. = FALSE)
+    }
+    else {
+        if (verbose) 
+            message("Using pre-built htslib: ", hts_a)
+    }
+    if (verbose) {
+        message("Building duckhts extension...")
+    }
+    cc <- Sys.getenv("CC", unset = "gcc")
+    uname <- system2("uname", stdout = TRUE)
+    is_mac <- identical(uname, "Darwin")
+    shared_ext <- if (is_mac) 
+        ".dylib"
+    else ".so"
+    shared_flags <- if (is_mac) {
+        "-shared -fPIC -undefined dynamic_lookup"
+    }
+    else {
+        "-shared -fPIC"
+    }
+    c_files <- file.path(ext_dir, c("duckhts.c", "bcf_reader.c", 
+        "bam_reader.c", "bgzip.c", "hts_index_builder.c", "liftover_udf.c", 
+        "munge_udf.c", "kmer_udf.c", "interval_udf.c", "seq_reader.c", 
+        "tabix_reader.c", "hts_meta_reader.c", "quality_encoding.c", 
+        "quality_encoding_reader.c", "score_udf.c", "vep_parser.c"))
+    o_files <- file.path(build_dir, sub("\\.c$", ".o", basename(c_files)))
+    includes <- paste(paste0("-I", file.path(ext_dir, "include")), 
+        paste0("-I", file.path(ext_dir, "duckdb_capi")), paste0("-I", 
+            htslib_dir))
+    for (i in seq_along(c_files)) {
+        cmd <- paste(cc, "-O2 -fPIC", includes, "-c", c_files[i], 
+            "-o", o_files[i])
+        if (verbose) {
+            message("  ", basename(c_files[i]))
+        }
+        if (system(cmd) != 0) 
+            stop("Compile failed: ", c_files[i], call. = FALSE)
+    }
+    shared_lib <- file.path(build_dir, paste0("libduckhts", shared_ext))
+    link_libs <- "-lz -lbz2 -llzma -lcurl -lpthread"
+    if (!is_mac) {
+        link_libs <- paste(link_libs, "-lm")
+    }
+    link_cmd <- paste(cc, shared_flags, "-o", shared_lib, paste(o_files, 
+        collapse = " "), hts_a, link_libs)
+    if (verbose) {
+        message("  Linking...")
+    }
+    if (system(link_cmd) != 0) {
+        stop("Link failed", call. = FALSE)
+    }
+    file.copy(shared_lib, ext_file, overwrite = TRUE)
+    duckhts_append_metadata(ext_file, verbose = verbose)
+    if (verbose) {
+        message("Extension built: ", ext_file)
+    }
+    ext_file
+}
+
+--------------------------------------------------------------------------------
+Function: duckhts_detect_platform()
+function () 
+{
+    sysname <- tolower(Sys.info()[["sysname"]])
+    machine <- Sys.info()[["machine"]]
+    os <- switch(sysname, linux = "linux", darwin = "osx", windows = "windows", 
+        sysname)
+    arch <- switch(machine, x86_64 = "amd64", aarch64 = "aarch64", 
+        arm64 = "aarch64", machine)
+    paste0(os, "_", arch)
+}
+
+--------------------------------------------------------------------------------
+Function: duckhts_extension_dir()
+function () 
+{
+    ext_path <- system.file("duckhts_extension", package = "Rduckhts", 
+        mustWork = FALSE)
+    if (nzchar(ext_path) && dir.exists(ext_path)) {
+        return(ext_path)
+    }
+    return(NULL)
+}
+
+--------------------------------------------------------------------------------
+Function: duckhts_find_repo()
+function () 
+{
+    wd <- getwd()
+    if (basename(wd) == "Rduckhts" && basename(dirname(wd)) == 
+        "r") {
+        candidate <- normalizePath(file.path(wd, "..", ".."), 
+            mustWork = FALSE)
+        if (file.exists(file.path(candidate, "CMakeLists.txt"))) {
+            return(candidate)
+        }
+    }
+    if (file.exists(file.path(wd, "CMakeLists.txt")) && file.exists(file.path(wd, 
+        "src", "duckhts.c"))) {
+        return(wd)
+    }
+    stop("Cannot auto-detect repo root. Pass repo_root= explicitly or ", 
+        "run from the duckhts repo directory.", call. = FALSE)
+}
+
+--------------------------------------------------------------------------------
+Function: duckhts_htslib_plugins_dir()
+function () 
+{
+    ext_dir <- duckhts_extension_dir()
+    candidates <- c(file.path(ext_dir, "htslib", "libexec", "htslib"), 
+        file.path(ext_dir, "htslib", "plugins"), file.path(ext_dir, 
+            "htslib"))
+    for (p in candidates) {
+        if (dir.exists(p)) {
+            return(normalizePath(p))
+        }
+    }
+    ""
+}
+
+--------------------------------------------------------------------------------
+Function: duckhts_load()
+function (con = NULL, extension_path = NULL) 
+{
+    if (!requireNamespace("duckdb", quietly = TRUE)) {
+        stop("duckdb R package is required", call. = FALSE)
+    }
+    if (is.null(con)) {
+        drv <- duckdb::duckdb(config = list(allow_unsigned_extensions = "true"))
+        con <- DBI::dbConnect(drv)
+    }
+    if (is.null(extension_path)) {
+        extension_path <- file.path(duckhts_extension_dir(), 
+            "build", "duckhts.duckdb_extension")
+    }
+    if (!file.exists(extension_path)) {
+        stop("Extension not found: ", extension_path, "\nRun duckhts_build() first.", 
+            call. = FALSE)
+    }
+    DBI::dbExecute(con, sprintf("LOAD '%s'", extension_path))
+    invisible(con)
+}
+
+--------------------------------------------------------------------------------
+Function: extract_array_element()
+function (array_col, index = NULL, default = NA) 
+{
+    if (is.null(index)) {
+        return(array_col)
+    }
+    sapply(array_col, function(x) {
+        if (is.null(x) || length(x) < index) {
+            return(default)
+        }
+        return(x[[index]])
+    }, USE.NAMES = FALSE)
+}
+
+--------------------------------------------------------------------------------
+Function: extract_map_data()
+function (map_col, operation = "keys", default = NA) 
+{
+    is_empty_map <- function(x) {
+        if (is.null(x)) {
+            return(TRUE)
+        }
+        if (length(x) == 0) {
+            return(TRUE)
+        }
+        if (length(x) == 1 && is.na(x)) {
+            return(TRUE)
+        }
+        if (is.data.frame(x) && nrow(x) == 0) {
+            return(TRUE)
+        }
+        FALSE
+    }
+    extract_kv <- function(x, field) {
+        if (is_empty_map(x)) {
+            return(character(0))
+        }
+        if (is.data.frame(x) && field %in% names(x)) {
+            return(x[[field]])
+        }
+        if (is.list(x) && !is.data.frame(x) && field %in% names(x)) {
+            return(x[[field]])
+        }
+        if (is.character(x) || is.numeric(x)) {
+            return(character(0))
+        }
+        character(0)
+    }
+    if (operation == "keys") {
+        return(lapply(map_col, function(x) extract_kv(x, "key")))
+    }
+    if (operation == "values") {
+        return(lapply(map_col, function(x) extract_kv(x, "value")))
+    }
+    return(lapply(map_col, function(x) {
+        if (is_empty_map(x)) {
+            return(default)
+        }
+        if (is.data.frame(x) && "key" %in% names(x) && "value" %in% 
+            names(x)) {
+            key_pos <- which(x$key == operation)
+            if (length(key_pos) == 0) {
+                return(default)
+            }
+            return(x$value[key_pos[1]])
+        }
+        if (is.list(x) && !is.data.frame(x) && "key" %in% names(x) && 
+            "value" %in% names(x)) {
+            key_pos <- which(x[["key"]] == operation)
+            if (length(key_pos) == 0) {
+                return(default)
+            }
+            return(x[["value"]][key_pos[1]])
+        }
+        return(default)
+    }))
+}
+
+--------------------------------------------------------------------------------
+Function: normalize_tabix_types()
+function (types) 
+{
+    if (length(types) == 0) {
+        return(types)
+    }
+    mappings <- duckdb_type_mappings()$r_to_duckdb
+    cleaned <- trimws(types)
+    lowered <- tolower(cleaned)
+    mapped <- character(length(cleaned))
+    for (i in seq_along(cleaned)) {
+        mapped[i] <- switch(lowered[i], integer = "BIGINT", int = "BIGINT", 
+            int32 = "BIGINT", int64 = "BIGINT", numeric = "DOUBLE", 
+            double = "DOUBLE", float = "DOUBLE", character = "VARCHAR", 
+            string = "VARCHAR", chr = "VARCHAR", logical = "BOOLEAN", 
+            bool = "BOOLEAN", boolean = "BOOLEAN", toupper(cleaned[i]))
+    }
+    mapped
+}
+
+--------------------------------------------------------------------------------
+Function: rduckhts_bam()
+function (con, table_name, path, region = NULL, index_path = NULL, 
+    reference = NULL, standard_tags = FALSE, auxiliary_tags = FALSE, 
+    sequence_encoding = NULL, quality_representation = NULL, 
+    overwrite = FALSE) 
+{
+    if (!missing(table_name) && !is.null(table_name)) {
+        if (DBI::dbExistsTable(con, table_name) && !overwrite) {
+            stop("Table '", table_name, "' already exists. Use overwrite = TRUE to replace it.")
+        }
+        if (DBI::dbExistsTable(con, table_name)) {
+            DBI::dbRemoveTable(con, table_name)
+        }
+    }
+    params <- list()
+    if (!is.null(region)) {
+        params$region <- sprintf("'%s'", region)
+    }
+    if (!is.null(index_path)) {
+        params$index_path <- sprintf("'%s'", index_path)
+    }
+    if (!is.null(reference)) {
+        params$reference <- sprintf("'%s'", reference)
+    }
+    if (!is.null(standard_tags)) {
+        params$standard_tags <- if (isTRUE(standard_tags)) 
+            "true"
+        else "false"
+    }
+    if (!is.null(auxiliary_tags)) {
+        params$auxiliary_tags <- if (isTRUE(auxiliary_tags)) 
+            "true"
+        else "false"
+    }
+    if (!is.null(sequence_encoding)) {
+        params$sequence_encoding <- sprintf("'%s'", sequence_encoding)
+    }
+    if (!is.null(quality_representation)) {
+        params$quality_representation <- sprintf("'%s'", quality_representation)
+    }
+    param_str <- build_param_str(params)
+    if (!is.null(table_name)) {
+        create_query <- sprintf("CREATE TABLE %s AS SELECT * FROM read_bam('%s'%s)", 
+            table_name, path, param_str)
+    }
+    else {
+        create_query <- sprintf("CREATE VIEW bam_data AS SELECT * FROM read_bam('%s'%s)", 
+            path, param_str)
+    }
+    DBI::dbExecute(con, create_query)
+    invisible(TRUE)
+}
+
+--------------------------------------------------------------------------------
+Function: rduckhts_bam_index()
+function (con, path, index_path = NULL, min_shift = 0, threads = 4) 
+{
+    params <- list(min_shift = min_shift, threads = threads)
+    if (!is.null(index_path)) 
+        params$index_path <- sprintf("'%s'", index_path)
+    param_str <- build_param_str(params)
+    query <- sprintf("SELECT * FROM bam_index('%s'%s)", path, 
+        param_str)
+    DBI::dbGetQuery(con, query)
+}
+
+--------------------------------------------------------------------------------
+Function: rduckhts_bam_multi()
+function (con, table_name, files, region = NULL, index_path = NULL, 
+    reference = NULL, standard_tags = FALSE, auxiliary_tags = FALSE, 
+    sequence_encoding = NULL, quality_representation = NULL, 
+    .params = NULL, overwrite = FALSE) 
+{
+    params <- list()
+    if (!is.null(region)) 
+        params$region <- region
+    if (!is.null(index_path)) 
+        params$index_path <- index_path
+    if (!is.null(reference)) 
+        params$reference <- reference
+    params$standard_tags <- standard_tags
+    params$auxiliary_tags <- auxiliary_tags
+    if (!is.null(sequence_encoding)) 
+        params$sequence_encoding <- sequence_encoding
+    if (!is.null(quality_representation)) 
+        params$quality_representation <- quality_representation
+    .hts_multi_read(con, table_name, "read_bam", files, params, 
+        .params, overwrite)
+}
+
+--------------------------------------------------------------------------------
+Function: rduckhts_bcf()
+function (con, table_name, path, region = NULL, index_path = NULL, 
+    tidy_format = FALSE, additional_csq_column_types = NULL, 
+    overwrite = FALSE) 
+{
+    if (!missing(table_name) && !is.null(table_name)) {
+        if (DBI::dbExistsTable(con, table_name) && !overwrite) {
+            stop("Table '", table_name, "' already exists. Use overwrite = TRUE to replace it.")
+        }
+        if (DBI::dbExistsTable(con, table_name)) {
+            DBI::dbRemoveTable(con, table_name)
+        }
+    }
+    params <- list()
+    if (!is.null(region)) {
+        params$region <- sprintf("'%s'", region)
+    }
+    if (!is.null(index_path)) {
+        params$index_path <- sprintf("'%s'", index_path)
+    }
+    if (tidy_format) {
+        params$tidy_format <- "true"
+    }
+    if (!is.null(additional_csq_column_types)) {
+        params$additional_csq_column_types <- sprintf("'%s'", 
+            additional_csq_column_types)
+    }
+    param_str <- build_param_str(params)
+    if (!is.null(table_name)) {
+        create_query <- sprintf("CREATE TABLE %s AS SELECT * FROM read_bcf('%s'%s)", 
+            table_name, path, param_str)
+    }
+    else {
+        create_query <- sprintf("CREATE VIEW bcf_data AS SELECT * FROM read_bcf('%s'%s)", 
+            path, param_str)
+    }
+    DBI::dbExecute(con, create_query)
+    invisible(TRUE)
+}
+
+--------------------------------------------------------------------------------
+Function: rduckhts_bcf_index()
+function (con, path, index_path = NULL, min_shift = NULL, threads = 4) 
+{
+    params <- list(threads = threads)
+    if (!is.null(index_path)) 
+        params$index_path <- sprintf("'%s'", index_path)
+    if (!is.null(min_shift)) 
+        params$min_shift <- min_shift
+    param_str <- build_param_str(params)
+    query <- sprintf("SELECT * FROM bcf_index('%s'%s)", path, 
+        param_str)
+    DBI::dbGetQuery(con, query)
+}
+
+--------------------------------------------------------------------------------
+Function: rduckhts_bcf_multi()
+function (con, table_name, files, region = NULL, index_path = NULL, 
+    tidy_format = FALSE, additional_csq_column_types = NULL, 
+    .params = NULL, overwrite = FALSE) 
+{
+    params <- list()
+    if (!is.null(region)) 
+        params$region <- region
+    if (!is.null(index_path)) 
+        params$index_path <- index_path
+    if (isTRUE(tidy_format)) 
+        params$tidy_format <- TRUE
+    if (!is.null(additional_csq_column_types)) {
+        params$additional_csq_column_types <- additional_csq_column_types
+    }
+    .hts_multi_read(con, table_name, "read_bcf", files, params, 
+        .params, overwrite)
+}
+
+--------------------------------------------------------------------------------
+Function: rduckhts_bed()
+function (con, table_name, path, region = NULL, index_path = NULL, 
+    overwrite = FALSE) 
+{
+    if (!missing(table_name) && !is.null(table_name)) {
+        if (DBI::dbExistsTable(con, table_name) && !overwrite) {
+            stop("Table '", table_name, "' already exists. Use overwrite = TRUE to replace it.")
+        }
+        if (DBI::dbExistsTable(con, table_name)) {
+            DBI::dbRemoveTable(con, table_name)
+        }
+    }
+    params <- list()
+    if (!is.null(region)) {
+        params$region <- sprintf("'%s'", region)
+    }
+    if (!is.null(index_path)) {
+        params$index_path <- sprintf("'%s'", index_path)
+    }
+    param_str <- build_param_str(params)
+    if (!is.null(table_name)) {
+        create_query <- sprintf("CREATE TABLE %s AS SELECT * FROM read_bed('%s'%s)", 
+            table_name, path, param_str)
+    }
+    else {
+        create_query <- sprintf("CREATE VIEW bed_data AS SELECT * FROM read_bed('%s'%s)", 
+            path, param_str)
+    }
+    DBI::dbExecute(con, create_query)
+    invisible(TRUE)
+}
+
+--------------------------------------------------------------------------------
+Function: rduckhts_bed_multi()
+function (con, table_name, files, region = NULL, index_path = NULL, 
+    .params = NULL, overwrite = FALSE) 
+{
+    params <- list()
+    if (!is.null(region)) 
+        params$region <- region
+    if (!is.null(index_path)) 
+        params$index_path <- index_path
+    .hts_multi_read(con, table_name, "read_bed", files, params, 
+        .params, overwrite)
+}
+
+--------------------------------------------------------------------------------
+Function: rduckhts_bgunzip()
+function (con, path, output_path = NULL, threads = 4, keep = TRUE, 
+    overwrite = FALSE) 
+{
+    params <- list(threads = threads)
+    if (!is.null(output_path)) 
+        params$output_path <- sprintf("'%s'", output_path)
+    if (keep) 
+        params$keep <- "true"
+    if (overwrite) 
+        params$overwrite <- "true"
+    param_str <- build_param_str(params)
+    query <- sprintf("SELECT * FROM bgunzip('%s'%s)", path, param_str)
+    DBI::dbGetQuery(con, query)
+}
+
+--------------------------------------------------------------------------------
+Function: rduckhts_bgzip()
+function (con, path, output_path = NULL, threads = 4, level = -1, 
+    keep = TRUE, overwrite = FALSE) 
+{
+    params <- list(threads = threads, level = level)
+    if (!is.null(output_path)) 
+        params$output_path <- sprintf("'%s'", output_path)
+    if (keep) 
+        params$keep <- "true"
+    if (overwrite) 
+        params$overwrite <- "true"
+    param_str <- build_param_str(params)
+    query <- sprintf("SELECT * FROM bgzip('%s'%s)", path, param_str)
+    DBI::dbGetQuery(con, query)
+}
+
+--------------------------------------------------------------------------------
+Function: rduckhts_detect_quality_encoding()
+function (con, path, max_records = 10000) 
+{
+    params <- list(max_records = max_records)
+    param_str <- build_param_str(params)
+    query <- sprintf("SELECT * FROM detect_quality_encoding('%s'%s)", 
+        path, param_str)
+    DBI::dbGetQuery(con, query)
+}
+
+--------------------------------------------------------------------------------
+Function: rduckhts_fasta()
+function (con, table_name, path, region = NULL, index_path = NULL, 
+    sequence_encoding = NULL, overwrite = FALSE) 
+{
+    if (!missing(table_name) && !is.null(table_name)) {
+        if (DBI::dbExistsTable(con, table_name) && !overwrite) {
+            stop("Table '", table_name, "' already exists. Use overwrite = TRUE to replace it.")
+        }
+        if (DBI::dbExistsTable(con, table_name)) {
+            DBI::dbRemoveTable(con, table_name)
+        }
+    }
+    params <- list()
+    if (!is.null(region)) {
+        params$region <- sprintf("'%s'", region)
+    }
+    if (!is.null(index_path)) {
+        params$index_path <- sprintf("'%s'", index_path)
+    }
+    if (!is.null(sequence_encoding)) {
+        params$sequence_encoding <- sprintf("'%s'", sequence_encoding)
+    }
+    param_str <- build_param_str(params)
+    if (!is.null(table_name)) {
+        create_query <- sprintf("CREATE TABLE %s AS SELECT * FROM read_fasta('%s'%s)", 
+            table_name, path, param_str)
+    }
+    else {
+        create_query <- sprintf("CREATE VIEW fasta_data AS SELECT * FROM read_fasta('%s'%s)", 
+            path, param_str)
+    }
+    DBI::dbExecute(con, create_query)
+    invisible(TRUE)
+}
+
+--------------------------------------------------------------------------------
+Function: rduckhts_fasta_index()
+function (con, path, index_path = NULL) 
+{
+    params <- list()
+    if (!is.null(index_path)) {
+        params$index_path <- sprintf("'%s'", index_path)
+    }
+    param_str <- build_param_str(params)
+    query <- sprintf("SELECT * FROM fasta_index('%s'%s)", path, 
+        param_str)
+    DBI::dbGetQuery(con, query)
+}
+
+--------------------------------------------------------------------------------
+Function: rduckhts_fasta_multi()
+function (con, table_name, files, region = NULL, index_path = NULL, 
+    sequence_encoding = NULL, .params = NULL, overwrite = FALSE) 
+{
+    params <- list()
+    if (!is.null(region)) 
+        params$region <- region
+    if (!is.null(index_path)) 
+        params$index_path <- index_path
+    if (!is.null(sequence_encoding)) 
+        params$sequence_encoding <- sequence_encoding
+    .hts_multi_read(con, table_name, "read_fasta", files, params, 
+        .params, overwrite)
+}
+
+--------------------------------------------------------------------------------
+Function: rduckhts_fasta_nuc()
+function (con, path, bed_path = NULL, bin_width = NULL, region = NULL, 
+    index_path = NULL, bed_index_path = NULL, include_seq = FALSE) 
+{
+    params <- list()
+    if (!is.null(bed_path)) 
+        params$bed_path <- sprintf("'%s'", bed_path)
+    if (!is.null(bin_width)) 
+        params$bin_width <- bin_width
+    if (!is.null(region)) 
+        params$region <- sprintf("'%s'", region)
+    if (!is.null(index_path)) 
+        params$index_path <- sprintf("'%s'", index_path)
+    if (!is.null(bed_index_path)) 
+        params$bed_index_path <- sprintf("'%s'", bed_index_path)
+    if (include_seq) 
+        params$include_seq <- "true"
+    param_str <- build_param_str(params)
+    query <- sprintf("SELECT * FROM fasta_nuc('%s'%s)", path, 
+        param_str)
+    DBI::dbGetQuery(con, query)
+}
+
+--------------------------------------------------------------------------------
+Function: rduckhts_fastq()
+function (con, table_name, path, mate_path = NULL, interleaved = FALSE, 
+    sequence_encoding = NULL, quality_representation = NULL, 
+    input_quality_encoding = NULL, overwrite = FALSE) 
+{
+    if (!missing(table_name) && !is.null(table_name)) {
+        if (DBI::dbExistsTable(con, table_name) && !overwrite) {
+            stop("Table '", table_name, "' already exists. Use overwrite = TRUE to replace it.")
+        }
+        if (DBI::dbExistsTable(con, table_name)) {
+            DBI::dbRemoveTable(con, table_name)
+        }
+    }
+    params <- list()
+    if (!is.null(mate_path)) {
+        params$mate_path <- sprintf("'%s'", mate_path)
+    }
+    if (interleaved) {
+        params$interleaved <- "true"
+    }
+    if (!is.null(sequence_encoding)) {
+        params$sequence_encoding <- sprintf("'%s'", sequence_encoding)
+    }
+    if (!is.null(quality_representation)) {
+        params$quality_representation <- sprintf("'%s'", quality_representation)
+    }
+    if (!is.null(input_quality_encoding)) {
+        params$input_quality_encoding <- sprintf("'%s'", input_quality_encoding)
+    }
+    param_str <- build_param_str(params)
+    if (!is.null(table_name)) {
+        create_query <- sprintf("CREATE TABLE %s AS SELECT * FROM read_fastq('%s'%s)", 
+            table_name, path, param_str)
+    }
+    else {
+        create_query <- sprintf("CREATE VIEW fastq_data AS SELECT * FROM read_fastq('%s'%s)", 
+            path, param_str)
+    }
+    DBI::dbExecute(con, create_query)
+    invisible(TRUE)
+}
+
+--------------------------------------------------------------------------------
+Function: rduckhts_fastq_multi()
+function (con, table_name, files, mate_path = NULL, interleaved = FALSE, 
+    sequence_encoding = NULL, quality_representation = NULL, 
+    input_quality_encoding = NULL, .params = NULL, overwrite = FALSE) 
+{
+    params <- list()
+    if (!is.null(mate_path)) 
+        params$mate_path <- mate_path
+    if (isTRUE(interleaved)) 
+        params$interleaved <- TRUE
+    if (!is.null(sequence_encoding)) 
+        params$sequence_encoding <- sequence_encoding
+    if (!is.null(quality_representation)) 
+        params$quality_representation <- quality_representation
+    if (!is.null(input_quality_encoding)) 
+        params$input_quality_encoding <- input_quality_encoding
+    .hts_multi_read(con, table_name, "read_fastq", files, params, 
+        .params, overwrite)
+}
+
+--------------------------------------------------------------------------------
+Function: rduckhts_functions()
+function (category = NULL, kind = NULL) 
+{
+    catalog_path <- system.file("function_catalog", "functions.tsv", 
+        package = "Rduckhts", mustWork = TRUE)
+    catalog <- utils::read.delim(catalog_path, sep = "\t", header = TRUE, 
+        stringsAsFactors = FALSE, check.names = FALSE)
+    if (!is.null(category)) {
+        catalog <- catalog[catalog$category %in% category, , 
+            drop = FALSE]
+    }
+    if (!is.null(kind)) {
+        catalog <- catalog[catalog$kind %in% kind, , drop = FALSE]
+    }
+    rownames(catalog) <- NULL
+    catalog
+}
+
+--------------------------------------------------------------------------------
+Function: rduckhts_gff()
+function (con, table_name, path, region = NULL, index_path = NULL, 
+    header = NULL, header_names = NULL, auto_detect = NULL, column_types = NULL, 
+    attributes_map = FALSE, overwrite = FALSE) 
+{
+    if (!missing(table_name) && !is.null(table_name)) {
+        if (DBI::dbExistsTable(con, table_name) && !overwrite) {
+            stop("Table '", table_name, "' already exists. Use overwrite = TRUE to replace it.")
+        }
+        if (DBI::dbExistsTable(con, table_name)) {
+            DBI::dbRemoveTable(con, table_name)
+        }
+    }
+    params <- list()
+    if (!is.null(region)) {
+        params$region <- sprintf("'%s'", region)
+    }
+    if (!is.null(index_path)) {
+        params$index_path <- sprintf("'%s'", index_path)
+    }
+    if (!is.null(header)) {
+        params$header <- if (isTRUE(header)) 
+            "true"
+        else "false"
+    }
+    if (!is.null(auto_detect)) {
+        params$auto_detect <- if (isTRUE(auto_detect)) 
+            "true"
+        else "false"
+    }
+    if (!is.null(header_names)) {
+        if (!is.character(header_names)) {
+            stop("header_names must be a character vector")
+        }
+        params$header_names <- sprintf("[%s]", paste(sprintf("'%s'", 
+            header_names), collapse = ", "))
+    }
+    if (!is.null(column_types)) {
+        if (!is.character(column_types)) {
+            stop("column_types must be a character vector")
+        }
+        normalized_types <- normalize_tabix_types(column_types)
+        params$column_types <- sprintf("[%s]", paste(sprintf("'%s'", 
+            normalized_types), collapse = ", "))
+    }
+    if (attributes_map) {
+        params$attributes_map <- "true"
+    }
+    param_str <- build_param_str(params)
+    if (!is.null(table_name)) {
+        create_query <- sprintf("CREATE TABLE %s AS SELECT * FROM read_gff('%s'%s)", 
+            table_name, path, param_str)
+    }
+    else {
+        create_query <- sprintf("CREATE VIEW gff_data AS SELECT * FROM read_gff('%s'%s)", 
+            path, param_str)
+    }
+    DBI::dbExecute(con, create_query)
+    invisible(TRUE)
+}
+
+--------------------------------------------------------------------------------
+Function: rduckhts_gff_multi()
+function (con, table_name, files, region = NULL, index_path = NULL, 
+    header = NULL, header_names = NULL, auto_detect = NULL, column_types = NULL, 
+    attributes_map = FALSE, .params = NULL, overwrite = FALSE) 
+{
+    params <- list()
+    if (!is.null(region)) 
+        params$region <- region
+    if (!is.null(index_path)) 
+        params$index_path <- index_path
+    if (!is.null(header)) 
+        params$header <- isTRUE(header)
+    if (!is.null(auto_detect)) 
+        params$auto_detect <- isTRUE(auto_detect)
+    if (!is.null(header_names)) {
+        if (!is.character(header_names)) 
+            stop("header_names must be a character vector", call. = FALSE)
+        params$header_names <- header_names
+    }
+    if (!is.null(column_types)) {
+        if (!is.character(column_types)) 
+            stop("column_types must be a character vector", call. = FALSE)
+        params$column_types <- normalize_tabix_types(column_types)
+    }
+    if (isTRUE(attributes_map)) 
+        params$attributes_map <- TRUE
+    .hts_multi_read(con, table_name, "read_gff", files, params, 
+        .params, overwrite)
+}
+
+--------------------------------------------------------------------------------
+Function: rduckhts_gtf()
+function (con, table_name, path, region = NULL, index_path = NULL, 
+    header = NULL, header_names = NULL, auto_detect = NULL, column_types = NULL, 
+    attributes_map = FALSE, overwrite = FALSE) 
+{
+    if (!missing(table_name) && !is.null(table_name)) {
+        if (DBI::dbExistsTable(con, table_name) && !overwrite) {
+            stop("Table '", table_name, "' already exists. Use overwrite = TRUE to replace it.")
+        }
+        if (DBI::dbExistsTable(con, table_name)) {
+            DBI::dbRemoveTable(con, table_name)
+        }
+    }
+    params <- list()
+    if (!is.null(region)) {
+        params$region <- sprintf("'%s'", region)
+    }
+    if (!is.null(index_path)) {
+        params$index_path <- sprintf("'%s'", index_path)
+    }
+    if (!is.null(header)) {
+        params$header <- if (isTRUE(header)) 
+            "true"
+        else "false"
+    }
+    if (!is.null(auto_detect)) {
+        params$auto_detect <- if (isTRUE(auto_detect)) 
+            "true"
+        else "false"
+    }
+    if (!is.null(header_names)) {
+        if (!is.character(header_names)) {
+            stop("header_names must be a character vector")
+        }
+        params$header_names <- sprintf("[%s]", paste(sprintf("'%s'", 
+            header_names), collapse = ", "))
+    }
+    if (!is.null(column_types)) {
+        if (!is.character(column_types)) {
+            stop("column_types must be a character vector")
+        }
+        normalized_types <- normalize_tabix_types(column_types)
+        params$column_types <- sprintf("[%s]", paste(sprintf("'%s'", 
+            normalized_types), collapse = ", "))
+    }
+    if (attributes_map) {
+        params$attributes_map <- "true"
+    }
+    param_str <- build_param_str(params)
+    if (!is.null(table_name)) {
+        create_query <- sprintf("CREATE TABLE %s AS SELECT * FROM read_gtf('%s'%s)", 
+            table_name, path, param_str)
+    }
+    else {
+        create_query <- sprintf("CREATE VIEW gtf_data AS SELECT * FROM read_gtf('%s'%s)", 
+            path, param_str)
+    }
+    DBI::dbExecute(con, create_query)
+    invisible(TRUE)
+}
+
+--------------------------------------------------------------------------------
+Function: rduckhts_gtf_multi()
+function (con, table_name, files, region = NULL, index_path = NULL, 
+    header = NULL, header_names = NULL, auto_detect = NULL, column_types = NULL, 
+    attributes_map = FALSE, .params = NULL, overwrite = FALSE) 
+{
+    params <- list()
+    if (!is.null(region)) 
+        params$region <- region
+    if (!is.null(index_path)) 
+        params$index_path <- index_path
+    if (!is.null(header)) 
+        params$header <- isTRUE(header)
+    if (!is.null(auto_detect)) 
+        params$auto_detect <- isTRUE(auto_detect)
+    if (!is.null(header_names)) {
+        if (!is.character(header_names)) 
+            stop("header_names must be a character vector", call. = FALSE)
+        params$header_names <- header_names
+    }
+    if (!is.null(column_types)) {
+        if (!is.character(column_types)) 
+            stop("column_types must be a character vector", call. = FALSE)
+        params$column_types <- normalize_tabix_types(column_types)
+    }
+    if (isTRUE(attributes_map)) 
+        params$attributes_map <- TRUE
+    .hts_multi_read(con, table_name, "read_gtf", files, params, 
+        .params, overwrite)
+}
+
+--------------------------------------------------------------------------------
+Function: rduckhts_hts_header()
+function (con, path, format = NULL, mode = NULL) 
+{
+    params <- list()
+    if (!is.null(format)) {
+        params$format <- sprintf("'%s'", format)
+    }
+    if (!is.null(mode)) {
+        params$mode <- sprintf("'%s'", mode)
+    }
+    param_str <- build_param_str(params)
+    query <- sprintf("SELECT * FROM read_hts_header('%s'%s)", 
+        path, param_str)
+    DBI::dbGetQuery(con, query)
+}
+
+--------------------------------------------------------------------------------
+Function: rduckhts_hts_index()
+function (con, path, format = NULL, index_path = NULL) 
+{
+    params <- list()
+    if (!is.null(format)) {
+        params$format <- sprintf("'%s'", format)
+    }
+    if (!is.null(index_path)) {
+        params$index_path <- sprintf("'%s'", index_path)
+    }
+    param_str <- build_param_str(params)
+    query <- sprintf("SELECT * FROM read_hts_index('%s'%s)", 
+        path, param_str)
+    DBI::dbGetQuery(con, query)
+}
+
+--------------------------------------------------------------------------------
+Function: rduckhts_hts_index_raw()
+function (con, path, format = NULL, index_path = NULL) 
+{
+    params <- list()
+    if (!is.null(format)) {
+        params$format <- sprintf("'%s'", format)
+    }
+    if (!is.null(index_path)) {
+        params$index_path <- sprintf("'%s'", index_path)
+    }
+    param_str <- build_param_str(params)
+    query <- sprintf("SELECT * FROM read_hts_index_raw('%s'%s)", 
+        path, param_str)
+    DBI::dbGetQuery(con, query)
+}
+
+--------------------------------------------------------------------------------
+Function: rduckhts_hts_index_spans()
+function (con, path, format = NULL, index_path = NULL) 
+{
+    params <- list()
+    if (!is.null(format)) {
+        params$format <- sprintf("'%s'", format)
+    }
+    if (!is.null(index_path)) {
+        params$index_path <- sprintf("'%s'", index_path)
+    }
+    param_str <- build_param_str(params)
+    query <- sprintf("SELECT * FROM read_hts_index_spans('%s'%s)", 
+        path, param_str)
+    DBI::dbGetQuery(con, query)
+}
+
+--------------------------------------------------------------------------------
+Function: rduckhts_liftover()
+function (con, query, chain_path, dst_fasta_ref, chrom_col = "chrom", 
+    pos_col = "pos", ref_col = NULL, alt_col = NULL, src_fasta_ref = NULL, 
+    max_snp_gap = 1, max_indel_inc = 250, lift_mt = FALSE, end_pos_col = NULL, 
+    no_left_align = FALSE) 
+{
+    if (!is.numeric(max_snp_gap) || length(max_snp_gap) != 1 || 
+        is.na(max_snp_gap) || max_snp_gap < 0) {
+        stop("max_snp_gap must be >= 0", call. = FALSE)
+    }
+    if (!is.numeric(max_indel_inc) || length(max_indel_inc) != 
+        1 || is.na(max_indel_inc) || max_indel_inc < 0) {
+        stop("max_indel_inc must be >= 0", call. = FALSE)
+    }
+    table_expr <- query
+    if (grepl("^\\s*select\\b", table_expr, ignore.case = TRUE)) {
+        table_expr <- sprintf("(%s) AS duckhts_src", table_expr)
+    }
+    table_sql <- gsub("'", "''", table_expr, fixed = TRUE)
+    params <- list(sprintf("'%s'", table_sql), sprintf("'%s'", 
+        chrom_col), sprintf("'%s'", pos_col))
+    if (!is.null(ref_col)) 
+        params <- c(params, sprintf("ref_col := '%s'", ref_col))
+    if (!is.null(alt_col)) 
+        params <- c(params, sprintf("alt_col := '%s'", alt_col))
+    params <- c(params, sprintf("chain_path := '%s'", chain_path), 
+        sprintf("dst_fasta_ref := '%s'", dst_fasta_ref))
+    if (!is.null(src_fasta_ref)) 
+        params <- c(params, sprintf("src_fasta_ref := '%s'", 
+            src_fasta_ref))
+    params <- c(params, sprintf("max_snp_gap := %d", as.integer(max_snp_gap)), 
+        sprintf("max_indel_inc := %d", as.integer(max_indel_inc)), 
+        sprintf("lift_mt := %s", tolower(as.character(lift_mt))))
+    if (!is.null(end_pos_col)) 
+        params <- c(params, sprintf("end_pos_col := '%s'", end_pos_col))
+    params <- c(params, sprintf("no_left_align := %s", tolower(as.character(no_left_align))))
+    sql <- sprintf("SELECT * FROM duckdb_liftover(%s)", paste(params, 
+        collapse = ", "))
+    DBI::dbGetQuery(con, sql)
+}
+
+--------------------------------------------------------------------------------
+Function: rduckhts_load()
+function (con, extension_path = NULL) 
+{
+    if (is.null(extension_path)) {
+        ext_dir <- duckhts_extension_dir()
+        if (is.null(ext_dir)) {
+            stop("duckhts_extension directory not found in installed package.", 
+                call. = FALSE)
+        }
+        extension_path <- file.path(ext_dir, "build", "duckhts.duckdb_extension")
+    }
+    if (!file.exists(extension_path)) {
+        stop("DuckHTS extension not found at: ", extension_path, 
+            "\nThis suggests the package was not built correctly during installation.", 
+            "\nTry recompiling the package with R CMD INSTALL --preclean Rduckhts")
+    }
+    setting <- DBI::dbGetQuery(con, "SELECT value FROM duckdb_settings() WHERE name = 'allow_unsigned_extensions'")
+    if (nrow(setting) == 1 && tolower(setting$value[1]) != "true") {
+        stop("DuckDB connection must allow unsigned extensions. Recreate the ", 
+            "connection with duckdb::duckdb(config = list(allow_unsigned_extensions = \"true\")).", 
+            call. = FALSE)
+    }
+    DBI::dbExecute(con, "SET enable_progress_bar = false")
+    result <- DBI::dbExecute(con, sprintf("LOAD '%s'", extension_path))
+    return(result == 0)
+}
+
+--------------------------------------------------------------------------------
+Function: rduckhts_munge()
+function (con, query, fasta_ref = NULL, preset = NULL, column_map = NULL, 
+    column_map_file = NULL, iffy_tag = "IFFY", mismatch_tag = "REF_MISMATCH", 
+    ns = NULL, nc = NULL, ne = NULL) 
+{
+    table_expr <- query
+    if (grepl("^\\s*select\\b", table_expr, ignore.case = TRUE)) {
+        table_expr <- sprintf("(%s) AS duckhts_src", table_expr)
+    }
+    provided_modes <- sum(!vapply(list(preset, column_map, column_map_file), 
+        is.null, logical(1)))
+    if (provided_modes > 1) {
+        stop("duckdb_munge: specify only one of preset, column_map, or column_map_file", 
+            call. = FALSE)
+    }
+    available_columns <- names(DBI::dbGetQuery(con, sprintf("SELECT * FROM %s LIMIT 0", 
+        table_expr)))
+    if (!is.null(preset)) {
+        default_map_path <- system.file("extdata", "colheaders.tsv", 
+            package = "Rduckhts", mustWork = TRUE)
+        alias_map <- resolve_munge_column_map(read_munge_column_map_file(default_map_path), 
+            available_columns)
+        preset_map <- resolve_munge_column_map(read_munge_preset_map(con, 
+            preset), available_columns)
+        column_map <- c(alias_map, preset_map)
+        column_map <- column_map[!duplicated(names(column_map), 
+            fromLast = TRUE)]
+        preset <- NULL
+    }
+    if (is.null(preset) && is.null(column_map) && is.null(column_map_file)) {
+        column_map_file <- system.file("extdata", "colheaders.tsv", 
+            package = "Rduckhts", mustWork = TRUE)
+    }
+    if (!is.null(column_map_file)) {
+        file_map <- resolve_munge_column_map(read_munge_column_map_file(column_map_file), 
+            available_columns)
+        if (!is.null(column_map)) {
+            column_map <- c(file_map, column_map)
+            column_map <- column_map[!duplicated(names(column_map), 
+                fromLast = TRUE)]
+        }
+        else {
+            column_map <- file_map
+        }
+        column_map_file <- NULL
+    }
+    params <- list(sql_quote_string(table_expr))
+    if (!is.null(preset)) 
+        params <- c(params, sprintf("preset := '%s'", preset))
+    if (!is.null(column_map)) 
+        params <- c(params, sprintf("column_map := %s", sql_map_literal(column_map)))
+    if (!is.null(column_map_file)) 
+        params <- c(params, sprintf("column_map_file := '%s'", 
+            column_map_file))
+    if (!is.null(fasta_ref)) {
+        params <- c(params, sprintf("fasta_ref := '%s'", fasta_ref))
+    }
+    params <- c(params, sprintf("iffy_tag := '%s'", iffy_tag), 
+        sprintf("mismatch_tag := '%s'", mismatch_tag))
+    if (!is.null(ns)) 
+        params <- c(params, sprintf("ns := %s", format(ns, scientific = FALSE, 
+            trim = TRUE)))
+    if (!is.null(nc)) 
+        params <- c(params, sprintf("nc := %s", format(nc, scientific = FALSE, 
+            trim = TRUE)))
+    if (!is.null(ne)) 
+        params <- c(params, sprintf("ne := %s", format(ne, scientific = FALSE, 
+            trim = TRUE)))
+    metal_keys <- c("INFO", "HET_I2", "HET_P", "HET_LP", "DIRE")
+    has_metal <- !is.null(column_map) && any(metal_keys %in% 
+        names(column_map))
+    macro_name <- if (has_metal) 
+        "duckdb_munge_metal"
+    else "duckdb_munge"
+    sql <- sprintf("SELECT * FROM %s(%s)", macro_name, paste(params, 
+        collapse = ", "))
+    DBI::dbGetQuery(con, sql)
+}
+
+--------------------------------------------------------------------------------
+Function: rduckhts_score()
+function (con, bcf_path, summary_path, use = NULL, columns = "PLINK", 
+    columns_file = NULL, q_score_thr = NULL, use_variant_id = FALSE, 
+    counts = FALSE, samples = NULL, force_samples = FALSE, regions = NULL, 
+    regions_file = NULL, regions_overlap = 1, targets = NULL, 
+    targets_file = NULL, targets_overlap = 0, apply_filters = NULL, 
+    include = NULL, exclude = NULL) 
+{
+    if (!is.null(use)) {
+        use <- toupper(use)
+        if (!(use %in% c("GT", "DS", "HDS", "AP", "GP", "AS"))) {
+            stop("use must be one of GT, DS, HDS, AP, GP, AS", 
+                call. = FALSE)
+        }
+    }
+    if (!is.null(columns)) {
+        columns <- toupper(columns)
+        if (!(columns %in% c("PLINK", "PLINK2", "REGENIE", "SAIGE", 
+            "BOLT", "METAL", "PGS", "SSF", "GWAS-SSF"))) {
+            stop("columns must be one of PLINK, PLINK2, REGENIE, SAIGE, BOLT, METAL, PGS, SSF, GWAS-SSF", 
+                call. = FALSE)
+        }
+    }
+    params <- list(sql_quote_string(bcf_path), sql_quote_string(summary_path))
+    if (!is.null(use)) 
+        params <- c(params, sprintf("use := '%s'", use))
+    if (!is.null(columns)) 
+        params <- c(params, sprintf("columns := '%s'", columns))
+    if (!is.null(columns_file)) 
+        params <- c(params, sprintf("columns_file := '%s'", columns_file))
+    if (!is.null(q_score_thr)) 
+        params <- c(params, sprintf("q_score_thr := '%s'", q_score_thr))
+    if (!is.null(samples)) 
+        params <- c(params, sprintf("samples := '%s'", samples))
+    if (!is.null(regions)) 
+        params <- c(params, sprintf("regions := '%s'", regions))
+    if (!is.null(regions_file)) 
+        params <- c(params, sprintf("regions_file := '%s'", regions_file))
+    if (!is.null(regions_overlap)) 
+        params <- c(params, sprintf("regions_overlap := %d", 
+            as.integer(regions_overlap)))
+    if (!is.null(targets)) 
+        params <- c(params, sprintf("targets := '%s'", targets))
+    if (!is.null(targets_file)) 
+        params <- c(params, sprintf("targets_file := '%s'", targets_file))
+    if (!is.null(targets_overlap)) 
+        params <- c(params, sprintf("targets_overlap := %d", 
+            as.integer(targets_overlap)))
+    if (!is.null(apply_filters)) 
+        params <- c(params, sprintf("apply_filters := '%s'", 
+            apply_filters))
+    if (!is.null(include)) 
+        params <- c(params, sprintf("include := '%s'", include))
+    if (!is.null(exclude)) 
+        params <- c(params, sprintf("exclude := '%s'", exclude))
+    params <- c(params, sprintf("use_variant_id := %s", if (isTRUE(use_variant_id)) "true" else "false"), 
+        sprintf("counts := %s", if (isTRUE(counts)) "true" else "false"), 
+        sprintf("force_samples := %s", if (isTRUE(force_samples)) "true" else "false"))
+    sql <- sprintf("SELECT * FROM bcftools_score(%s)", paste(params, 
+        collapse = ", "))
+    DBI::dbGetQuery(con, sql)
+}
+
+--------------------------------------------------------------------------------
+Function: rduckhts_tabix()
+function (con, table_name, path, region = NULL, index_path = NULL, 
+    header = NULL, header_names = NULL, auto_detect = NULL, column_types = NULL, 
+    overwrite = FALSE) 
+{
+    if (!missing(table_name) && !is.null(table_name)) {
+        if (DBI::dbExistsTable(con, table_name) && !overwrite) {
+            stop("Table '", table_name, "' already exists. Use overwrite = TRUE to replace it.")
+        }
+        if (DBI::dbExistsTable(con, table_name)) {
+            DBI::dbRemoveTable(con, table_name)
+        }
+    }
+    params <- list()
+    if (!is.null(region)) {
+        params$region <- sprintf("'%s'", region)
+    }
+    if (!is.null(index_path)) {
+        params$index_path <- sprintf("'%s'", index_path)
+    }
+    if (!is.null(header)) {
+        params$header <- if (isTRUE(header)) 
+            "true"
+        else "false"
+    }
+    if (!is.null(auto_detect)) {
+        params$auto_detect <- if (isTRUE(auto_detect)) 
+            "true"
+        else "false"
+    }
+    if (!is.null(header_names)) {
+        if (!is.character(header_names)) {
+            stop("header_names must be a character vector")
+        }
+        params$header_names <- sprintf("[%s]", paste(sprintf("'%s'", 
+            header_names), collapse = ", "))
+    }
+    if (!is.null(column_types)) {
+        if (!is.character(column_types)) {
+            stop("column_types must be a character vector")
+        }
+        normalized_types <- normalize_tabix_types(column_types)
+        params$column_types <- sprintf("[%s]", paste(sprintf("'%s'", 
+            normalized_types), collapse = ", "))
+    }
+    param_str <- build_param_str(params)
+    if (!is.null(table_name)) {
+        create_query <- sprintf("CREATE TABLE %s AS SELECT * FROM read_tabix('%s'%s)", 
+            table_name, path, param_str)
+    }
+    else {
+        create_query <- sprintf("CREATE VIEW tabix_data AS SELECT * FROM read_tabix('%s'%s)", 
+            path, param_str)
+    }
+    DBI::dbExecute(con, create_query)
+    invisible(TRUE)
+}
+
+--------------------------------------------------------------------------------
+Function: rduckhts_tabix_index()
+function (con, path, preset = "vcf", index_path = NULL, min_shift = 0, 
+    threads = 4, seq_col = NULL, start_col = NULL, end_col = NULL, 
+    comment_char = NULL, skip_lines = NULL) 
+{
+    params <- list(preset = sprintf("'%s'", preset), min_shift = min_shift, 
+        threads = threads)
+    if (!is.null(index_path)) 
+        params$index_path <- sprintf("'%s'", index_path)
+    if (!is.null(seq_col)) 
+        params$seq_col <- seq_col
+    if (!is.null(start_col)) 
+        params$start_col <- start_col
+    if (!is.null(end_col)) 
+        params$end_col <- end_col
+    if (!is.null(comment_char)) 
+        params$comment_char <- sprintf("'%s'", comment_char)
+    if (!is.null(skip_lines)) 
+        params$skip_lines <- skip_lines
+    param_str <- build_param_str(params)
+    query <- sprintf("SELECT * FROM tabix_index('%s'%s)", path, 
+        param_str)
+    DBI::dbGetQuery(con, query)
+}
+
+--------------------------------------------------------------------------------
+Function: rduckhts_tabix_multi()
+function (con, table_name, files, region = NULL, index_path = NULL, 
+    header = NULL, header_names = NULL, auto_detect = NULL, column_types = NULL, 
+    .params = NULL, overwrite = FALSE) 
+{
+    params <- list()
+    if (!is.null(region)) 
+        params$region <- region
+    if (!is.null(index_path)) 
+        params$index_path <- index_path
+    if (!is.null(header)) 
+        params$header <- isTRUE(header)
+    if (!is.null(auto_detect)) 
+        params$auto_detect <- isTRUE(auto_detect)
+    if (!is.null(header_names)) {
+        if (!is.character(header_names)) 
+            stop("header_names must be a character vector", call. = FALSE)
+        params$header_names <- header_names
+    }
+    if (!is.null(column_types)) {
+        if (!is.character(column_types)) 
+            stop("column_types must be a character vector", call. = FALSE)
+        params$column_types <- normalize_tabix_types(column_types)
+    }
+    .hts_multi_read(con, table_name, "read_tabix", files, params, 
+        .params, overwrite)
+}
+
+--------------------------------------------------------------------------------
+Function: read_munge_column_map_file()
+function (path) 
+{
+    tbl <- utils::read.delim(path, sep = "\t", header = FALSE, 
+        stringsAsFactors = FALSE, quote = "", comment.char = "")
+    if (ncol(tbl) < 2) {
+        stop("column_map_file must be a two-column TSV with source and canonical names", 
+            call. = FALSE)
+    }
+    out <- structure(tbl[[1]], names = toupper(tbl[[2]]))
+    out[nzchar(names(out))]
+}
+
+--------------------------------------------------------------------------------
+Function: read_munge_preset_map()
+function (con, preset) 
+{
+    preset_sql <- sql_quote_string(preset)
+    out <- DBI::dbGetQuery(con, sprintf("SELECT duckdb_munge_preset_map(%s) AS m", 
+        preset_sql))
+    if (nrow(out) != 1 || is.null(out$m[[1]])) {
+        stop("duckdb_munge: unknown preset", call. = FALSE)
+    }
+    m <- out$m[[1]]
+    if (!is.data.frame(m) || !all(c("key", "value") %in% names(m))) {
+        stop("duckdb_munge: failed to read preset map", call. = FALSE)
+    }
+    structure(as.character(m$value), names = toupper(as.character(m$key)))
+}
+
+--------------------------------------------------------------------------------
+Function: resolve_munge_column_map()
+function (raw_map, available_columns) 
+{
+    if (is.null(raw_map) || length(raw_map) == 0 || is.null(available_columns) || 
+        length(available_columns) == 0) {
+        return(character())
+    }
+    available_columns <- as.character(available_columns)
+    available_upper <- toupper(available_columns)
+    canonical_names <- unique(names(raw_map))
+    selected <- character(length(canonical_names))
+    names(selected) <- canonical_names
+    for (i in seq_along(canonical_names)) {
+        canonical <- canonical_names[[i]]
+        candidates <- as.character(raw_map[names(raw_map) == 
+            canonical])
+        for (candidate in candidates) {
+            idx <- match(toupper(candidate), available_upper)
+            if (!is.na(idx)) {
+                selected[[i]] <- available_columns[[idx]]
+                break
+            }
+        }
+    }
+    selected[nzchar(selected)]
+}
+
+--------------------------------------------------------------------------------
+Function: setup_hts_env()
+function (plugins_dir = NULL) 
+{
+    old_value <- Sys.getenv("HTS_PATH", unset = NA)
+    if (is.null(plugins_dir)) {
+        plugins_dir <- duckhts_htslib_plugins_dir()
+    }
+    if (nzchar(plugins_dir) && dir.exists(plugins_dir)) {
+        Sys.setenv(HTS_PATH = plugins_dir)
+    }
+    invisible(old_value)
+}
+
+--------------------------------------------------------------------------------
+Function: sql_map_literal()
+function (x) 
+{
+    if (is.null(x) || length(x) == 0) {
+        stop("column_map must be non-empty", call. = FALSE)
+    }
+    nm <- names(x)
+    if (is.null(nm) || any(!nzchar(nm))) {
+        stop("column_map must be a named character vector with canonical names as names", 
+            call. = FALSE)
+    }
+    keys <- paste(vapply(nm, sql_quote_string, character(1)), 
+        collapse = ", ")
+    vals <- paste(vapply(as.character(x), sql_quote_string, character(1)), 
+        collapse = ", ")
+    sprintf("map([%s], [%s])", keys, vals)
+}
+
+--------------------------------------------------------------------------------
+Function: sql_quote_string()
+function (x) 
+{
+    sprintf("'%s'", gsub("'", "''", x, fixed = TRUE))
+}

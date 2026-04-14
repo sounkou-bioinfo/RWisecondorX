@@ -1,0 +1,937 @@
+<!DOCTYPE html>
+
+<html xmlns="http://www.w3.org/1999/xhtml">
+
+<head>
+
+<meta charset="utf-8">
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+<meta name="generator" content="pandoc" />
+<meta name="viewport" content="width=device-width, initial-scale=1">
+
+<style type="text/css">
+@font-face {
+font-family: octicons-link;
+src: url(data:font/woff;charset=utf-8;base64,d09GRgABAAAAAAZwABAAAAAACFQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAABEU0lHAAAGaAAAAAgAAAAIAAAAAUdTVUIAAAZcAAAACgAAAAoAAQAAT1MvMgAAAyQAAABJAAAAYFYEU3RjbWFwAAADcAAAAEUAAACAAJThvmN2dCAAAATkAAAABAAAAAQAAAAAZnBnbQAAA7gAAACyAAABCUM+8IhnYXNwAAAGTAAAABAAAAAQABoAI2dseWYAAAFsAAABPAAAAZwcEq9taGVhZAAAAsgAAAA0AAAANgh4a91oaGVhAAADCAAAABoAAAAkCA8DRGhtdHgAAAL8AAAADAAAAAwGAACfbG9jYQAAAsAAAAAIAAAACABiATBtYXhwAAACqAAAABgAAAAgAA8ASm5hbWUAAAToAAABQgAAAlXu73sOcG9zdAAABiwAAAAeAAAAME3QpOBwcmVwAAAEbAAAAHYAAAB/aFGpk3jaTY6xa8JAGMW/O62BDi0tJLYQincXEypYIiGJjSgHniQ6umTsUEyLm5BV6NDBP8Tpts6F0v+k/0an2i+itHDw3v2+9+DBKTzsJNnWJNTgHEy4BgG3EMI9DCEDOGEXzDADU5hBKMIgNPZqoD3SilVaXZCER3/I7AtxEJLtzzuZfI+VVkprxTlXShWKb3TBecG11rwoNlmmn1P2WYcJczl32etSpKnziC7lQyWe1smVPy/Lt7Kc+0vWY/gAgIIEqAN9we0pwKXreiMasxvabDQMM4riO+qxM2ogwDGOZTXxwxDiycQIcoYFBLj5K3EIaSctAq2kTYiw+ymhce7vwM9jSqO8JyVd5RH9gyTt2+J/yUmYlIR0s04n6+7Vm1ozezUeLEaUjhaDSuXHwVRgvLJn1tQ7xiuVv/ocTRF42mNgZGBgYGbwZOBiAAFGJBIMAAizAFoAAABiAGIAznjaY2BkYGAA4in8zwXi+W2+MjCzMIDApSwvXzC97Z4Ig8N/BxYGZgcgl52BCSQKAA3jCV8CAABfAAAAAAQAAEB42mNgZGBg4f3vACQZQABIMjKgAmYAKEgBXgAAeNpjYGY6wTiBgZWBg2kmUxoDA4MPhGZMYzBi1AHygVLYQUCaawqDA4PChxhmh/8ODDEsvAwHgMKMIDnGL0x7gJQCAwMAJd4MFwAAAHjaY2BgYGaA4DAGRgYQkAHyGMF8NgYrIM3JIAGVYYDT+AEjAwuDFpBmA9KMDEwMCh9i/v8H8sH0/4dQc1iAmAkALaUKLgAAAHjaTY9LDsIgEIbtgqHUPpDi3gPoBVyRTmTddOmqTXThEXqrob2gQ1FjwpDvfwCBdmdXC5AVKFu3e5MfNFJ29KTQT48Ob9/lqYwOGZxeUelN2U2R6+cArgtCJpauW7UQBqnFkUsjAY/kOU1cP+DAgvxwn1chZDwUbd6CFimGXwzwF6tPbFIcjEl+vvmM/byA48e6tWrKArm4ZJlCbdsrxksL1AwWn/yBSJKpYbq8AXaaTb8AAHja28jAwOC00ZrBeQNDQOWO//sdBBgYGRiYWYAEELEwMTE4uzo5Zzo5b2BxdnFOcALxNjA6b2ByTswC8jYwg0VlNuoCTWAMqNzMzsoK1rEhNqByEyerg5PMJlYuVueETKcd/89uBpnpvIEVomeHLoMsAAe1Id4AAAAAAAB42oWQT07CQBTGv0JBhagk7HQzKxca2sJCE1hDt4QF+9JOS0nbaaYDCQfwCJ7Au3AHj+LO13FMmm6cl7785vven0kBjHCBhfpYuNa5Ph1c0e2Xu3jEvWG7UdPDLZ4N92nOm+EBXuAbHmIMSRMs+4aUEd4Nd3CHD8NdvOLTsA2GL8M9PODbcL+hD7C1xoaHeLJSEao0FEW14ckxC+TU8TxvsY6X0eLPmRhry2WVioLpkrbp84LLQPGI7c6sOiUzpWIWS5GzlSgUzzLBSikOPFTOXqly7rqx0Z1Q5BAIoZBSFihQYQOOBEdkCOgXTOHA07HAGjGWiIjaPZNW13/+lm6S9FT7rLHFJ6fQbkATOG1j2OFMucKJJsxIVfQORl+9Jyda6Sl1dUYhSCm1dyClfoeDve4qMYdLEbfqHf3O/AdDumsjAAB42mNgYoAAZQYjBmyAGYQZmdhL8zLdDEydARfoAqIAAAABAAMABwAKABMAB///AA8AAQAAAAAAAAAAAAAAAAABAAAAAA==) format('woff');
+}
+body {
+-webkit-text-size-adjust: 100%;
+text-size-adjust: 100%;
+color: #333;
+font-family: "Helvetica Neue", Helvetica, "Segoe UI", Arial, freesans, sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol";
+font-size: 16px;
+line-height: 1.6;
+word-wrap: break-word;
+}
+a {
+background-color: transparent;
+}
+a:active,
+a:hover {
+outline: 0;
+}
+strong {
+font-weight: bold;
+}
+h1 {
+font-size: 2em;
+margin: 0.67em 0;
+}
+img {
+border: 0;
+}
+hr {
+box-sizing: content-box;
+height: 0;
+}
+pre {
+overflow: auto;
+}
+code,
+kbd,
+pre {
+font-family: monospace, monospace;
+font-size: 1em;
+}
+input {
+color: inherit;
+font: inherit;
+margin: 0;
+}
+html input[disabled] {
+cursor: default;
+}
+input {
+line-height: normal;
+}
+input[type="checkbox"] {
+box-sizing: border-box;
+padding: 0;
+}
+table {
+border-collapse: collapse;
+border-spacing: 0;
+}
+td,
+th {
+padding: 0;
+}
+* {
+box-sizing: border-box;
+}
+input {
+font: 13px / 1.4 Helvetica, arial, nimbussansl, liberationsans, freesans, clean, sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol";
+}
+a {
+color: #4078c0;
+text-decoration: none;
+}
+a:hover,
+a:active {
+text-decoration: underline;
+}
+hr {
+height: 0;
+margin: 15px 0;
+overflow: hidden;
+background: transparent;
+border: 0;
+border-bottom: 1px solid #ddd;
+}
+hr:before {
+display: table;
+content: "";
+}
+hr:after {
+display: table;
+clear: both;
+content: "";
+}
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
+margin-top: 15px;
+margin-bottom: 15px;
+line-height: 1.1;
+}
+h1 {
+font-size: 30px;
+}
+h2 {
+font-size: 21px;
+}
+h3 {
+font-size: 16px;
+}
+h4 {
+font-size: 14px;
+}
+h5 {
+font-size: 12px;
+}
+h6 {
+font-size: 11px;
+}
+blockquote {
+margin: 0;
+}
+ul,
+ol {
+padding: 0;
+margin-top: 0;
+margin-bottom: 0;
+}
+ol ol,
+ul ol {
+list-style-type: lower-roman;
+}
+ul ul ol,
+ul ol ol,
+ol ul ol,
+ol ol ol {
+list-style-type: lower-alpha;
+}
+dd {
+margin-left: 0;
+}
+code {
+font-family: Consolas, "Liberation Mono", Menlo, Courier, monospace;
+font-size: 12px;
+}
+pre {
+margin-top: 0;
+margin-bottom: 0;
+font: 12px Consolas, "Liberation Mono", Menlo, Courier, monospace;
+}
+.select::-ms-expand {
+opacity: 0;
+}
+.octicon {
+font: normal normal normal 16px/1 octicons-link;
+display: inline-block;
+text-decoration: none;
+text-rendering: auto;
+-webkit-font-smoothing: antialiased;
+-moz-osx-font-smoothing: grayscale;
+-webkit-user-select: none;
+-moz-user-select: none;
+-ms-user-select: none;
+user-select: none;
+}
+.octicon-link:before {
+content: '\f05c';
+}
+.markdown-body:before {
+display: table;
+content: "";
+}
+.markdown-body:after {
+display: table;
+clear: both;
+content: "";
+}
+.markdown-body>*:first-child {
+margin-top: 0 !important;
+}
+.markdown-body>*:last-child {
+margin-bottom: 0 !important;
+}
+a:not([href]) {
+color: inherit;
+text-decoration: none;
+}
+.anchor {
+display: inline-block;
+padding-right: 2px;
+margin-left: -18px;
+}
+.anchor:focus {
+outline: none;
+}
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
+margin-top: 1em;
+margin-bottom: 16px;
+font-weight: bold;
+line-height: 1.4;
+}
+h1 .octicon-link,
+h2 .octicon-link,
+h3 .octicon-link,
+h4 .octicon-link,
+h5 .octicon-link,
+h6 .octicon-link {
+color: #000;
+vertical-align: middle;
+visibility: hidden;
+}
+h1:hover .anchor,
+h2:hover .anchor,
+h3:hover .anchor,
+h4:hover .anchor,
+h5:hover .anchor,
+h6:hover .anchor {
+text-decoration: none;
+}
+h1:hover .anchor .octicon-link,
+h2:hover .anchor .octicon-link,
+h3:hover .anchor .octicon-link,
+h4:hover .anchor .octicon-link,
+h5:hover .anchor .octicon-link,
+h6:hover .anchor .octicon-link {
+visibility: visible;
+}
+h1 {
+padding-bottom: 0.3em;
+font-size: 2.25em;
+line-height: 1.2;
+border-bottom: 1px solid #eee;
+}
+h1 .anchor {
+line-height: 1;
+}
+h2 {
+padding-bottom: 0.3em;
+font-size: 1.75em;
+line-height: 1.225;
+border-bottom: 1px solid #eee;
+}
+h2 .anchor {
+line-height: 1;
+}
+h3 {
+font-size: 1.5em;
+line-height: 1.43;
+}
+h3 .anchor {
+line-height: 1.2;
+}
+h4 {
+font-size: 1.25em;
+}
+h4 .anchor {
+line-height: 1.2;
+}
+h5 {
+font-size: 1em;
+}
+h5 .anchor {
+line-height: 1.1;
+}
+h6 {
+font-size: 1em;
+color: #777;
+}
+h6 .anchor {
+line-height: 1.1;
+}
+p,
+blockquote,
+ul,
+ol,
+dl,
+table,
+pre {
+margin-top: 0;
+margin-bottom: 16px;
+}
+hr {
+height: 4px;
+padding: 0;
+margin: 16px 0;
+background-color: #e7e7e7;
+border: 0 none;
+}
+ul,
+ol {
+padding-left: 2em;
+}
+ul ul,
+ul ol,
+ol ol,
+ol ul {
+margin-top: 0;
+margin-bottom: 0;
+}
+li>p {
+margin-top: 16px;
+}
+dl {
+padding: 0;
+}
+dl dt {
+padding: 0;
+margin-top: 16px;
+font-size: 1em;
+font-style: italic;
+font-weight: bold;
+}
+dl dd {
+padding: 0 16px;
+margin-bottom: 16px;
+}
+blockquote {
+padding: 0 15px;
+color: #777;
+border-left: 4px solid #ddd;
+}
+blockquote>:first-child {
+margin-top: 0;
+}
+blockquote>:last-child {
+margin-bottom: 0;
+}
+table {
+display: block;
+width: 100%;
+overflow: auto;
+word-break: normal;
+word-break: keep-all;
+}
+table th {
+font-weight: bold;
+}
+table th,
+table td {
+padding: 6px 13px;
+border: 1px solid #ddd;
+}
+table tr {
+background-color: #fff;
+border-top: 1px solid #ccc;
+}
+table tr:nth-child(2n) {
+background-color: #f8f8f8;
+}
+img {
+max-width: 100%;
+box-sizing: content-box;
+background-color: #fff;
+}
+code {
+padding: 0;
+padding-top: 0.2em;
+padding-bottom: 0.2em;
+margin: 0;
+font-size: 85%;
+background-color: rgba(0,0,0,0.04);
+border-radius: 3px;
+}
+code:before,
+code:after {
+letter-spacing: -0.2em;
+content: "\00a0";
+}
+pre>code {
+padding: 0;
+margin: 0;
+font-size: 100%;
+word-break: normal;
+white-space: pre;
+background: transparent;
+border: 0;
+}
+.highlight {
+margin-bottom: 16px;
+}
+.highlight pre,
+pre {
+padding: 16px;
+overflow: auto;
+font-size: 85%;
+line-height: 1.45;
+background-color: #f7f7f7;
+border-radius: 3px;
+}
+.highlight pre {
+margin-bottom: 0;
+word-break: normal;
+}
+pre {
+word-wrap: normal;
+}
+pre code {
+display: inline;
+max-width: initial;
+padding: 0;
+margin: 0;
+overflow: initial;
+line-height: inherit;
+word-wrap: normal;
+background-color: transparent;
+border: 0;
+}
+pre code:before,
+pre code:after {
+content: normal;
+}
+kbd {
+display: inline-block;
+padding: 3px 5px;
+font-size: 11px;
+line-height: 10px;
+color: #555;
+vertical-align: middle;
+background-color: #fcfcfc;
+border: solid 1px #ccc;
+border-bottom-color: #bbb;
+border-radius: 3px;
+box-shadow: inset 0 -1px 0 #bbb;
+}
+.pl-c {
+color: #969896;
+}
+.pl-c1,
+.pl-s .pl-v {
+color: #0086b3;
+}
+.pl-e,
+.pl-en {
+color: #795da3;
+}
+.pl-s .pl-s1,
+.pl-smi {
+color: #333;
+}
+.pl-ent {
+color: #63a35c;
+}
+.pl-k {
+color: #a71d5d;
+}
+.pl-pds,
+.pl-s,
+.pl-s .pl-pse .pl-s1,
+.pl-sr,
+.pl-sr .pl-cce,
+.pl-sr .pl-sra,
+.pl-sr .pl-sre {
+color: #183691;
+}
+.pl-v {
+color: #ed6a43;
+}
+.pl-id {
+color: #b52a1d;
+}
+.pl-ii {
+background-color: #b52a1d;
+color: #f8f8f8;
+}
+.pl-sr .pl-cce {
+color: #63a35c;
+font-weight: bold;
+}
+.pl-ml {
+color: #693a17;
+}
+.pl-mh,
+.pl-mh .pl-en,
+.pl-ms {
+color: #1d3e81;
+font-weight: bold;
+}
+.pl-mq {
+color: #008080;
+}
+.pl-mi {
+color: #333;
+font-style: italic;
+}
+.pl-mb {
+color: #333;
+font-weight: bold;
+}
+.pl-md {
+background-color: #ffecec;
+color: #bd2c00;
+}
+.pl-mi1 {
+background-color: #eaffea;
+color: #55a532;
+}
+.pl-mdr {
+color: #795da3;
+font-weight: bold;
+}
+.pl-mo {
+color: #1d3e81;
+}
+kbd {
+display: inline-block;
+padding: 3px 5px;
+font: 11px Consolas, "Liberation Mono", Menlo, Courier, monospace;
+line-height: 10px;
+color: #555;
+vertical-align: middle;
+background-color: #fcfcfc;
+border: solid 1px #ccc;
+border-bottom-color: #bbb;
+border-radius: 3px;
+box-shadow: inset 0 -1px 0 #bbb;
+}
+.task-list-item {
+list-style-type: none;
+}
+.task-list-item+.task-list-item {
+margin-top: 3px;
+}
+.task-list-item input {
+margin: 0 0.35em 0.25em -1.6em;
+vertical-align: middle;
+}
+:checked+.radio-label {
+z-index: 1;
+position: relative;
+border-color: #4078c0;
+}
+.sourceLine {
+display: inline-block;
+}
+code .kw { color: #000000; }
+code .dt { color: #ed6a43; }
+code .dv { color: #009999; }
+code .bn { color: #009999; }
+code .fl { color: #009999; }
+code .ch { color: #009999; }
+code .st { color: #183691; }
+code .co { color: #969896; }
+code .ot { color: #0086b3; }
+code .al { color: #a61717; }
+code .fu { color: #63a35c; }
+code .er { color: #a61717; background-color: #e3d2d2; }
+code .wa { color: #000000; }
+code .cn { color: #008080; }
+code .sc { color: #008080; }
+code .vs { color: #183691; }
+code .ss { color: #183691; }
+code .im { color: #000000; }
+code .va {color: #008080; }
+code .cf { color: #000000; }
+code .op { color: #000000; }
+code .bu { color: #000000; }
+code .ex { color: #000000; }
+code .pp { color: #999999; }
+code .at { color: #008080; }
+code .do { color: #969896; }
+code .an { color: #008080; }
+code .cv { color: #008080; }
+code .in { color: #008080; }
+</style>
+<style>
+body {
+box-sizing: border-box;
+min-width: 200px;
+max-width: 980px;
+margin: 0 auto;
+padding: 45px;
+padding-top: 0px;
+}
+</style>
+
+
+</head>
+
+<body>
+
+<!-- README.md is generated from README.Rmd. Please edit that file -->
+
+<h1 id="rwisecondorx">RWisecondorX</h1>
+<!-- badges: start -->
+
+<p><a href="https://github.com/sounkou-bioinfo/RWisecondorX/actions/workflows/R-CMD-check.yaml"><img src="data:image/svg+xml; charset=utf-8;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIxODIiIGhlaWdodD0iMjAiPgogIDx0aXRsZT5SLUNNRC1jaGVjay55YW1sIC0gcGFzc2luZzwvdGl0bGU+CiAgPGRlZnM+CiAgICA8bGluZWFyR3JhZGllbnQgaWQ9IndvcmtmbG93LWZpbGwiIHgxPSI1MCUiIHkxPSIwJSIgeDI9IjUwJSIgeTI9IjEwMCUiPgogICAgICA8c3RvcCBzdG9wLWNvbG9yPSIjNDQ0RDU2IiBvZmZzZXQ9IjAlIj48L3N0b3A+CiAgICAgIDxzdG9wIHN0b3AtY29sb3I9IiMyNDI5MkUiIG9mZnNldD0iMTAwJSI+PC9zdG9wPgogICAgPC9saW5lYXJHcmFkaWVudD4KICAgIDxsaW5lYXJHcmFkaWVudCBpZD0ic3RhdGUtZmlsbCIgeDE9IjUwJSIgeTE9IjAlIiB4Mj0iNTAlIiB5Mj0iMTAwJSI+CiAgICAgIDxzdG9wIHN0b3AtY29sb3I9IiMzNEQwNTgiIG9mZnNldD0iMCUiPjwvc3RvcD4KICAgICAgPHN0b3Agc3RvcC1jb2xvcj0iIzI4QTc0NSIgb2Zmc2V0PSIxMDAlIj48L3N0b3A+CiAgICA8L2xpbmVhckdyYWRpZW50PgogIDwvZGVmcz4KICA8ZyBmaWxsPSJub25lIiBmaWxsLXJ1bGU9ImV2ZW5vZGQiPgogICAgPGcgZm9udC1mYW1pbHk9IiYjMzk7RGVqYVZ1IFNhbnMmIzM5OyxWZXJkYW5hLEdlbmV2YSxzYW5zLXNlcmlmIiBmb250LXNpemU9IjExIj4KICAgICAgPHBhdGggaWQ9IndvcmtmbG93LWJnIiBkPSJNMCwzIEMwLDEuMzQzMSAxLjM1NTIsMCAzLjAyNzAyNzAzLDAgTDEzMiwwIEwxMzIsMjAgTDMuMDI3MDI3MDMsMjAgQzEuMzU1MiwyMCAwLDE4LjY1NjkgMCwxNyBMMCwzIFoiIGZpbGw9InVybCgjd29ya2Zsb3ctZmlsbCkiIGZpbGwtcnVsZT0ibm9uemVybyI+PC9wYXRoPgogICAgICA8dGV4dCBmaWxsPSIjMDEwMTAxIiBmaWxsLW9wYWNpdHk9Ii4zIj4KICAgICAgICA8dHNwYW4geD0iMjIuMTk4MTk4MiIgeT0iMTUiIGFyaWEtaGlkZGVuPSJ0cnVlIj5SLUNNRC1jaGVjay55YW1sPC90c3Bhbj4KICAgICAgPC90ZXh0PgogICAgICA8dGV4dCBmaWxsPSIjRkZGRkZGIj4KICAgICAgICA8dHNwYW4geD0iMjIuMTk4MTk4MiIgeT0iMTQiPlItQ01ELWNoZWNrLnlhbWw8L3RzcGFuPgogICAgICA8L3RleHQ+CiAgICA8L2c+CiAgICA8ZyB0cmFuc2Zvcm09InRyYW5zbGF0ZSgxMzIpIiBmb250LWZhbWlseT0iJiMzOTtEZWphVnUgU2FucyYjMzk7LFZlcmRhbmEsR2VuZXZhLHNhbnMtc2VyaWYiIGZvbnQtc2l6ZT0iMTEiPgogICAgICA8cGF0aCBkPSJNMCAwaDQ2LjkzOUM0OC42MjkgMCA1MCAxLjM0MyA1MCAzdjE0YzAgMS42NTctMS4zNyAzLTMuMDYxIDNIMFYweiIgaWQ9InN0YXRlLWJnIiBmaWxsPSJ1cmwoI3N0YXRlLWZpbGwpIiBmaWxsLXJ1bGU9Im5vbnplcm8iPjwvcGF0aD4KICAgICAgPHRleHQgZmlsbD0iIzAxMDEwMSIgZmlsbC1vcGFjaXR5PSIuMyIgYXJpYS1oaWRkZW49InRydWUiPgogICAgICAgIDx0c3BhbiB4PSI0IiB5PSIxNSI+cGFzc2luZzwvdHNwYW4+CiAgICAgIDwvdGV4dD4KICAgICAgPHRleHQgZmlsbD0iI0ZGRkZGRiI+CiAgICAgICAgPHRzcGFuIHg9IjQiIHk9IjE0Ij5wYXNzaW5nPC90c3Bhbj4KICAgICAgPC90ZXh0PgogICAgPC9nPgogICAgPHBhdGggZmlsbD0iIzk1OURBNSIgZD0iTTExIDNjLTMuODY4IDAtNyAzLjEzMi03IDdhNi45OTYgNi45OTYgMCAwIDAgNC43ODYgNi42NDFjLjM1LjA2Mi40ODItLjE0OC40ODItLjMzMiAwLS4xNjYtLjAxLS43MTgtLjAxLTEuMzA0LTEuNzU4LjMyNC0yLjIxMy0uNDI5LTIuMzUzLS44MjItLjA3OS0uMjAyLS40Mi0uODIzLS43MTctLjk5LS4yNDUtLjEzLS41OTUtLjQ1NC0uMDEtLjQ2My41NTItLjAwOS45NDYuNTA4IDEuMDc3LjcxOC42MyAxLjA1OCAxLjYzNi43NiAyLjAzOS41NzcuMDYxLS40NTUuMjQ1LS43NjEuNDQ2LS45MzYtMS41NTctLjE3NS0zLjE4NS0uNzc5LTMuMTg1LTMuNDU2IDAtLjc2Mi4yNzEtMS4zOTIuNzE4LTEuODgyLS4wNy0uMTc1LS4zMTUtLjg5Mi4wNy0xLjg1NSAwIDAgLjU4Ni0uMTgzIDEuOTI1LjcxOGE2LjUgNi41IDAgMCAxIDEuNzUtLjIzNiA2LjUgNi41IDAgMCAxIDEuNzUuMjM2YzEuMzM4LS45MSAxLjkyNS0uNzE4IDEuOTI1LS43MTguMzg1Ljk2My4xNCAxLjY4LjA3IDEuODU1LjQ0Ni40OS43MTcgMS4xMTIuNzE3IDEuODgyIDAgMi42ODYtMS42MzYgMy4yOC0zLjE5NCAzLjQ1Ni4yNTQuMjE5LjQ3My42MzkuNDczIDEuMjk1IDAgLjkzNi0uMDA5IDEuNjg5LS4wMDkgMS45MjUgMCAuMTg0LjEzMS40MDIuNDgxLjMzMkE3LjAxMSA3LjAxMSAwIDAgMCAxOCAxMGMwLTMuODY3LTMuMTMzLTctNy03eiI+PC9wYXRoPgogIDwvZz4KPC9zdmc+Cgo=" alt="R-CMD-check" /></a></p>
+<!-- badges: end -->
+
+<p><code>RWisecondorX</code> is an R toolkit for copy number analysis
+and trisomy prediction in non-invasive prenatal testing (NIPT), built on
+top of <code>Rduckhts</code> and DuckDB. It ports both <a href="https://github.com/CenterForMedicalGeneticsGhent/WisecondorX">WisecondorX</a>
+(CNV detection) and <a href="https://github.com/molgenis/NIPTeR">NIPTeR</a> (trisomy prediction
+via Z-scores, NCV, regression, and chi-squared correction), following
+the <a href="https://rewrites.bio">rewrites.bio</a> principles: exact
+emulation of upstream outputs, full credit to the original authors, and
+transparency about AI assistance.</p>
+<p>The core convert step runs entirely in R/SQL via
+<code>Rduckhts</code> with no Python dependency.
+<code>bam_convert()</code> returns per-bin read counts in memory;
+<code>bam_convert_bed()</code> writes them to a bgzipped, tabix-indexed
+BED file readable by DuckDB or any tabix-aware tool; and
+<code>bam_convert_npz()</code> serialises them to a
+WisecondorX-compatible <code>.npz</code> via <code>reticulate</code>.
+The convert implementation exactly replicates the upstream
+<code>larp</code> / <code>larp2</code> streaming deduplication
+behaviour, achieving bin-for-bin agreement with the Python
+implementation.</p>
+<p>The NIPTeR statistical layer provides GC correction (via on-the-fly
+FASTA computation, not bundled tables), chi-squared overdispersion
+correction, chromosomal fraction Z-scores, normalised chromosome values
+(NCV), and forward stepwise regression — all operating on
+<code>NIPTeRSample</code> objects produced by
+<code>nipter_bin_bam()</code>.</p>
+<p>For pipelines that need the full upstream toolchain, thin
+<code>condathis</code> wrappers cover every stage:
+<code>wisecondorx_convert()</code>, <code>wisecondorx_newref()</code>,
+and <code>wisecondorx_predict()</code> each delegate to the official
+bioconda package without requiring a manual conda setup.</p>
+<h2 id="installation">Installation</h2>
+<p>Install the development version from GitHub:</p>
+<div class="sourceCode" id="cb1"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb1-1"><a href="#cb1-1" tabindex="-1"></a><span class="co"># install.packages(&quot;pak&quot;)</span></span>
+<span id="cb1-2"><a href="#cb1-2" tabindex="-1"></a>pak<span class="sc">::</span><span class="fu">pak</span>(<span class="st">&quot;sounkou-bioinfo/RWisecondorX&quot;</span>)</span></code></pre></div>
+<p><code>RWisecondorX</code> imports <code>Rduckhts</code>,
+<code>DBI</code>, and <code>duckdb</code>. <code>reticulate</code> is
+needed only to write <code>.npz</code> files; <code>condathis</code> is
+needed only for the upstream CLI wrappers. Neither is required for the
+core convert step.</p>
+<h2 id="convert-a-bam-to-bin-counts">Convert A BAM To Bin Counts</h2>
+<p>The package ships with a small chromosome 11 BAM fixture for examples
+and tests.</p>
+<div class="sourceCode" id="cb2"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb2-1"><a href="#cb2-1" tabindex="-1"></a><span class="fu">library</span>(RWisecondorX)</span>
+<span id="cb2-2"><a href="#cb2-2" tabindex="-1"></a></span>
+<span id="cb2-3"><a href="#cb2-3" tabindex="-1"></a>fixture_bam <span class="ot">&lt;-</span> <span class="fu">system.file</span>(</span>
+<span id="cb2-4"><a href="#cb2-4" tabindex="-1"></a>  <span class="st">&quot;extdata&quot;</span>,</span>
+<span id="cb2-5"><a href="#cb2-5" tabindex="-1"></a>  <span class="st">&quot;hg00106_chr11_fixture.bam&quot;</span>,</span>
+<span id="cb2-6"><a href="#cb2-6" tabindex="-1"></a>  <span class="at">package =</span> <span class="st">&quot;RWisecondorX&quot;</span></span>
+<span id="cb2-7"><a href="#cb2-7" tabindex="-1"></a>)</span>
+<span id="cb2-8"><a href="#cb2-8" tabindex="-1"></a></span>
+<span id="cb2-9"><a href="#cb2-9" tabindex="-1"></a>bins <span class="ot">&lt;-</span> <span class="fu">bam_convert</span>(</span>
+<span id="cb2-10"><a href="#cb2-10" tabindex="-1"></a>  fixture_bam,</span>
+<span id="cb2-11"><a href="#cb2-11" tabindex="-1"></a>  <span class="at">binsize =</span> <span class="dv">5000</span><span class="dt">L</span>,</span>
+<span id="cb2-12"><a href="#cb2-12" tabindex="-1"></a>  <span class="at">rmdup =</span> <span class="st">&quot;streaming&quot;</span></span>
+<span id="cb2-13"><a href="#cb2-13" tabindex="-1"></a>)</span>
+<span id="cb2-14"><a href="#cb2-14" tabindex="-1"></a></span>
+<span id="cb2-15"><a href="#cb2-15" tabindex="-1"></a><span class="fu">names</span>(<span class="fu">Filter</span>(<span class="fu">Negate</span>(is.null), bins))</span>
+<span id="cb2-16"><a href="#cb2-16" tabindex="-1"></a><span class="co">#&gt; [1] &quot;11&quot;</span></span>
+<span id="cb2-17"><a href="#cb2-17" tabindex="-1"></a></span>
+<span id="cb2-18"><a href="#cb2-18" tabindex="-1"></a><span class="fu">length</span>(bins[[<span class="st">&quot;11&quot;</span>]])</span>
+<span id="cb2-19"><a href="#cb2-19" tabindex="-1"></a><span class="co">#&gt; [1] 1198</span></span>
+<span id="cb2-20"><a href="#cb2-20" tabindex="-1"></a></span>
+<span id="cb2-21"><a href="#cb2-21" tabindex="-1"></a><span class="fu">sum</span>(bins[[<span class="st">&quot;11&quot;</span>]])</span>
+<span id="cb2-22"><a href="#cb2-22" tabindex="-1"></a><span class="co">#&gt; [1] 982</span></span></code></pre></div>
+<p>The <code>rmdup</code> argument controls duplicate handling.
+<code>&quot;streaming&quot;</code> exactly replicates the upstream WisecondorX
+<code>larp</code> / <code>larp2</code> state machine and is the default.
+<code>&quot;none&quot;</code> skips deduplication entirely, matching
+<code>wisecondorx convert --normdup</code> for NIPT data where read
+depth is low. <code>&quot;flag&quot;</code> uses the SAM duplicate flag
+(<code>0x400</code>) for BAMs already processed by Picard or
+sambamba.</p>
+<h2 id="optional-bedgz-output">Optional BED.gz Output</h2>
+<p><code>bam_convert_bed()</code> is the language-agnostic output path.
+It produces a bgzipped BED file (<code>chrom</code>, <code>start</code>,
+<code>end</code>, <code>count</code>; 0-based coordinates) and a tabix
+index alongside it, using <code>rduckhts_bgzip</code> and
+<code>rduckhts_tabix_index</code> from <code>Rduckhts</code> — no
+external tools or Python required. The resulting file can be queried by
+region directly from DuckDB.</p>
+<div class="sourceCode" id="cb3"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb3-1"><a href="#cb3-1" tabindex="-1"></a><span class="fu">bam_convert_bed</span>(</span>
+<span id="cb3-2"><a href="#cb3-2" tabindex="-1"></a>  <span class="at">bam     =</span> <span class="st">&quot;sample.bam&quot;</span>,</span>
+<span id="cb3-3"><a href="#cb3-3" tabindex="-1"></a>  <span class="at">bed     =</span> <span class="st">&quot;sample.bed.gz&quot;</span>,   <span class="co"># → sample.bed.gz + sample.bed.gz.tbi</span></span>
+<span id="cb3-4"><a href="#cb3-4" tabindex="-1"></a>  <span class="at">binsize =</span> <span class="dv">5000</span><span class="dt">L</span>,</span>
+<span id="cb3-5"><a href="#cb3-5" tabindex="-1"></a>  <span class="at">rmdup   =</span> <span class="st">&quot;streaming&quot;</span></span>
+<span id="cb3-6"><a href="#cb3-6" tabindex="-1"></a>)</span></code></pre></div>
+<h2 id="optional-npz-and-cli-workflow">Optional NPZ And CLI
+Workflow</h2>
+<p>When the full upstream WisecondorX pipeline is needed,
+<code>wisecondorx_convert()</code> wraps
+<code>wisecondorx convert</code> via <code>condathis</code> and produces
+an <code>.npz</code> through the official Python implementation.
+<code>wisecondorx_newref()</code> and <code>wisecondorx_predict()</code>
+cover the remaining stages. All three handle conda environment creation
+automatically on first use.</p>
+<div class="sourceCode" id="cb4"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb4-1"><a href="#cb4-1" tabindex="-1"></a><span class="fu">wisecondorx_convert</span>(</span>
+<span id="cb4-2"><a href="#cb4-2" tabindex="-1"></a>  <span class="at">bam     =</span> <span class="st">&quot;sample.bam&quot;</span>,</span>
+<span id="cb4-3"><a href="#cb4-3" tabindex="-1"></a>  <span class="at">npz     =</span> <span class="st">&quot;sample.npz&quot;</span>,</span>
+<span id="cb4-4"><a href="#cb4-4" tabindex="-1"></a>  <span class="at">binsize =</span> <span class="dv">5000</span><span class="dt">L</span>,</span>
+<span id="cb4-5"><a href="#cb4-5" tabindex="-1"></a>  <span class="at">normdup =</span> <span class="cn">FALSE</span>          <span class="co"># TRUE → --normdup (NIPT)</span></span>
+<span id="cb4-6"><a href="#cb4-6" tabindex="-1"></a>)</span></code></pre></div>
+<div class="sourceCode" id="cb5"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb5-1"><a href="#cb5-1" tabindex="-1"></a><span class="fu">library</span>(RWisecondorX)</span>
+<span id="cb5-2"><a href="#cb5-2" tabindex="-1"></a></span>
+<span id="cb5-3"><a href="#cb5-3" tabindex="-1"></a>fixture_npz <span class="ot">&lt;-</span> <span class="fu">tempfile</span>(<span class="at">fileext =</span> <span class="st">&quot;.npz&quot;</span>)</span>
+<span id="cb5-4"><a href="#cb5-4" tabindex="-1"></a>np <span class="ot">&lt;-</span> reticulate<span class="sc">::</span><span class="fu">import</span>(<span class="st">&quot;numpy&quot;</span>, <span class="at">convert =</span> <span class="cn">FALSE</span>)</span>
+<span id="cb5-5"><a href="#cb5-5" tabindex="-1"></a></span>
+<span id="cb5-6"><a href="#cb5-6" tabindex="-1"></a><span class="fu">bam_convert_npz</span>(</span>
+<span id="cb5-7"><a href="#cb5-7" tabindex="-1"></a>  <span class="at">bam     =</span> fixture_bam,</span>
+<span id="cb5-8"><a href="#cb5-8" tabindex="-1"></a>  <span class="at">npz     =</span> fixture_npz,</span>
+<span id="cb5-9"><a href="#cb5-9" tabindex="-1"></a>  <span class="at">binsize =</span> <span class="dv">5000</span><span class="dt">L</span>,</span>
+<span id="cb5-10"><a href="#cb5-10" tabindex="-1"></a>  <span class="at">rmdup   =</span> <span class="st">&quot;streaming&quot;</span>,</span>
+<span id="cb5-11"><a href="#cb5-11" tabindex="-1"></a>  <span class="at">np      =</span> np</span>
+<span id="cb5-12"><a href="#cb5-12" tabindex="-1"></a>)</span>
+<span id="cb5-13"><a href="#cb5-13" tabindex="-1"></a></span>
+<span id="cb5-14"><a href="#cb5-14" tabindex="-1"></a><span class="fu">c</span>(</span>
+<span id="cb5-15"><a href="#cb5-15" tabindex="-1"></a>  <span class="at">npz_created =</span> <span class="fu">file.exists</span>(fixture_npz),</span>
+<span id="cb5-16"><a href="#cb5-16" tabindex="-1"></a>  <span class="at">npz_size    =</span> <span class="fu">file.info</span>(fixture_npz)<span class="sc">$</span>size</span>
+<span id="cb5-17"><a href="#cb5-17" tabindex="-1"></a>)</span>
+<span id="cb5-18"><a href="#cb5-18" tabindex="-1"></a><span class="co">#&gt; npz_created    npz_size </span></span>
+<span id="cb5-19"><a href="#cb5-19" tabindex="-1"></a><span class="co">#&gt;           1         392</span></span></code></pre></div>
+<p>The CLI wrappers expose the upstream arguments documented in the
+WisecondorX README. They delegate to the official
+<code>wisecondorx</code> bioconda package installed automatically via
+<code>condathis</code>.</p>
+<div class="sourceCode" id="cb6"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb6-1"><a href="#cb6-1" tabindex="-1"></a><span class="fu">library</span>(RWisecondorX)</span>
+<span id="cb6-2"><a href="#cb6-2" tabindex="-1"></a></span>
+<span id="cb6-3"><a href="#cb6-3" tabindex="-1"></a>npz_files <span class="ot">&lt;-</span> <span class="fu">list.files</span>(<span class="st">&quot;controls/&quot;</span>, <span class="st">&quot;</span><span class="sc">\\</span><span class="st">.npz$&quot;</span>, <span class="at">full.names =</span> <span class="cn">TRUE</span>)</span>
+<span id="cb6-4"><a href="#cb6-4" tabindex="-1"></a></span>
+<span id="cb6-5"><a href="#cb6-5" tabindex="-1"></a><span class="fu">wisecondorx_newref</span>(</span>
+<span id="cb6-6"><a href="#cb6-6" tabindex="-1"></a>  <span class="at">npz_files   =</span> npz_files,</span>
+<span id="cb6-7"><a href="#cb6-7" tabindex="-1"></a>  <span class="at">output      =</span> <span class="st">&quot;reference.npz&quot;</span>,</span>
+<span id="cb6-8"><a href="#cb6-8" tabindex="-1"></a>  <span class="at">ref_binsize =</span> <span class="dv">100000</span><span class="dt">L</span>,</span>
+<span id="cb6-9"><a href="#cb6-9" tabindex="-1"></a>  <span class="at">nipt        =</span> <span class="cn">TRUE</span>,</span>
+<span id="cb6-10"><a href="#cb6-10" tabindex="-1"></a>  <span class="at">refsize     =</span> <span class="dv">300</span><span class="dt">L</span>,</span>
+<span id="cb6-11"><a href="#cb6-11" tabindex="-1"></a>  <span class="at">plotyfrac   =</span> <span class="st">&quot;yfrac_plot.png&quot;</span>,</span>
+<span id="cb6-12"><a href="#cb6-12" tabindex="-1"></a>  <span class="at">cpus        =</span> <span class="dv">4</span><span class="dt">L</span></span>
+<span id="cb6-13"><a href="#cb6-13" tabindex="-1"></a>)</span>
+<span id="cb6-14"><a href="#cb6-14" tabindex="-1"></a></span>
+<span id="cb6-15"><a href="#cb6-15" tabindex="-1"></a><span class="fu">wisecondorx_predict</span>(</span>
+<span id="cb6-16"><a href="#cb6-16" tabindex="-1"></a>  <span class="at">npz             =</span> <span class="st">&quot;sample.npz&quot;</span>,</span>
+<span id="cb6-17"><a href="#cb6-17" tabindex="-1"></a>  <span class="at">ref             =</span> <span class="st">&quot;reference.npz&quot;</span>,</span>
+<span id="cb6-18"><a href="#cb6-18" tabindex="-1"></a>  <span class="at">output_prefix   =</span> <span class="st">&quot;results/sample&quot;</span>,</span>
+<span id="cb6-19"><a href="#cb6-19" tabindex="-1"></a>  <span class="at">bed             =</span> <span class="cn">TRUE</span>,</span>
+<span id="cb6-20"><a href="#cb6-20" tabindex="-1"></a>  <span class="at">plot            =</span> <span class="cn">TRUE</span>,</span>
+<span id="cb6-21"><a href="#cb6-21" tabindex="-1"></a>  <span class="at">add_plot_title  =</span> <span class="cn">TRUE</span>,</span>
+<span id="cb6-22"><a href="#cb6-22" tabindex="-1"></a>  <span class="at">seed            =</span> <span class="dv">1</span><span class="dt">L</span></span>
+<span id="cb6-23"><a href="#cb6-23" tabindex="-1"></a>)</span></code></pre></div>
+<h2 id="native-wisecondorx-pipeline-no-python">Native WisecondorX
+Pipeline (No Python)</h2>
+<p><code>rwisecondorx_newref()</code> and
+<code>rwisecondorx_predict()</code> are pure R/Rcpp implementations of
+the full WisecondorX algorithm — reference building, PCA correction,
+within-sample normalisation, CBS segmentation, and aberration calling —
+with no Python dependency. Performance-critical KNN reference-bin
+finding is compiled via Rcpp with OpenMP parallelisation. CBS
+segmentation uses DNAcopy (or ParDNAcopy for parallel operation)
+directly instead of calling the upstream <code>CBS.R</code>
+subprocess.</p>
+<p>The typical workflow is: bin samples with <code>bam_convert()</code>,
+build a reference with <code>rwisecondorx_newref()</code>, then call
+aberrations with <code>rwisecondorx_predict()</code>. The reference is a
+plain R list that can be serialised with <code>saveRDS()</code> and
+shared between sessions.</p>
+<div class="sourceCode" id="cb7"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb7-1"><a href="#cb7-1" tabindex="-1"></a><span class="fu">library</span>(RWisecondorX)</span>
+<span id="cb7-2"><a href="#cb7-2" tabindex="-1"></a></span>
+<span id="cb7-3"><a href="#cb7-3" tabindex="-1"></a>bam_files <span class="ot">&lt;-</span> <span class="fu">list.files</span>(<span class="st">&quot;controls/&quot;</span>, <span class="st">&quot;</span><span class="sc">\\</span><span class="st">.bam$&quot;</span>, <span class="at">full.names =</span> <span class="cn">TRUE</span>)</span>
+<span id="cb7-4"><a href="#cb7-4" tabindex="-1"></a></span>
+<span id="cb7-5"><a href="#cb7-5" tabindex="-1"></a>samples <span class="ot">&lt;-</span> <span class="fu">lapply</span>(bam_files, bam_convert, <span class="at">binsize =</span> <span class="dv">5000</span><span class="dt">L</span>, <span class="at">rmdup =</span> <span class="st">&quot;streaming&quot;</span>)</span>
+<span id="cb7-6"><a href="#cb7-6" tabindex="-1"></a></span>
+<span id="cb7-7"><a href="#cb7-7" tabindex="-1"></a>ref <span class="ot">&lt;-</span> <span class="fu">rwisecondorx_newref</span>(</span>
+<span id="cb7-8"><a href="#cb7-8" tabindex="-1"></a>  <span class="at">samples  =</span> samples,</span>
+<span id="cb7-9"><a href="#cb7-9" tabindex="-1"></a>  <span class="at">binsize  =</span> <span class="dv">100000</span><span class="dt">L</span>,</span>
+<span id="cb7-10"><a href="#cb7-10" tabindex="-1"></a>  <span class="at">nipt     =</span> <span class="cn">TRUE</span>,</span>
+<span id="cb7-11"><a href="#cb7-11" tabindex="-1"></a>  <span class="at">refsize  =</span> <span class="dv">300</span><span class="dt">L</span>,</span>
+<span id="cb7-12"><a href="#cb7-12" tabindex="-1"></a>  <span class="at">cpus     =</span> <span class="dv">4</span><span class="dt">L</span></span>
+<span id="cb7-13"><a href="#cb7-13" tabindex="-1"></a>)</span>
+<span id="cb7-14"><a href="#cb7-14" tabindex="-1"></a></span>
+<span id="cb7-15"><a href="#cb7-15" tabindex="-1"></a><span class="fu">saveRDS</span>(ref, <span class="st">&quot;reference.rds&quot;</span>)</span>
+<span id="cb7-16"><a href="#cb7-16" tabindex="-1"></a></span>
+<span id="cb7-17"><a href="#cb7-17" tabindex="-1"></a>test_sample <span class="ot">&lt;-</span> <span class="fu">bam_convert</span>(<span class="st">&quot;test.bam&quot;</span>, <span class="at">binsize =</span> <span class="dv">5000</span><span class="dt">L</span>, <span class="at">rmdup =</span> <span class="st">&quot;streaming&quot;</span>)</span>
+<span id="cb7-18"><a href="#cb7-18" tabindex="-1"></a></span>
+<span id="cb7-19"><a href="#cb7-19" tabindex="-1"></a>prediction <span class="ot">&lt;-</span> <span class="fu">rwisecondorx_predict</span>(</span>
+<span id="cb7-20"><a href="#cb7-20" tabindex="-1"></a>  <span class="at">sample         =</span> test_sample,</span>
+<span id="cb7-21"><a href="#cb7-21" tabindex="-1"></a>  <span class="at">reference      =</span> ref,</span>
+<span id="cb7-22"><a href="#cb7-22" tabindex="-1"></a>  <span class="at">sample_binsize =</span> <span class="dv">5000</span><span class="dt">L</span>,</span>
+<span id="cb7-23"><a href="#cb7-23" tabindex="-1"></a>  <span class="at">outprefix      =</span> <span class="st">&quot;results/test&quot;</span>,</span>
+<span id="cb7-24"><a href="#cb7-24" tabindex="-1"></a>  <span class="at">zscore         =</span> <span class="dv">5</span>,</span>
+<span id="cb7-25"><a href="#cb7-25" tabindex="-1"></a>  <span class="at">alpha          =</span> <span class="fl">1e-4</span>,</span>
+<span id="cb7-26"><a href="#cb7-26" tabindex="-1"></a>  <span class="at">seed           =</span> <span class="dv">1</span><span class="dt">L</span></span>
+<span id="cb7-27"><a href="#cb7-27" tabindex="-1"></a>)</span>
+<span id="cb7-28"><a href="#cb7-28" tabindex="-1"></a></span>
+<span id="cb7-29"><a href="#cb7-29" tabindex="-1"></a>prediction<span class="sc">$</span>aberrations</span>
+<span id="cb7-30"><a href="#cb7-30" tabindex="-1"></a>prediction<span class="sc">$</span>statistics</span></code></pre></div>
+<h3 id="synthetic-cohort-for-testing">Synthetic Cohort For Testing</h3>
+<p><code>generate_cohort()</code> creates a synthetic BAM cohort
+suitable for end-to-end pipeline testing. It produces 50 samples using
+“compressed” chromosome lengths (100bp per 100kb genomic bin), so each
+BAM is ~435KB. The cohort includes euploid females and males plus three
+trisomy samples (T21, T18, T13) for sensitivity validation.</p>
+<div class="sourceCode" id="cb8"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb8-1"><a href="#cb8-1" tabindex="-1"></a><span class="fu">library</span>(RWisecondorX)</span>
+<span id="cb8-2"><a href="#cb8-2" tabindex="-1"></a></span>
+<span id="cb8-3"><a href="#cb8-3" tabindex="-1"></a>out_dir <span class="ot">&lt;-</span> <span class="fu">tempfile</span>(<span class="st">&quot;cohort_&quot;</span>)</span>
+<span id="cb8-4"><a href="#cb8-4" tabindex="-1"></a><span class="fu">generate_cohort</span>(out_dir)</span>
+<span id="cb8-5"><a href="#cb8-5" tabindex="-1"></a></span>
+<span id="cb8-6"><a href="#cb8-6" tabindex="-1"></a>bams <span class="ot">&lt;-</span> <span class="fu">list.files</span>(out_dir, <span class="st">&quot;</span><span class="sc">\\</span><span class="st">.bam$&quot;</span>, <span class="at">full.names =</span> <span class="cn">TRUE</span>)</span>
+<span id="cb8-7"><a href="#cb8-7" tabindex="-1"></a><span class="fu">length</span>(bams)  <span class="co"># 50</span></span>
+<span id="cb8-8"><a href="#cb8-8" tabindex="-1"></a></span>
+<span id="cb8-9"><a href="#cb8-9" tabindex="-1"></a>samples <span class="ot">&lt;-</span> <span class="fu">lapply</span>(bams, bam_convert,</span>
+<span id="cb8-10"><a href="#cb8-10" tabindex="-1"></a>                  <span class="at">binsize =</span> COMPRESSED_BINSIZE, <span class="at">rmdup =</span> <span class="st">&quot;none&quot;</span>)</span>
+<span id="cb8-11"><a href="#cb8-11" tabindex="-1"></a>ref <span class="ot">&lt;-</span> <span class="fu">rwisecondorx_newref</span>(samples, <span class="at">binsize =</span> COMPRESSED_BINSIZE,</span>
+<span id="cb8-12"><a href="#cb8-12" tabindex="-1"></a>                           <span class="at">nipt =</span> <span class="cn">TRUE</span>, <span class="at">cpus =</span> <span class="dv">4</span><span class="dt">L</span>)</span>
+<span id="cb8-13"><a href="#cb8-13" tabindex="-1"></a></span>
+<span id="cb8-14"><a href="#cb8-14" tabindex="-1"></a>t21_bam <span class="ot">&lt;-</span> <span class="fu">file.path</span>(out_dir, <span class="st">&quot;sample_048_T21.bam&quot;</span>)</span>
+<span id="cb8-15"><a href="#cb8-15" tabindex="-1"></a>t21 <span class="ot">&lt;-</span> <span class="fu">bam_convert</span>(t21_bam, <span class="at">binsize =</span> COMPRESSED_BINSIZE, <span class="at">rmdup =</span> <span class="st">&quot;none&quot;</span>)</span>
+<span id="cb8-16"><a href="#cb8-16" tabindex="-1"></a>pred <span class="ot">&lt;-</span> <span class="fu">rwisecondorx_predict</span>(t21, ref,</span>
+<span id="cb8-17"><a href="#cb8-17" tabindex="-1"></a>                             <span class="at">sample_binsize =</span> COMPRESSED_BINSIZE,</span>
+<span id="cb8-18"><a href="#cb8-18" tabindex="-1"></a>                             <span class="at">zscore =</span> <span class="dv">5</span>, <span class="at">seed =</span> <span class="dv">42</span><span class="dt">L</span>)</span>
+<span id="cb8-19"><a href="#cb8-19" tabindex="-1"></a></span>
+<span id="cb8-20"><a href="#cb8-20" tabindex="-1"></a>pred<span class="sc">$</span>aberrations[pred<span class="sc">$</span>aberrations<span class="sc">$</span>type <span class="sc">==</span> <span class="st">&quot;gain&quot;</span>, <span class="fu">c</span>(<span class="st">&quot;chr&quot;</span>, <span class="st">&quot;start&quot;</span>, <span class="st">&quot;end&quot;</span>, <span class="st">&quot;zscore&quot;</span>)]</span></code></pre></div>
+<h2 id="sex-prediction">Sex Prediction</h2>
+<p><code>nipter_sex_model()</code> trains a 2-component Gaussian mixture
+model on chromosome fraction data from a control group for sex
+prediction. Three model types are available: Y-fraction alone, bivariate
+X+Y fractions, and Y-unique region read ratios from specific
+Y-chromosome genes. <code>nipter_predict_sex()</code> classifies a test
+sample using one or more models with majority-vote consensus.</p>
+<div class="sourceCode" id="cb9"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb9-1"><a href="#cb9-1" tabindex="-1"></a><span class="fu">library</span>(RWisecondorX)</span>
+<span id="cb9-2"><a href="#cb9-2" tabindex="-1"></a></span>
+<span id="cb9-3"><a href="#cb9-3" tabindex="-1"></a>cg <span class="ot">&lt;-</span> <span class="fu">nipter_as_control_group</span>(samples)</span>
+<span id="cb9-4"><a href="#cb9-4" tabindex="-1"></a>cg <span class="ot">&lt;-</span> <span class="fu">nipter_gc_correct</span>(cg, <span class="at">fasta =</span> <span class="st">&quot;hg38.fa&quot;</span>)</span>
+<span id="cb9-5"><a href="#cb9-5" tabindex="-1"></a>corrected <span class="ot">&lt;-</span> <span class="fu">nipter_chi_correct</span>(samples[[<span class="dv">1</span>]], cg)</span>
+<span id="cb9-6"><a href="#cb9-6" tabindex="-1"></a>cg <span class="ot">&lt;-</span> corrected<span class="sc">$</span>control_group</span>
+<span id="cb9-7"><a href="#cb9-7" tabindex="-1"></a></span>
+<span id="cb9-8"><a href="#cb9-8" tabindex="-1"></a>model_y  <span class="ot">&lt;-</span> <span class="fu">nipter_sex_model</span>(cg, <span class="at">method =</span> <span class="st">&quot;y_fraction&quot;</span>)</span>
+<span id="cb9-9"><a href="#cb9-9" tabindex="-1"></a>model_xy <span class="ot">&lt;-</span> <span class="fu">nipter_sex_model</span>(cg, <span class="at">method =</span> <span class="st">&quot;xy_fraction&quot;</span>)</span>
+<span id="cb9-10"><a href="#cb9-10" tabindex="-1"></a></span>
+<span id="cb9-11"><a href="#cb9-11" tabindex="-1"></a><span class="fu">nipter_predict_sex</span>(test_sample, <span class="at">models =</span> <span class="fu">list</span>(model_y, model_xy))</span></code></pre></div>
+<h2 id="nipter-style-trisomy-prediction">NIPTeR-Style Trisomy
+Prediction</h2>
+<p><code>RWisecondorX</code> also ports the statistical analysis layer
+from <a href="https://github.com/molgenis/NIPTeR">NIPTeR</a> (de Weerd
+et al.), replacing <code>Rsamtools</code> with <code>Rduckhts</code> and
+bundled <code>sysdata.rda</code> tables with on-the-fly computation via
+<code>rduckhts_fasta_nuc()</code>. The analysis pipeline follows
+NIPTeR’s workflow: bin samples, build a control group, correct for GC
+bias and overdispersion, then compute Z-scores or NCV values for trisomy
+prediction.</p>
+<h3 id="binning">Binning</h3>
+<p><code>nipter_bin_bam()</code> produces <code>NIPTeRSample</code>
+objects compatible with all downstream functions. Pre-filtering flags
+mirror <code>samtools view -f</code>/<code>-F</code> conventions, so
+real-world NIPT pipelines that mark duplicates with Picard can pass
+<code>exclude_flags = 1024L</code> directly.</p>
+<div class="sourceCode" id="cb10"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb10-1"><a href="#cb10-1" tabindex="-1"></a>samples <span class="ot">&lt;-</span> <span class="fu">lapply</span>(bam_files, nipter_bin_bam, <span class="at">binsize =</span> <span class="dv">50000</span><span class="dt">L</span>)</span></code></pre></div>
+<h3 id="control-group-construction">Control Group Construction</h3>
+<p>A control group is the reference cohort against which test samples
+are scored. <code>nipter_as_control_group()</code> validates and
+deduplicates the input samples.
+<code>nipter_diagnose_control_group()</code> reports per-chromosome
+Z-scores and Shapiro-Wilk normality p-values across the group, useful
+for identifying outlier samples before scoring. When working with a
+large cohort, <code>nipter_match_control_group()</code> selects the
+closest-matching subset for a given test sample based on chromosomal
+fraction distance.</p>
+<div class="sourceCode" id="cb11"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb11-1"><a href="#cb11-1" tabindex="-1"></a>cg <span class="ot">&lt;-</span> <span class="fu">nipter_as_control_group</span>(samples)</span>
+<span id="cb11-2"><a href="#cb11-2" tabindex="-1"></a>diag <span class="ot">&lt;-</span> <span class="fu">nipter_diagnose_control_group</span>(cg)</span>
+<span id="cb11-3"><a href="#cb11-3" tabindex="-1"></a>matched_cg <span class="ot">&lt;-</span> <span class="fu">nipter_match_control_group</span>(test_sample, cg, <span class="at">n_controls =</span> <span class="dv">50</span><span class="dt">L</span>)</span></code></pre></div>
+<h3 id="gc-correction">GC Correction</h3>
+<p><code>nipter_gc_correct()</code> adjusts bin counts for GC-content
+bias. GC percentages are computed per bin from the reference FASTA via
+<code>rduckhts_fasta_nuc()</code> rather than from static bundled
+tables. Two methods are available: LOESS regression (default, matching
+NIPTeR) and bin-weight normalisation. The function accepts either a
+single sample or an entire control group.</p>
+<div class="sourceCode" id="cb12"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb12-1"><a href="#cb12-1" tabindex="-1"></a>cg <span class="ot">&lt;-</span> <span class="fu">nipter_gc_correct</span>(cg, <span class="at">fasta =</span> <span class="st">&quot;hg38.fa&quot;</span>, <span class="at">method =</span> <span class="st">&quot;loess&quot;</span>)</span>
+<span id="cb12-2"><a href="#cb12-2" tabindex="-1"></a>test_sample <span class="ot">&lt;-</span> <span class="fu">nipter_gc_correct</span>(test_sample, <span class="at">fasta =</span> <span class="st">&quot;hg38.fa&quot;</span>)</span></code></pre></div>
+<h3 id="chi-squared-correction">Chi-Squared Correction</h3>
+<p><code>nipter_chi_correct()</code> identifies overdispersed bins
+across the control group using a normalised chi-squared test and
+downweights them. The correction is applied simultaneously to both the
+test sample and control group, maintaining consistency for downstream
+scoring.</p>
+<div class="sourceCode" id="cb13"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb13-1"><a href="#cb13-1" tabindex="-1"></a>corrected <span class="ot">&lt;-</span> <span class="fu">nipter_chi_correct</span>(test_sample, cg, <span class="at">chi_cutoff =</span> <span class="fl">3.5</span>)</span>
+<span id="cb13-2"><a href="#cb13-2" tabindex="-1"></a>test_sample <span class="ot">&lt;-</span> corrected<span class="sc">$</span>sample</span>
+<span id="cb13-3"><a href="#cb13-3" tabindex="-1"></a>cg <span class="ot">&lt;-</span> corrected<span class="sc">$</span>control_group</span></code></pre></div>
+<h3 id="scoring">Scoring</h3>
+<p><code>nipter_z_score()</code> computes the chromosomal fraction
+Z-score for a focus chromosome, testing how far the sample deviates from
+the control distribution. A Z-score above 3 is the conventional
+threshold for trisomy. Each result includes a Shapiro-Wilk p-value for
+the control distribution so that normality violations are visible.</p>
+<div class="sourceCode" id="cb14"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb14-1"><a href="#cb14-1" tabindex="-1"></a>z21 <span class="ot">&lt;-</span> <span class="fu">nipter_z_score</span>(test_sample, cg, <span class="at">chromo_focus =</span> <span class="dv">21</span>)</span>
+<span id="cb14-2"><a href="#cb14-2" tabindex="-1"></a>z21<span class="sc">$</span>sample_z_score</span>
+<span id="cb14-3"><a href="#cb14-3" tabindex="-1"></a>z21<span class="sc">$</span>control_statistics</span></code></pre></div>
+<p><code>nipter_ncv_score()</code> computes the normalised chromosome
+value, which searches for the denominator chromosome set that minimises
+control-group variance before computing the Z-score. This is more robust
+than the standard Z-score when the control group is small or the
+chromosomal fraction has high variance.</p>
+<div class="sourceCode" id="cb15"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb15-1"><a href="#cb15-1" tabindex="-1"></a>ncv21 <span class="ot">&lt;-</span> <span class="fu">nipter_ncv_score</span>(test_sample, cg, <span class="at">chromo_focus =</span> <span class="dv">21</span>)</span>
+<span id="cb15-2"><a href="#cb15-2" tabindex="-1"></a>ncv21<span class="sc">$</span>sample_ncv_score</span>
+<span id="cb15-3"><a href="#cb15-3" tabindex="-1"></a>ncv21<span class="sc">$</span>denominators</span></code></pre></div>
+<p><code>nipter_regression()</code> uses forward stepwise linear
+regression to predict the focus chromosome’s fraction from other
+chromosomes, then scores the residual. It builds multiple models with a
+train/test split and selects the CV (practical vs theoretical) that
+gives the more conservative estimate.</p>
+<div class="sourceCode" id="cb16"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb16-1"><a href="#cb16-1" tabindex="-1"></a>reg21 <span class="ot">&lt;-</span> <span class="fu">nipter_regression</span>(test_sample, cg, <span class="at">chromo_focus =</span> <span class="dv">21</span>)</span>
+<span id="cb16-2"><a href="#cb16-2" tabindex="-1"></a>reg21<span class="sc">$</span>models[[<span class="dv">1</span>]]<span class="sc">$</span>z_score</span>
+<span id="cb16-3"><a href="#cb16-3" tabindex="-1"></a>reg21<span class="sc">$</span>models[[<span class="dv">1</span>]]<span class="sc">$</span>predictors</span></code></pre></div>
+<h2 id="sra-metadata-helpers">SRA Metadata Helpers</h2>
+<p><code>sra_runinfo_url()</code>, <code>download_sra_runinfo()</code>,
+and <code>read_sra_runinfo()</code> are small helpers for staging NCBI
+SRA run metadata used by conformance fixtures.</p>
+<div class="sourceCode" id="cb17"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb17-1"><a href="#cb17-1" tabindex="-1"></a><span class="fu">library</span>(RWisecondorX)</span>
+<span id="cb17-2"><a href="#cb17-2" tabindex="-1"></a></span>
+<span id="cb17-3"><a href="#cb17-3" tabindex="-1"></a><span class="fu">sra_runinfo_url</span>(<span class="st">&quot;PRJNA400134&quot;</span>)</span>
+<span id="cb17-4"><a href="#cb17-4" tabindex="-1"></a><span class="co">#&gt; [1] &quot;https://trace.ncbi.nlm.nih.gov/Traces/sra-db-be/runinfo?acc=PRJNA400134&quot;</span></span></code></pre></div>
+<h2 id="development">Development</h2>
+<p><code>README.Rmd</code> is the editable source for this document. Run
+<code>make readme</code> to rerender <code>README.md</code>,
+<code>make rd</code> to regenerate documentation from roxygen2 comments,
+and <code>make fixtures</code> to rebuild the bundled test data.</p>
+
+</body>
+</html>

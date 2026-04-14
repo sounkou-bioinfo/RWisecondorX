@@ -196,29 +196,21 @@ scale_sample <- function(sample, from_size, to_size) {
            "Install it with: install.packages('mclust')", call. = FALSE)
     }
 
-    # Fit 2-component GMM (emulating sklearn GaussianMixture)
     fit <- .mclust_gender_fit(y_fractions)
 
     if (is.null(fit)) {
-      # Mclust can fail when one group has zero variance (e.g. all females
-      # have exactly 0 Y-fraction). Fall back to a gap-based cutoff.
+      # Mclust returned NULL (rare edge case). Use the gap between the
+      # smallest nonzero fraction and zero as the cutoff.
       nonzero <- y_fractions[y_fractions > 0]
-      if (length(nonzero) > 0L) {
-        cutoff <- min(nonzero) / 2
-      } else {
-        # All samples have zero Y — everyone is female
-        cutoff <- 0.001
-      }
-      message("GMM gender model did not converge; using fallback cutoff ", cutoff)
+      cutoff <- if (length(nonzero) > 0L) min(nonzero) / 2 else 0.001
+      message("GMM gender model did not converge; using cutoff ", cutoff)
     } else {
       # Find local minimum of the density on a fine grid [0, 0.02]
       gmm_x <- seq(0, 0.02, length.out = 5000)
       gmm_y <- .gmm_density(fit, gmm_x)
 
-      # Find local minima using diff of sign
       local_mins <- which(diff(sign(diff(gmm_y))) == 2) + 1L
       if (length(local_mins) == 0L) {
-        # Fallback: use the midpoint between the two component means
         cutoff <- mean(fit$parameters$mean)
       } else {
         cutoff <- gmm_x[local_mins[1]]

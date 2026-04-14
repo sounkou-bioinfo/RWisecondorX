@@ -6,6 +6,13 @@
 // other chromosomes).
 //
 // Parallelized with OpenMP when cpus > 1.
+//
+// Performance note: R stores matrices column-major (n_bins × n_samples),
+// so row i's features are at offsets i, i + n_bins, i + 2*n_bins, ...
+// — a stride of n_bins doubles (~225KB for 28K bins).  We transpose to
+// row-major at the start so each bin's feature vector is contiguous
+// (n_samples doubles ≈ 400 bytes for 50 samples), giving ~10-20× speedup
+// from cache locality.
 
 #include <Rcpp.h>
 #include <algorithm>
@@ -18,18 +25,6 @@
 #endif
 
 using namespace Rcpp;
-
-// Small helper: squared Euclidean distance between two rows of a column-major
-// matrix (n_bins × n_samples).
-static inline double sq_euclid(const double* a, const double* b,
-                               int n_samples, int n_bins) {
-    double d = 0.0;
-    for (int j = 0; j < n_samples; ++j) {
-        double diff = a[j * n_bins] - b[j * n_bins];
-        d += diff * diff;
-    }
-    return d;
-}
 
 // [[Rcpp::export]]
 List knn_reference_cpp(NumericMatrix pca_corrected,
@@ -51,8 +46,17 @@ List knn_reference_cpp(NumericMatrix pca_corrected,
 
     bool is_gonosomal = (gender == "F" || gender == "M");
 
-    // Raw pointer to column-major data
+    // --- Transpose pca_corrected from column-major (n_bins × n_samples)
+    //     to row-major layout: trans[bin * n_samples + s]
+    //     This makes each bin's feature vector contiguous in memory.
     const double* pca_ptr = REAL(pca_corrected);
+    std::vector<double> trans(static_cast<size_t>(n_bins) * n_samples);
+    for (int s = 0; s < n_samples; ++s) {
+        const double* col = pca_ptr + static_cast<size_t>(s) * n_bins;
+        for (int b = 0; b < n_bins; ++b) {
+            trans[static_cast<size_t>(b) * n_samples + s] = col[b];
+        }
+    }
 
     // Pre-compute chromosome start/end for each chromosome (1-based R indexing
     // converted to 0-based C indexing)
@@ -92,17 +96,18 @@ List knn_reference_cpp(NumericMatrix pca_corrected,
         // Parallel over bins within this chromosome
         #pragma omp parallel for schedule(dynamic, 64) if(cpus > 1)
         for (int bin_i = cs; bin_i <= ce; ++bin_i) {
-            // Pointer to this bin's first element (column-major: row bin_i)
-            const double* this_row = pca_ptr + bin_i;
+            // Pointer to this bin's contiguous feature vector in transposed layout
+            const double* this_row = trans.data() +
+                                     static_cast<size_t>(bin_i) * n_samples;
 
             // Compute squared distances to all candidate bins
-            // Use a vector of (distance, index) pairs for partial sort
             std::vector<std::pair<double, int>> dist_idx(n_other);
             for (int j = 0; j < n_other; ++j) {
-                const double* cand_row = pca_ptr + other_rows[j];
+                const double* cand_row = trans.data() +
+                    static_cast<size_t>(other_rows[j]) * n_samples;
                 double d = 0.0;
                 for (int s = 0; s < n_samples; ++s) {
-                    double diff = this_row[s * n_bins] - cand_row[s * n_bins];
+                    double diff = this_row[s] - cand_row[s];
                     d += diff * diff;
                 }
                 dist_idx[j] = std::make_pair(d, other_rows[j]);

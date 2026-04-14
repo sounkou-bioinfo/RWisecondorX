@@ -67,12 +67,42 @@ BEGIN_RCPP
     return rcpp_result_gen;
 END_RCPP
 }
+// nipter_ncv_search_cpp
+List nipter_ncv_search_cpp(NumericMatrix ctrl_reads, IntegerVector candidates, int focus_row, int max_elements);
+RcppExport SEXP _RWisecondorX_nipter_ncv_search_cpp(SEXP ctrl_readsSEXP, SEXP candidatesSEXP, SEXP focus_rowSEXP, SEXP max_elementsSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< NumericMatrix >::type ctrl_reads(ctrl_readsSEXP);
+    Rcpp::traits::input_parameter< IntegerVector >::type candidates(candidatesSEXP);
+    Rcpp::traits::input_parameter< int >::type focus_row(focus_rowSEXP);
+    Rcpp::traits::input_parameter< int >::type max_elements(max_elementsSEXP);
+    rcpp_result_gen = Rcpp::wrap(nipter_ncv_search_cpp(ctrl_reads, candidates, focus_row, max_elements));
+    return rcpp_result_gen;
+END_RCPP
+}
+// nipter_stepwise_cpp
+IntegerVector nipter_stepwise_cpp(NumericMatrix fracs, int focus_row, IntegerVector cand_rows, int n_step);
+RcppExport SEXP _RWisecondorX_nipter_stepwise_cpp(SEXP fracsSEXP, SEXP focus_rowSEXP, SEXP cand_rowsSEXP, SEXP n_stepSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< NumericMatrix >::type fracs(fracsSEXP);
+    Rcpp::traits::input_parameter< int >::type focus_row(focus_rowSEXP);
+    Rcpp::traits::input_parameter< IntegerVector >::type cand_rows(cand_rowsSEXP);
+    Rcpp::traits::input_parameter< int >::type n_step(n_stepSEXP);
+    rcpp_result_gen = Rcpp::wrap(nipter_stepwise_cpp(fracs, focus_row, cand_rows, n_step));
+    return rcpp_result_gen;
+END_RCPP
+}
 
 static const R_CallMethodDef CallEntries[] = {
     {"_RWisecondorX_knn_reference_cpp", (DL_FUNC) &_RWisecondorX_knn_reference_cpp, 6},
     {"_RWisecondorX_null_ratios_cpp", (DL_FUNC) &_RWisecondorX_null_ratios_cpp, 4},
     {"_RWisecondorX_nipter_ssd_scores_cpp", (DL_FUNC) &_RWisecondorX_nipter_ssd_scores_cpp, 4},
     {"_RWisecondorX_nipter_ssd_matrix_cpp", (DL_FUNC) &_RWisecondorX_nipter_ssd_matrix_cpp, 3},
+    {"_RWisecondorX_nipter_ncv_search_cpp", (DL_FUNC) &_RWisecondorX_nipter_ncv_search_cpp, 4},
+    {"_RWisecondorX_nipter_stepwise_cpp", (DL_FUNC) &_RWisecondorX_nipter_stepwise_cpp, 4},
     {NULL, NULL, 0}
 };
 

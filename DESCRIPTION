@@ -14,9 +14,9 @@ Description: An 'R' toolkit for copy number analysis and trisomy prediction in n
             BAM/CRAM files are read via 'Rduckhts' without requiring 'pysam' or 'Rsamtools'.
             Intermediate results are written in language-agnostic bgzipped BED format, queryable by any tabix-aware tool or directly by 'DuckDB'.
             Optional conformance testing against the official 'wisecondorx' bioconda package is available via 'condathis' and 'reticulate'; no Python installation is required at runtime.
-Imports: Rduckhts(>= 1.1.6.9000-0.0.6), DBI, duckdb, Rcpp, stats, utils
+Imports: Rduckhts(>= 1.1.6.9000-0.0.6), Rcpp, stats, utils, ParDNAcopy, ggplot2, mclust
 LinkingTo: Rcpp
-Suggests: tinytest, condathis, reticulate, NIPTeR, mclust, DNAcopy, ParDNAcopy
+Suggests: tinytest, condathis, reticulate, NIPTeR
 Additional_repositories: https://rgenomicsetl.r-universe.dev, https://gsun2018.r-universe.dev
 biocViews:
 Config/WisecondorX/bioconda-package: wisecondorx

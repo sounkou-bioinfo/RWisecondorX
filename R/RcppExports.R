@@ -17,3 +17,11 @@ nipter_ssd_matrix_cpp <- function(fracs, compare_idx, cpus = 1L) {
     .Call(`_RWisecondorX_nipter_ssd_matrix_cpp`, fracs, compare_idx, cpus)
 }
 
+nipter_ncv_search_cpp <- function(ctrl_reads, candidates, focus_row, max_elements) {
+    .Call(`_RWisecondorX_nipter_ncv_search_cpp`, ctrl_reads, candidates, focus_row, max_elements)
+}
+
+nipter_stepwise_cpp <- function(fracs, focus_row, cand_rows, n_step) {
+    .Call(`_RWisecondorX_nipter_stepwise_cpp`, fracs, focus_row, cand_rows, n_step)
+}
+

@@ -6,6 +6,7 @@
 <!-- badges: start -->
 
 [![R-CMD-check](https://github.com/sounkou-bioinfo/RWisecondorX/actions/workflows/R-CMD-check.yaml/badge.svg)](https://github.com/sounkou-bioinfo/RWisecondorX/actions/workflows/R-CMD-check.yaml)
+[![rewrites.bio](https://rewrites.bio/badges/rewrites-bio.svg)](https://rewrites.bio)
 <!-- badges: end -->
 
 `RWisecondorX` is an R toolkit for copy number analysis and trisomy
@@ -57,8 +58,6 @@ The package ships with a small chromosome 11 BAM fixture for examples
 and tests.
 
 ``` r
-library(RWisecondorX)
-
 fixture_bam <- system.file(
   "extdata",
   "hg00106_chr11_fixture.bam",
@@ -88,79 +87,149 @@ is the default. `"none"` skips deduplication entirely, matching
 `"flag"` uses the SAM duplicate flag (`0x400`) for BAMs already
 processed by Picard or sambamba.
 
-## Optional BED.gz Output
+## BED.gz Output And Round-Trip
 
 `bam_convert_bed()` is the language-agnostic output path. It produces a
 bgzipped BED file (`chrom`, `start`, `end`, `count`; 0-based
-coordinates) and a tabix index alongside it, using `rduckhts_bgzip` and
+coordinates) and a tabix index, using `rduckhts_bgzip` and
 `rduckhts_tabix_index` from `Rduckhts` — no external tools or Python
-required. The resulting file can be queried by region directly from
-DuckDB.
+required.
 
 ``` r
+bed_file <- tempfile(fileext = ".bed.gz")
+
 bam_convert_bed(
-  bam     = "sample.bam",
-  bed     = "sample.bed.gz",   # → sample.bed.gz + sample.bed.gz.tbi
+  bam     = fixture_bam,
+  bed     = bed_file,
   binsize = 5000L,
   rmdup   = "streaming"
 )
+
+c(
+  bed_created   = file.exists(bed_file),
+  index_created = file.exists(paste0(bed_file, ".tbi")),
+  bed_size_kb   = round(file.info(bed_file)$size / 1024, 1)
+)
+#>   bed_created index_created   bed_size_kb 
+#>           1.0           1.0           4.3
+
+# Round-trip: reload into the named-list format for rwisecondorx_newref()
+sample_reloaded <- bed_to_sample(bed_file, binsize = 5000L)
+length(sample_reloaded[["11"]])  # same as bins[["11"]] above
+#> [1] 1198
 ```
 
-## BED.gz Round-Trip
+`bed_to_nipter_sample()` reads a 5-column NIPTeR BED.gz into a
+`NIPTeRSample` object compatible with all NIPTeR statistical functions.
+Column count is auto-detected (5 = CombinedStrands, 9 =
+SeparatedStrands).
 
-Once bin counts have been written to BED.gz, `bed_to_sample()` and
-`bed_to_nipter_sample()` read them back into the in-memory formats
-expected by the analysis pipelines. This means you can bin once, store
-the compact BED.gz files, and reload them for any number of downstream
-analyses without touching the original BAM again.
+## Native WisecondorX Pipeline (No Python)
 
-`bed_to_sample()` reads a 4-column WisecondorX BED.gz into the named
-list of integer vectors consumed by `rwisecondorx_newref()` and
-`rwisecondorx_predict()`:
+`rwisecondorx_newref()` and `rwisecondorx_predict()` are pure R/Rcpp
+implementations of the full WisecondorX algorithm — reference building,
+PCA correction, within-sample normalisation, CBS segmentation, and
+aberration calling — with no Python dependency. Performance-critical KNN
+reference-bin finding is compiled via Rcpp with OpenMP parallelisation.
+CBS segmentation uses DNAcopy (or ParDNAcopy for parallel operation)
+directly.
 
-``` r
-sample <- bed_to_sample("sample.bed.gz", binsize = 5000L)
-```
-
-`bed_to_nipter_sample()` reads a 5-column (CombinedStrands) or 9-column
-(SeparatedStrands) NIPTeR BED.gz into a `NIPTeRSample` object compatible
-with all NIPTeR statistical functions. Column count is auto-detected:
-
-``` r
-ns <- bed_to_nipter_sample("sample_nipter.bed.gz", binsize = 50000L)
-class(ns)  # "NIPTeRSample" "CombinedStrands"
-```
-
-A typical production workflow bins BAMs once and stores the results,
-then loads them for analysis across multiple sessions:
+The example below generates a 50-sample synthetic cohort (35 euploid
+female, 12 euploid male, 1×T21, 1×T18, 1×T13), builds a reference, and
+verifies that a trisomy sample is correctly detected.
 
 ``` r
-library(RWisecondorX)
+library(DNAcopy)
 
-bam_files <- list.files("bams/", "\\.bam$", full.names = TRUE)
-bed_dir   <- "bed_counts/"
-dir.create(bed_dir, showWarnings = FALSE)
-
-for (bam in bam_files) {
-  bed <- file.path(bed_dir, sub("\\.bam$", ".bed.gz", basename(bam)))
-  bam_convert_bed(bam, bed, binsize = 5000L, rmdup = "streaming")
+# generate_cohort() uses compressed chromosome lengths (100bp = 1 genomic bin)
+# so each BAM is ~435KB. Requires samtools on PATH.
+has_samtools <- nchar(Sys.which("samtools")) > 0L
+if (!has_samtools) {
+  message("samtools not found — skipping cohort pipeline example")
+  knitr::opts_chunk$set(eval = FALSE)
 }
+```
 
-bed_files <- list.files(bed_dir, "\\.bed\\.gz$", full.names = TRUE)
-samples   <- lapply(bed_files, bed_to_sample, binsize = 5000L)
+``` r
+cohort_dir <- file.path(tempdir(), "rwx_readme_cohort")
+manifest   <- suppressMessages(generate_cohort(cohort_dir, verbose = FALSE))
 
-ref <- rwisecondorx_newref(samples, binsize = 100000L, nipt = TRUE, cpus = 4L)
-saveRDS(ref, "reference.rds")
+# Cohort composition
+table(manifest$sex, manifest$trisomy)
+#>    
+#>     none T13 T18 T21
+#>   F   35   1   1   1
+#>   M   12   0   0   0
+```
+
+``` r
+# Bin all 50 BAMs
+all_samples <- lapply(
+  file.path(cohort_dir, manifest$bam_file),
+  function(bam) suppressMessages(
+    bam_convert(bam, binsize = COMPRESSED_BINSIZE, mapq = 0L, rmdup = "none")
+  )
+)
+names(all_samples) <- manifest$sample_id
+```
+
+``` r
+# Build reference (refsize=10 for speed; production uses refsize=300)
+ref <- suppressMessages(
+  rwisecondorx_newref(
+    samples = all_samples,
+    binsize = COMPRESSED_BINSIZE,
+    nipt    = TRUE,
+    refsize = 10L,
+    cpus    = 1L
+  )
+)
+c(binsize = ref$binsize, masked_bins = sum(!ref$mask), is_nipt = ref$is_nipt)
+#>     binsize masked_bins     is_nipt 
+#>         100         137           1
+```
+
+``` r
+# Predict on the T21 sample
+t21_id   <- manifest$sample_id[manifest$trisomy == "T21"]
+pred_t21 <- suppressMessages(
+  rwisecondorx_predict(
+    sample    = all_samples[[t21_id]],
+    reference = ref,
+    zscore    = 3,
+    alpha     = 1e-4,
+    seed      = 42L
+  )
+)
+
+# Chr21 should show gain
+pred_t21$aberrations[pred_t21$aberrations$chr == "21", ]
+#> [1] chr    start  end    ratio  zscore type  
+#> <0 rows> (or 0-length row.names)
+```
+
+### Multi-File BED Input For Reference Building
+
+`rwisecondorx_newref()` also accepts a directory of 4-column BED.gz
+files produced by `bam_convert_bed()` via the `bed_dir` parameter. All
+matching files are loaded in a single DuckDB pass — no in-memory sample
+list needed:
+
+``` r
+ref <- rwisecondorx_newref(
+  bed_dir = "bed_counts/",     # directory of *.bed.gz files
+  binsize = 100000L,
+  nipt    = TRUE,
+  cpus    = 4L
+)
 ```
 
 ## Optional NPZ And CLI Workflow
 
 When the full upstream WisecondorX pipeline is needed,
 `wisecondorx_convert()` wraps `wisecondorx convert` via `condathis` and
-produces an `.npz` through the official Python implementation.
-`wisecondorx_newref()` and `wisecondorx_predict()` cover the remaining
-stages. All three handle conda environment creation automatically on
-first use.
+produces an `.npz` through the official Python implementation. All three
+wrappers handle conda environment creation automatically on first use.
 
 ``` r
 wisecondorx_convert(
@@ -172,8 +241,6 @@ wisecondorx_convert(
 ```
 
 ``` r
-library(RWisecondorX)
-
 fixture_npz <- tempfile(fileext = ".npz")
 np <- reticulate::import("numpy", convert = FALSE)
 
@@ -194,11 +261,11 @@ c(
 ```
 
 The CLI wrappers expose the upstream arguments documented in the
-WisecondorX README. They delegate to the official `wisecondorx` bioconda
-package installed automatically via `condathis`.
+WisecondorX README and delegate to the official `wisecondorx` bioconda
+package.
 
 ``` r
-library(RWisecondorX)
+# Requires: condathis installed; wisecondorx bioconda package auto-installed
 
 npz_files <- list.files("controls/", "\\.npz$", full.names = TRUE)
 
@@ -208,126 +275,62 @@ wisecondorx_newref(
   ref_binsize = 100000L,
   nipt        = TRUE,
   refsize     = 300L,
-  plotyfrac   = "yfrac_plot.png",
   cpus        = 4L
 )
 
 wisecondorx_predict(
-  npz             = "sample.npz",
-  ref             = "reference.npz",
-  output_prefix   = "results/sample",
-  bed             = TRUE,
-  plot            = TRUE,
-  add_plot_title  = TRUE,
-  seed            = 1L
+  npz           = "sample.npz",
+  ref           = "reference.npz",
+  output_prefix = "results/sample",
+  bed           = TRUE,
+  seed          = 1L
 )
 ```
 
-## Native WisecondorX Pipeline (No Python)
+## Beta Mode (Somatic CNV)
 
-`rwisecondorx_newref()` and `rwisecondorx_predict()` are pure R/Rcpp
-implementations of the full WisecondorX algorithm — reference building,
-PCA correction, within-sample normalisation, CBS segmentation, and
-aberration calling — with no Python dependency. Performance-critical KNN
-reference-bin finding is compiled via Rcpp with OpenMP parallelisation.
-CBS segmentation uses DNAcopy (or ParDNAcopy for parallel operation)
-directly instead of calling the upstream `CBS.R` subprocess.
+`rwisecondorx_predict()` supports a `beta` parameter for purity-based
+aberration calling, appropriate for somatic CNV analysis where tumour
+purity is known. When `beta` is supplied, ratio cutoffs replace Z-score
+thresholds:
 
-The typical workflow is: bin samples with `bam_convert()`, build a
-reference with `rwisecondorx_newref()`, then call aberrations with
-`rwisecondorx_predict()`. The reference is a plain R list that can be
-serialised with `saveRDS()` and shared between sessions.
+    gain cutoff: log2((ploidy + beta/2) / ploidy)
+    loss cutoff: log2((ploidy - beta/2) / ploidy)
+
+`beta` is the tumour purity estimate (0–1; 0 = most liberal calling, 1 =
+most conservative; optimally close to true purity). This mode is **not
+appropriate for NIPT**, which uses the default Z-score calling.
 
 ``` r
-library(RWisecondorX)
-
-bam_files <- list.files("controls/", "\\.bam$", full.names = TRUE)
-
-samples <- lapply(bam_files, bam_convert, binsize = 5000L, rmdup = "streaming")
-
-ref <- rwisecondorx_newref(
-  samples  = samples,
-  binsize  = 100000L,
-  nipt     = TRUE,
-  refsize  = 300L,
-  cpus     = 4L
+# Somatic CNV: 40% purity tumour sample
+pred_somatic <- rwisecondorx_predict(
+  sample    = tumour_sample,
+  reference = ref,
+  beta      = 0.4,   # ~tumour purity
+  seed      = 1L
 )
-
-saveRDS(ref, "reference.rds")
-
-test_sample <- bam_convert("test.bam", binsize = 5000L, rmdup = "streaming")
-
-prediction <- rwisecondorx_predict(
-  sample         = test_sample,
-  reference      = ref,
-  sample_binsize = 5000L,
-  outprefix      = "results/test",
-  zscore         = 5,
-  alpha          = 1e-4,
-  seed           = 1L
-)
-
-prediction$aberrations
-prediction$statistics
 ```
 
-### Synthetic Cohort For Testing
+## Synthetic Cohort For Testing
 
-`generate_cohort()` creates a synthetic BAM cohort suitable for
-end-to-end pipeline testing. It produces 50 samples using “compressed”
-chromosome lengths (100bp per 100kb genomic bin), so each BAM is ~435KB.
-The cohort includes euploid females and males plus three trisomy samples
-(T21, T18, T13) for sensitivity validation.
+`generate_cohort()` creates a 50-sample synthetic BAM cohort using
+compressed chromosome lengths (100bp = 1 genomic 100kb bin), so each BAM
+is ~435KB. The cohort contains euploid females and males plus three
+trisomy samples (T21, T18, T13). See the native pipeline section above
+for end-to-end usage.
 
 ``` r
-library(RWisecondorX)
-
 out_dir <- tempfile("cohort_")
-generate_cohort(out_dir)
+manifest <- generate_cohort(out_dir)
 
-bams <- list.files(out_dir, "\\.bam$", full.names = TRUE)
-length(bams)  # 50
-
-samples <- lapply(bams, bam_convert,
-                  binsize = COMPRESSED_BINSIZE, rmdup = "none")
-ref <- rwisecondorx_newref(samples, binsize = COMPRESSED_BINSIZE,
-                           nipt = TRUE, cpus = 4L)
-
-t21_bam <- file.path(out_dir, "sample_048_T21.bam")
-t21 <- bam_convert(t21_bam, binsize = COMPRESSED_BINSIZE, rmdup = "none")
-pred <- rwisecondorx_predict(t21, ref,
-                             sample_binsize = COMPRESSED_BINSIZE,
-                             zscore = 5, seed = 42L)
-
-pred$aberrations[pred$aberrations$type == "gain", c("chr", "start", "end", "zscore")]
-```
-
-## Sex Prediction
-
-`nipter_sex_model()` trains a 2-component Gaussian mixture model on
-chromosome fraction data from a control group for sex prediction. Three
-model types are available: Y-fraction alone, bivariate X+Y fractions,
-and Y-unique region read ratios from specific Y-chromosome genes.
-`nipter_predict_sex()` classifies a test sample using one or more models
-with majority-vote consensus.
-
-``` r
-library(RWisecondorX)
-
-cg <- nipter_as_control_group(samples)
-cg <- nipter_gc_correct(cg, fasta = "hg38.fa")
-corrected <- nipter_chi_correct(samples[[1]], cg)
-cg <- corrected$control_group
-
-model_y  <- nipter_sex_model(cg, method = "y_fraction")
-model_xy <- nipter_sex_model(cg, method = "xy_fraction")
-
-nipter_predict_sex(test_sample, models = list(model_y, model_xy))
+# Bin with COMPRESSED_BINSIZE (100L) to match synthetic coordinates
+bams    <- file.path(out_dir, manifest$bam_file)
+samples <- lapply(bams, bam_convert, binsize = COMPRESSED_BINSIZE, rmdup = "none")
 ```
 
 ## NIPTeR-Style Trisomy Prediction
 
-`RWisecondorX` also ports the statistical analysis layer from
+`RWisecondorX` ports the statistical analysis layer from
 [NIPTeR](https://github.com/molgenis/NIPTeR) (de Weerd et al.),
 replacing `Rsamtools` with `Rduckhts` and bundled `sysdata.rda` tables
 with on-the-fly computation via `rduckhts_fasta_nuc()`. The analysis
@@ -355,12 +358,15 @@ Z-scores and Shapiro-Wilk normality p-values across the group, useful
 for identifying outlier samples before scoring. When working with a
 large cohort, `nipter_match_control_group()` selects the
 closest-matching subset for a given test sample based on chromosomal
-fraction distance.
+fraction distance (Rcpp+OpenMP accelerated). `nipter_match_matrix()`
+computes the full N×N pairwise SSD matrix — useful for QC outlier
+detection before building the control group.
 
 ``` r
 cg <- nipter_as_control_group(samples)
 diag <- nipter_diagnose_control_group(cg)
-matched_cg <- nipter_match_control_group(test_sample, cg, n_controls = 50L)
+matched_cg <- nipter_match_control_group(test_sample, cg, n = 50L)
+mm <- nipter_match_matrix(cg, cpus = 4L)
 ```
 
 ### GC Correction
@@ -369,12 +375,18 @@ matched_cg <- nipter_match_control_group(test_sample, cg, n_controls = 50L)
 percentages are computed per bin from the reference FASTA via
 `rduckhts_fasta_nuc()` rather than from static bundled tables. Two
 methods are available: LOESS regression (default, matching NIPTeR) and
-bin-weight normalisation. The function accepts either a single sample or
-an entire control group.
+bin-weight normalisation. For cohort workflows, `nipter_gc_precompute()`
+pre-computes and saves GC fractions to a TSV.bgz file so the FASTA is
+only scanned once.
 
 ``` r
-cg <- nipter_gc_correct(cg, fasta = "hg38.fa", method = "loess")
-test_sample <- nipter_gc_correct(test_sample, fasta = "hg38.fa")
+# Pre-compute GC table (one-time per genome / binsize)
+nipter_gc_precompute(fasta = "hg38.fa", binsize = 50000L,
+                     out = "gc_table.tsv.bgz")
+
+# Apply GC correction using pre-computed table (fast)
+cg          <- nipter_gc_correct(cg, gc_table = "gc_table.tsv.bgz")
+test_sample <- nipter_gc_correct(test_sample, gc_table = "gc_table.tsv.bgz")
 ```
 
 ### Chi-Squared Correction
@@ -385,18 +397,15 @@ correction is applied simultaneously to both the test sample and control
 group, maintaining consistency for downstream scoring.
 
 ``` r
-corrected <- nipter_chi_correct(test_sample, cg, chi_cutoff = 3.5)
+corrected   <- nipter_chi_correct(test_sample, cg, chi_cutoff = 3.5)
 test_sample <- corrected$sample
-cg <- corrected$control_group
+cg          <- corrected$control_group
 ```
 
 ### Scoring
 
 `nipter_z_score()` computes the chromosomal fraction Z-score for a focus
-chromosome, testing how far the sample deviates from the control
-distribution. A Z-score above 3 is the conventional threshold for
-trisomy. Each result includes a Shapiro-Wilk p-value for the control
-distribution so that normality violations are visible.
+chromosome. A Z-score above 3 is the conventional threshold for trisomy.
 
 ``` r
 z21 <- nipter_z_score(test_sample, cg, chromo_focus = 21)
@@ -404,11 +413,10 @@ z21$sample_z_score
 z21$control_statistics
 ```
 
-`nipter_ncv_score()` computes the normalised chromosome value, which
-searches for the denominator chromosome set that minimises control-group
-variance before computing the Z-score. This is more robust than the
-standard Z-score when the control group is small or the chromosomal
-fraction has high variance.
+`nipter_ncv_score()` computes the normalised chromosome value, searching
+for the denominator chromosome set that minimises control-group variance
+before computing the Z-score. More robust than the standard Z-score when
+the control group is small.
 
 ``` r
 ncv21 <- nipter_ncv_score(test_sample, cg, chromo_focus = 21)
@@ -418,14 +426,35 @@ ncv21$denominators
 
 `nipter_regression()` uses forward stepwise linear regression to predict
 the focus chromosome’s fraction from other chromosomes, then scores the
-residual. It builds multiple models with a train/test split and selects
-the CV (practical vs theoretical) that gives the more conservative
-estimate.
+residual.
 
 ``` r
 reg21 <- nipter_regression(test_sample, cg, chromo_focus = 21)
 reg21$models[[1]]$z_score
 reg21$models[[1]]$predictors
+```
+
+## Sex Prediction
+
+`nipter_sex_model()` trains a 2-component Gaussian mixture model on
+chromosome fraction data from a control group for sex prediction. Three
+model types are available: Y-fraction alone, bivariate X+Y fractions,
+and Y-unique region read ratios from specific Y-chromosome genes.
+`nipter_predict_sex()` classifies a test sample using one or more models
+with majority-vote consensus (ties → female, the conservative choice for
+NIPT).
+
+``` r
+# Requires: mclust package; whole-genome BAMs; FASTA for GC correction
+cg <- nipter_as_control_group(samples)
+cg <- nipter_gc_correct(cg, fasta = "hg38.fa")
+corrected <- nipter_chi_correct(samples[[1]], cg)
+cg <- corrected$control_group
+
+model_y  <- nipter_sex_model(cg, method = "y_fraction")
+model_xy <- nipter_sex_model(cg, method = "xy_fraction")
+
+nipter_predict_sex(test_sample, models = list(model_y, model_xy))
 ```
 
 ## SRA Metadata Helpers
@@ -435,14 +464,36 @@ are small helpers for staging NCBI SRA run metadata used by conformance
 fixtures.
 
 ``` r
-library(RWisecondorX)
-
 sra_runinfo_url("PRJNA400134")
 #> [1] "https://trace.ncbi.nlm.nih.gov/Traces/sra-db-be/runinfo?acc=PRJNA400134"
 ```
+
+## Validation And Conformance
+
+Per [rewrites.bio](https://rewrites.bio) principle 4.3, see
+[`VALIDATION.md`](VALIDATION.md) for a full account of what has been
+validated, on what data, against which upstream versions, and what
+remains unvalidated.
+
+**Summary of current status:**
+
+- `bam_convert()`: bin-for-bin identical to Python WisecondorX on
+  `HG00106.chrom11` (0 mismatches, 25,115 bins).
+- NIPTeR statistical layer (Z-score, NCV, chi, regression): formulas
+  verified against inline reference implementations in
+  `test_nipter_conformance.R`.
+- Trisomy detection: T21/T18/T13 all correctly called in
+  `test_cohort_pipeline.R` and `test_wisecondorx_e2e.R` using synthetic
+  cohort.
+- `rwisecondorx_newref/predict` segment and aberration comparison
+  against upstream Python: **pending real-data run** (run
+  `inst/scripts/real_data_conformance.R` with your server BAMs).
+- Beta mode (purity-based calling): implemented, not yet tested with
+  clinical samples.
 
 ## Development
 
 `README.Rmd` is the editable source for this document. Run `make readme`
 to rerender `README.md`, `make rd` to regenerate documentation from
-roxygen2 comments, and `make fixtures` to rebuild the bundled test data.
+roxygen2 comments, `make fixtures` to rebuild the bundled test data, and
+`make conformance` to run the end-to-end WisecondorX conformance test.

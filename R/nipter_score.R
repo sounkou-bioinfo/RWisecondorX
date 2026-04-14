@@ -173,24 +173,17 @@ nipter_ncv_score <- function(sample,
 
   chr_focus_key <- as.character(chromo_focus)
 
-  # Brute-force search over all combinations
-  best_cv   <- Inf
-  best_denom <- NULL
+  # 0-based row indices for focus chromosome and candidates
+  chr_names   <- rownames(ctrl_reads)
+  focus_row0  <- match(chr_focus_key, chr_names) - 1L
+  cand_rows0  <- match(as.character(candidates), chr_names) - 1L
 
-  for (n_el in seq_len(max_elements)) {
-    combos <- utils::combn(candidates, n_el, simplify = FALSE)
-    for (combo in combos) {
-      combo_keys <- as.character(combo)
-      # Ratio = focus / sum(denominators) for each control
-      denom_sums <- colSums(ctrl_reads[combo_keys, , drop = FALSE])
-      ratios <- ctrl_reads[chr_focus_key, ] / denom_sums
-      cv <- stats::sd(ratios) / mean(ratios)
-      if (cv < best_cv) {
-        best_cv    <- cv
-        best_denom <- combo
-      }
-    }
-  }
+  # C++ brute-force search over all combinations up to max_elements
+  search_res <- nipter_ncv_search_cpp(ctrl_reads, cand_rows0,
+                                      focus_row0, max_elements)
+  # Convert 0-based row indices back to chromosome integers
+  best_denom <- candidates[match(search_res$denom_rows, cand_rows0)]
+  best_cv    <- search_res$best_cv
 
   # Compute NCV statistics using the best denominators
   denom_keys   <- as.character(best_denom)

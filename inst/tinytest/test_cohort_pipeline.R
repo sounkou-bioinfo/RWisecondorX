@@ -11,9 +11,6 @@ library(DNAcopy)
 # the trisomy samples with rwisecondorx_predict().
 # ---------------------------------------------------------------------------
 
-has_samtools <- nchar(Sys.which("samtools")) > 0L
-if (!has_samtools) exit_file("samtools not available")
-
 
 # ---- Generate cohort ------------------------------------------------------
 
@@ -72,15 +69,13 @@ expect_true(all(y_counts_female == 0L),
 # ---- Build reference with rwisecondorx_newref() ---------------------------
 
 message("Building reference with rwisecondorx_newref() ...")
-ref <- suppressMessages(
-  rwisecondorx_newref(
+ref <- rwisecondorx_newref(
     samples = all_samples,
     binsize = COMPRESSED_BINSIZE,
     nipt    = TRUE,
     refsize = 10L,
     cpus    = 1L
   )
-)
 
 expect_true(inherits(ref, "WisecondorXReference") || is.list(ref),
             info = "newref returns a reference object")

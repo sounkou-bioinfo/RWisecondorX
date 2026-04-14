@@ -13,7 +13,7 @@
 #
 # Deterministic: sample i uses set.seed(42 + i).
 # NIPTeR-compatible: no unmapped reads, unique positions per chromosome.
-# Requires: samtools on PATH.
+# Uses Rduckhts for bgzip + BAM indexing — no external samtools dependency.
 
 
 # ---- GRCh37 bin structure (package-internal constants) --------------------
@@ -177,8 +177,6 @@ READS_PER_BIN <- 3.0
 #'
 #' The manifest is also written to `manifest.tsv` in `out_dir`.
 #'
-#' Requires `samtools` on PATH.
-#'
 #' @examples
 #' \dontrun{
 #' manifest <- generate_cohort(tempdir())
@@ -187,10 +185,16 @@ READS_PER_BIN <- 3.0
 #'
 #' @export
 generate_cohort <- function(out_dir, verbose = TRUE) {
-  samtools <- Sys.which("samtools")
-  if (nchar(samtools) == 0L) {
-    stop("samtools not found on PATH", call. = FALSE)
+  if (!requireNamespace("Rduckhts", quietly = TRUE)) {
+    stop("Rduckhts is required. Install it with: ",
+         "remotes::install_github('RGenomicsETL/duckhts/r/Rduckhts')",
+         call. = FALSE)
   }
+
+  drv <- duckdb::duckdb(config = list(allow_unsigned_extensions = "true"))
+  con <- DBI::dbConnect(drv)
+  Rduckhts::rduckhts_load(con)
+  on.exit(DBI::dbDisconnect(con, shutdown = TRUE), add = TRUE)
 
   dir.create(out_dir, showWarnings = FALSE, recursive = TRUE)
 
@@ -219,22 +223,16 @@ generate_cohort <- function(out_dir, verbose = TRUE) {
     records <- .sam_records(prof, seed)
     sam_text <- paste(c(header_text, records), collapse = "\n")
 
-    # Pipe SAM through samtools to produce sorted BAM
-    tmp_bam <- tempfile(fileext = ".bam")
+    # Write SAM to temp file, bgzip to .bam. read_bam() handles bgzipped SAM
+    # transparently via htslib. Records are coordinate-sorted by construction.
+    # No BAI index: BAI encodes binary BAM offsets, not SAM text positions, so
+    # indexing a bgzipped SAM produces a corrupt index. Sequential read_bam()
+    # scans work fine without an index.
+    tmp_sam <- tempfile(fileext = ".sam")
+    writeLines(sam_text, tmp_sam)
 
-    con <- pipe(sprintf("%s view -b -o %s -",
-                        shQuote(samtools), shQuote(tmp_bam)), "wb")
-    writeLines(sam_text, con)
-    close(con)
-
-    # Sort (should be sorted by construction, but be safe)
-    system2(samtools, c("sort", "-o", shQuote(bam_path), shQuote(tmp_bam)),
-            stdout = FALSE, stderr = FALSE)
-    unlink(tmp_bam)
-
-    # Index
-    system2(samtools, c("index", shQuote(bam_path)),
-            stdout = FALSE, stderr = FALSE)
+    Rduckhts::rduckhts_bgzip(con, tmp_sam, output_path = bam_path,
+                             threads = 1L, keep = FALSE)
 
     trisomy <- "none"
     if (grepl("trisomy_21", prof$id)) trisomy <- "T21"

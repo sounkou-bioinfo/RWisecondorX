@@ -5,22 +5,26 @@
 \title{Build a WisecondorX reference from binned samples}
 \usage{
 rwisecondorx_newref(
-  samples,
+  samples = NULL,
   binsize = 100000L,
   sample_binsizes = NULL,
   nipt = FALSE,
   refsize = 300L,
   yfrac = NULL,
-  cpus = 1L
+  cpus = 1L,
+  bed_dir = NULL,
+  bed_pattern = "*.bed.gz",
+  con = NULL
 )
 }
 \arguments{
 \item{samples}{List of sample objects, each a named list of integer vectors
 keyed by chromosome (\code{"1"}--\code{"24"}), as returned by \code{\link[=bam_convert]{bam_convert()}}.
-At least 10 samples are required.}
+At least 10 samples are required. Mutually exclusive with \code{bed_dir}.}
 
 \item{binsize}{Integer; the target bin size in base pairs. All samples are
-rescaled to this size. Default \code{100000L}.}
+rescaled to this size. Default \code{100000L}. Inferred from BED files when
+\code{bed_dir} is supplied and \code{sample_binsizes} is \code{NULL}.}
 
 \item{sample_binsizes}{Optional integer vector of per-sample bin sizes. If
 \code{NULL} (default), all samples are assumed to already be at \code{binsize}.}
@@ -36,6 +40,17 @@ classification. If \code{NULL} (default), the cutoff is derived from a GMM.}
 
 \item{cpus}{Integer; number of threads for reference bin finding.
 Default \code{1L}.}
+
+\item{bed_dir}{Optional character; path to a directory of 4-column bgzipped
+BED files (as written by \code{\link[=bam_convert_bed]{bam_convert_bed()}}). All files matching
+\code{bed_pattern} are loaded in a single DuckDB pass via
+\code{rduckhts_tabix_multi()}. Mutually exclusive with \code{samples}.}
+
+\item{bed_pattern}{Glob pattern for matching BED files inside \code{bed_dir}.
+Default \code{"*.bed.gz"}.}
+
+\item{con}{Optional existing DuckDB connection. Used only when \code{bed_dir} is
+supplied. A temporary connection is created (and closed) if \code{NULL}.}
 }
 \value{
 A list (the reference object) with class \code{"WisecondorXReference"},

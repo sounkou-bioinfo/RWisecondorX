@@ -54,7 +54,7 @@
 #'   available. Default `TRUE`. Falls back to `DNAcopy::segment()` with a
 #'   message if ParDNAcopy is not installed.
 #' @param cpus Integer; number of threads for parallel CBS (`parSegment`) and
-#'   any other OpenMP-accelerated steps. Default `1L`.
+#'   any other OpenMP-accelerated steps. Default `4L`.
 #'
 #' @return A list with class `"WisecondorXPrediction"` containing:
 #'   \describe{
@@ -86,7 +86,7 @@ rwisecondorx_predict <- function(sample,
                                 gender          = NULL,
                                 seed            = NULL,
                                 parallel        = TRUE,
-                                cpus            = 1L) {
+                                cpus            = 4L) {
   # ---------- validation ----------
   stopifnot(is.list(sample), is.list(reference))
   minrefbins  <- as.integer(minrefbins)

@@ -149,6 +149,9 @@ nipter_regression <- function(sample,
   # Total reads for focus chromosome of the test sample (for theoretical CV)
   sample_focus_reads <- sum(sample$autosomal_chromosome_reads[[1L]][chr_focus_key, ])
 
+  # Row-name → 0-based row index lookup (used for C++ stepwise call)
+  chr_names <- rownames(train_frac)
+
   # Track used predictors across models (no reuse)
   used_predictors <- character(0L)
 
@@ -162,30 +165,16 @@ nipter_regression <- function(sample,
 
     n_pred_this <- min(n_predictors, length(remaining))
 
-    # Forward stepwise selection on the training set
-    selected <- character(0L)
-    for (step in seq_len(n_pred_this)) {
-      best_adj_r2  <- -Inf
-      best_pred    <- NULL
-
-      for (candidate in setdiff(remaining, selected)) {
-        trial <- c(selected, candidate)
-        # Build data frame for lm
-        df_train <- data.frame(
-          y = train_frac[chr_focus_key, ],
-          t(train_frac[trial, , drop = FALSE])
-        )
-        fit <- stats::lm(y ~ ., data = df_train)
-        adj_r2 <- summary(fit)$adj.r.squared
-        if (!is.na(adj_r2) && adj_r2 > best_adj_r2) {
-          best_adj_r2 <- adj_r2
-          best_pred   <- candidate
-        }
-      }
-
-      if (is.null(best_pred)) break
-      selected <- c(selected, best_pred)
-    }
+    # C++ forward stepwise selection on the training set.
+    # nipter_stepwise_cpp uses incremental Gram-Schmidt to maximise adj.R²
+    # at each step — same greedy criterion as the R lm() loop but ~50-100x
+    # faster because it avoids formula parsing, data.frame allocation, and
+    # full QR re-decomposition for each candidate.
+    focus_row0    <- match(chr_focus_key, chr_names) - 1L
+    remaining_row0 <- match(remaining, chr_names) - 1L
+    sel_idx0 <- nipter_stepwise_cpp(train_frac, focus_row0,
+                                    remaining_row0, n_pred_this)
+    selected <- remaining[sel_idx0 + 1L]   # 0-based → 1-based → chr keys
 
     if (length(selected) == 0L) {
       models_out <- models_out[seq_len(m - 1L)]
@@ -194,23 +183,19 @@ nipter_regression <- function(sample,
 
     used_predictors <- c(used_predictors, selected)
 
-    # Fit final model on training set
-    df_train <- data.frame(
-      y = train_frac[chr_focus_key, ],
-      t(train_frac[selected, , drop = FALSE])
-    )
-    final_model <- stats::lm(y ~ ., data = df_train)
+    # Fit final model on training set using lm.fit() (no formula overhead)
+    X_train <- rbind(1, train_frac[selected, , drop = FALSE])  # (1+p) × n_train
+    fit_coef <- stats::lm.fit(t(X_train),
+                              train_frac[chr_focus_key, ])$coefficients
 
-    # Predict on test set
-    df_test <- data.frame(t(test_frac[selected, , drop = FALSE]))
-    test_pred <- stats::predict(final_model, newdata = df_test)
+    # Predict on test set and sample
+    X_test   <- rbind(1, test_frac[selected,  , drop = FALSE])
+    X_sample <- c(1, sample_frac[selected])
+    test_pred   <- as.numeric(fit_coef %*% X_test)
+    sample_pred <- as.numeric(sum(fit_coef * X_sample))
+
     test_obs  <- test_frac[chr_focus_key, ]
-    test_ratio <- test_obs / test_pred
-
-    # Predict for the sample
-    df_sample <- data.frame(t(sample_frac[selected]))
-    colnames(df_sample) <- colnames(df_train)[-1L]
-    sample_pred  <- stats::predict(final_model, newdata = df_sample)
+    test_ratio   <- test_obs / test_pred
     sample_ratio <- sample_frac[chr_focus_key] / sample_pred
 
     # CVs

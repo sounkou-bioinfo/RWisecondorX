@@ -20,7 +20,7 @@ deps:
 build: deps
 	R CMD build .
 
-.PHONY: install check build rd test test-source fixtures cohort clean help
+.PHONY: install check build rd test test-source fixtures cohort conformance nipter-fixture clean help
 
 install: build
 	THREADS=4 R CMD INSTALL $(PKG_NAME)_$(PKG_VERSION).tar.gz
@@ -44,6 +44,12 @@ test: install
 test-source:
 	R -e "tinytest::run_test_dir('inst/tinytest')"
 
+conformance:
+	R -e "tinytest::run_test_file('inst/tinytest/test_wisecondorx_e2e.R')"
+
+nipter-fixture:
+	Rscript inst/scripts/make_nipter_fixture.R
+
 # Clean build artifacts
 .PHONY: clean
 clean:
@@ -65,5 +71,7 @@ help:
 	@echo "  test-source - Run tinytest directly from the source tree"
 	@echo "  fixtures   - Regenerate packaged BAM/CRAM fixtures under inst/extdata"
 	@echo "  cohort     - Generate synthetic BAM cohort into cohort_out/"
+	@echo "  conformance - Run E2E WisecondorX conformance test (Python arm conditional on condathis)"
+	@echo "  nipter-fixture - Build multi-chromosome NIPTeR conformance BAM fixture"
 	@echo "  clean      - Clean build artifacts"
 	@echo "  help       - Show this help message"

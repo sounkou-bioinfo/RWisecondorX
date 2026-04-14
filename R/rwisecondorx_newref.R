@@ -39,9 +39,10 @@
 #'
 #' @param samples List of sample objects, each a named list of integer vectors
 #'   keyed by chromosome (`"1"`--`"24"`), as returned by [bam_convert()].
-#'   At least 10 samples are required.
+#'   At least 10 samples are required. Mutually exclusive with `bed_dir`.
 #' @param binsize Integer; the target bin size in base pairs. All samples are
-#'   rescaled to this size. Default `100000L`.
+#'   rescaled to this size. Default `100000L`. Inferred from BED files when
+#'   `bed_dir` is supplied and `sample_binsizes` is `NULL`.
 #' @param sample_binsizes Optional integer vector of per-sample bin sizes. If
 #'   `NULL` (default), all samples are assumed to already be at `binsize`.
 #' @param nipt Logical; if `TRUE`, NIPT mode (no gender correction, no male
@@ -51,7 +52,15 @@
 #' @param yfrac Optional numeric; manual Y-fraction cutoff for gender
 #'   classification. If `NULL` (default), the cutoff is derived from a GMM.
 #' @param cpus Integer; number of threads for reference bin finding.
-#'   Default `1L`.
+#'   Default `4L`.
+#' @param bed_dir Optional character; path to a directory of 4-column bgzipped
+#'   BED files (as written by [bam_convert_bed()]). All files matching
+#'   `bed_pattern` are loaded in a single DuckDB pass via
+#'   `rduckhts_tabix_multi()`. Mutually exclusive with `samples`.
+#' @param bed_pattern Glob pattern for matching BED files inside `bed_dir`.
+#'   Default `"*.bed.gz"`.
+#' @param con Optional existing DuckDB connection. Used only when `bed_dir` is
+#'   supplied. A temporary connection is created (and closed) if `NULL`.
 #'
 #' @return A list (the reference object) with class `"WisecondorXReference"`,
 #'   containing autosomal and (optionally) gonosomal sub-references. See
@@ -75,13 +84,55 @@
 #' @seealso [rwisecondorx_predict()], [scale_sample()], [bam_convert()]
 #'
 #' @export
-rwisecondorx_newref <- function(samples,
+rwisecondorx_newref <- function(samples         = NULL,
                                binsize         = 100000L,
                                sample_binsizes = NULL,
                                nipt            = FALSE,
                                refsize         = 300L,
                                yfrac           = NULL,
-                               cpus            = 1L) {
+                               cpus            = 4L,
+                               bed_dir         = NULL,
+                               bed_pattern     = "*.bed.gz",
+                               con             = NULL) {
+  # ---------- bed_dir loading (alternative to samples list) ----------
+  if (!is.null(bed_dir)) {
+    if (!is.null(samples))
+      stop("Provide 'samples' OR 'bed_dir', not both.")
+    files <- sort(Sys.glob(file.path(bed_dir, bed_pattern)))
+    if (!length(files))
+      stop("No files matching '", bed_pattern, "' found in bed_dir: ", bed_dir)
+    own_con <- is.null(con)
+    if (own_con) {
+      drv <- duckdb::duckdb(config = list(allow_unsigned_extensions = "true"))
+      con <- DBI::dbConnect(drv)
+      Rduckhts::rduckhts_load(con)
+    }
+    on.exit(if (own_con) DBI::dbDisconnect(con, shutdown = TRUE), add = TRUE)
+    tbl <- "rwx_newref_beds"
+    Rduckhts::rduckhts_tabix_multi(con, tbl, files, overwrite = TRUE)
+    rows <- DBI::dbGetQuery(con, sprintf(
+      "SELECT column0 AS chrom,
+              CAST(column1 AS INTEGER) AS start_pos,
+              CAST(column2 AS INTEGER) AS end_pos,
+              CAST(column3 AS INTEGER) AS count,
+              filename
+       FROM %s ORDER BY filename, chrom, start_pos", tbl))
+    rows$sample_name <- sub("\\.bed(\\.gz)?$", "", basename(rows$filename))
+    sample_names <- unique(rows$sample_name)
+    # Infer binsize from coordinate spacing if not supplied
+    if (is.null(sample_binsizes)) {
+      first_rows <- rows[rows$sample_name == sample_names[1L], ]
+      if (nrow(first_rows) >= 2L) {
+        inferred <- first_rows$end_pos[1L] - first_rows$start_pos[1L]
+        if (inferred > 0L) binsize <- as.integer(inferred)
+      }
+    }
+    samples <- lapply(sample_names, function(nm) {
+      .bed_rows_to_wcx_sample(rows[rows$sample_name == nm, ])
+    })
+    message("Loaded ", length(samples), " samples from bed_dir.")
+  }
+
   # ---------- input validation ----------
   stopifnot(is.list(samples), length(samples) >= 10L)
   binsize <- as.integer(binsize)
@@ -160,7 +211,7 @@ rwisecondorx_newref <- function(samples,
     message("Building female gonosomal reference...")
     female_samples <- samples[genders == "F"]
     gon_f_ref <- .build_sub_reference(female_samples, "F", total_mask, bins_per_chr,
-                                      refsize = refsize, cpus = 1L)
+                                      refsize = refsize, cpus = cpus)
     result$has_female <- TRUE
     for (nm in names(gon_f_ref)) result[[paste0(nm, ".F")]] <- gon_f_ref[[nm]]
   }
@@ -170,7 +221,7 @@ rwisecondorx_newref <- function(samples,
     message("Building male gonosomal reference...")
     male_samples <- samples[genders == "M"]
     gon_m_ref <- .build_sub_reference(male_samples, "M", total_mask, bins_per_chr,
-                                      refsize = refsize, cpus = 1L)
+                                      refsize = refsize, cpus = cpus)
     result$has_male <- TRUE
     for (nm in names(gon_m_ref)) result[[paste0(nm, ".M")]] <- gon_m_ref[[nm]]
   }
@@ -311,4 +362,36 @@ rwisecondorx_newref <- function(samples,
                                  as.integer(cpus))
 
   list(indexes = indexes, distances = distances, null_ratios = null_ratios)
+}
+
+
+#' Convert BED rows (from rduckhts_tabix_multi) to WisecondorX sample format
+#'
+#' @param rows data.frame with columns chrom, start_pos, end_pos, count.
+#' @return Named list of integer vectors keyed by chromosome ("1"–"24").
+#' @keywords internal
+.bed_rows_to_wcx_sample <- function(rows) {
+  # Map chromosome names to 1-24 (handles "chrX"->"23", "chrY"->"24" etc.)
+  chr_map <- c(as.character(1:22), "X", "Y",
+               paste0("chr", 1:22), "chrX", "chrY")
+  std_map <- c(as.character(1:22), "23", "24",
+               as.character(1:22), "23", "24")
+  names(std_map) <- chr_map
+
+  sample <- stats::setNames(vector("list", 24L), as.character(1:24))
+
+  for (chr_raw in unique(rows$chrom)) {
+    chr_key <- std_map[chr_raw]
+    if (is.na(chr_key)) next
+    r <- rows[rows$chrom == chr_raw, ]
+    r <- r[order(r$start_pos), ]
+    sample[[chr_key]] <- as.integer(r$count)
+  }
+
+  # Fill missing chromosomes with zero-length vectors
+  for (k in as.character(1:24)) {
+    if (is.null(sample[[k]])) sample[[k]] <- integer(0L)
+  }
+
+  sample
 }

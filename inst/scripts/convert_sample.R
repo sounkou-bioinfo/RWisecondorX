@@ -10,6 +10,7 @@
 #   Rscript convert_sample.R --mode wisecondorx --bam sample.bam --out sample.npz --npz
 #   Rscript convert_sample.R --mode nipter --bam sample.bam --out sample.bed.gz
 #   Rscript convert_sample.R --mode nipter --bam sample.bam --out sample.bed.gz --gc-table hg38_gc.tsv.bgz
+#   Rscript convert_sample.R --mode nipter --bam sample.bam --out sample.bed.gz --fasta hg38.fa
 
 if (!requireNamespace("optparse", quietly = TRUE)) {
   stop("optparse is required. Install it with: install.packages('optparse')",
@@ -54,7 +55,10 @@ option_list <- list(
               help = "NIPTeR mode: produce SeparatedStrands 9-column BED [default: %default]"),
   make_option("--gc-table", type = "character", default = NULL,
               help = paste0("Precomputed GC table (TSV.bgz from nipter_gc_precompute). ",
-                            "NIPTeR mode: GC-correct and embed corrected counts in BED"))
+                            "NIPTeR mode: GC-correct and embed corrected counts in BED")),
+  make_option("--fasta", type = "character", default = NULL,
+              help = paste0("FASTA reference for on-the-fly GC correction (alternative to --gc-table). ",
+                            "NIPTeR mode only. Slower than --gc-table for multiple samples"))
 )
 
 parser <- OptionParser(
@@ -71,8 +75,11 @@ parser <- OptionParser(
     "  # WisecondorX NPZ output (for Python interop)",
     "  %prog --bam sample.bam --out sample.npz --npz",
     "",
-    "  # NIPTeR BED output with GC correction",
+    "  # NIPTeR BED output with GC correction (precomputed table)",
     "  %prog --mode nipter --bam sample.bam --out sample.bed.gz --gc-table hg38_gc.tsv.bgz",
+    "",
+    "  # NIPTeR BED output with GC correction (on-the-fly from FASTA)",
+    "  %prog --mode nipter --bam sample.bam --out sample.bed.gz --fasta hg38.fa",
     "",
     "  # NIPTeR with pre-filtering (MAPQ 40, exclude duplicates)",
     "  %prog --mode nipter --bam sample.bam --out sample.bed.gz --mapq 40 --exclude-flags 1024",
@@ -110,6 +117,14 @@ if (opts$npz && mode != "wisecondorx") {
 
 if (!is.null(opts$`gc-table`) && mode != "nipter") {
   stop("--gc-table is only valid in nipter mode", call. = FALSE)
+}
+
+if (!is.null(opts$fasta) && mode != "nipter") {
+  stop("--fasta GC correction is only valid in nipter mode", call. = FALSE)
+}
+
+if (!is.null(opts$`gc-table`) && !is.null(opts$fasta)) {
+  stop("--gc-table and --fasta are mutually exclusive; provide one or the other", call. = FALSE)
 }
 
 if (opts$`separate-strands` && mode != "nipter") {
@@ -167,9 +182,10 @@ if (mode == "wisecondorx") {
 } else {
   # NIPTeR mode
   gc_table <- opts$`gc-table`
+  gc_fasta <- opts$fasta
   corrected_sample <- NULL
 
-  if (!is.null(gc_table)) {
+  if (!is.null(gc_table) || !is.null(gc_fasta)) {
     cat(sprintf("Binning %s (NIPTeR, binsize=%d, mapq=%d, rmdup=%s) ...\n",
                 basename(bam), binsize, mapq, rmdup))
     raw_sample <- nipter_bin_bam(
@@ -183,7 +199,12 @@ if (mode == "wisecondorx") {
       reference        = opts$reference
     )
     cat("Applying GC correction ...\n")
-    corrected_sample <- nipter_gc_correct(raw_sample, gc_table = gc_table)
+    if (!is.null(gc_table)) {
+      corrected_sample <- nipter_gc_correct(raw_sample, gc_table = gc_table)
+    } else {
+      corrected_sample <- nipter_gc_correct(raw_sample, fasta = gc_fasta,
+                                            binsize = binsize)
+    }
   }
 
   cat(sprintf("Converting %s → %s (NIPTeR BED%s, binsize=%d, mapq=%d, rmdup=%s)\n",

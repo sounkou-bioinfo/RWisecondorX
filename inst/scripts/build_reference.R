@@ -11,6 +11,7 @@
 # Usage:
 #   Rscript build_reference.R --mode wisecondorx --bam-dir /path/to/bams --out ref.rds
 #   Rscript build_reference.R --mode nipter --bam-list samples.txt --out control.rds
+#   Rscript build_reference.R --mode nipter --bam-list samples.txt --fasta hg38.fa --out control.rds
 #   Rscript build_reference.R --mode wisecondorx --bed-dir /path/to/beds --out ref.rds
 #   Rscript build_reference.R --mode nipter --bed-list beds.txt --gc-table hg38_gc.tsv.bgz --out control.rds
 
@@ -72,6 +73,9 @@ option_list <- list(
               help = paste0("Precomputed GC table (TSV.bgz from nipter_gc_precompute). ",
                             "NIPTeR mode: GC-correct each sample before writing BED. ",
                             "Requires binning from BAMs (ignored with --bed-dir/--bed-list)")),
+  make_option("--fasta", type = "character", default = NULL,
+              help = paste0("FASTA reference for on-the-fly GC correction (alternative to --gc-table). ",
+                            "NIPTeR mode only. Slower than --gc-table for large cohorts")),
 
   # --- WisecondorX newref parameters ---
   make_option("--refsize", type = "integer", default = 300L,
@@ -105,6 +109,9 @@ parser <- OptionParser(
     "",
     "  # NIPTeR: bin BAMs with GC correction",
     "  %prog --mode nipter --bam-dir bams/ --gc-table hg38_gc_50k.tsv.bgz --out control.rds",
+    "",
+    "  # NIPTeR: bin BAMs with on-the-fly GC correction from FASTA",
+    "  %prog --mode nipter --bam-dir bams/ --fasta hg38.fa --out control.rds",
     "",
     "  # NIPTeR: pre-filtered BAMs from a file list",
     "  %prog --mode nipter --bam-list samples.txt --mapq 40 --exclude-flags 1024 --out control.rds",
@@ -153,6 +160,14 @@ if (has_bam_dir && has_bam_list) {
 
 if (has_bed_dir && has_bed_list) {
   stop("--bed-dir and --bed-list are mutually exclusive", call. = FALSE)
+}
+
+if (!is.null(opts$`gc-table`) && !is.null(opts$fasta)) {
+  stop("--gc-table and --fasta are mutually exclusive; provide one or the other", call. = FALSE)
+}
+
+if (!is.null(opts$fasta) && mode != "nipter") {
+  stop("--fasta GC correction is only valid in nipter mode", call. = FALSE)
 }
 
 # ---------------------------------------------------------------------------
@@ -220,6 +235,7 @@ if (mode == "wisecondorx") {
 
 ref_binsize <- opts$`ref-binsize`
 gc_table    <- opts$`gc-table`
+gc_fasta    <- opts$fasta
 
 library(RWisecondorX)
 
@@ -271,7 +287,7 @@ if (!is.null(bam_files)) {
     } else {
       # NIPTeR binning: optionally GC-correct and embed corrected counts
       corrected_sample <- NULL
-      if (!is.null(gc_table)) {
+      if (!is.null(gc_table) || !is.null(gc_fasta)) {
         raw_sample <- nipter_bin_bam(
           bam              = bam,
           binsize          = binsize,
@@ -282,7 +298,12 @@ if (!is.null(bam_files)) {
           separate_strands = opts$`separate-strands`,
           reference        = opts$reference
         )
-        corrected_sample <- nipter_gc_correct(raw_sample, gc_table = gc_table)
+        if (!is.null(gc_table)) {
+          corrected_sample <- nipter_gc_correct(raw_sample, gc_table = gc_table)
+        } else {
+          corrected_sample <- nipter_gc_correct(raw_sample, fasta = gc_fasta,
+                                                binsize = binsize)
+        }
       }
 
       nipter_bin_bam_bed(

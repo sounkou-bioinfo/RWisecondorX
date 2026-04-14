@@ -382,6 +382,7 @@ if (has_mclust && has_dnacopy) {
       sample    = test_sample_f,
       reference = ref,
       zscore    = 5,
+      minrefbins = 5L,
       alpha     = 0.01,
       seed      = 42
     )

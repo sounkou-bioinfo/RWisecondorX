@@ -110,6 +110,7 @@ for (i in seq_len(nrow(trisomy_samples))) {
       sample    = sample_data,
       reference = ref,
       zscore    = 3,
+      minrefbins = 5L,
       alpha     = 1e-4,
       seed      = 42L
     )
@@ -170,6 +171,7 @@ pred_euploid <- suppressMessages(
     sample    = all_samples[[euploid_id]],
     reference = ref,
     zscore    = 3,
+    minrefbins = 5L,
     alpha     = 1e-4,
     seed      = 42L
   )

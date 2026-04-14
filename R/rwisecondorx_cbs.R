@@ -84,9 +84,12 @@
 
   # Run CBS — ParDNAcopy when parallel = TRUE, DNAcopy::segment() otherwise.
   if (isTRUE(parallel)) {
-    seg_result <- ParDNAcopy::parSegment(cna_obj, alpha = alpha,
-                                         verbose = 0, weights = weight_cbs,
-                                         num.cores = as.integer(cpus))
+    seg_result <- ParDNAcopy::parSegment(cna_obj,
+                                         distrib = "Rparallel",
+                                         njobs = as.integer(cpus),
+                                         alpha = alpha,
+                                         verbose = 0,
+                                         weights = weight_cbs)
   } else {
     # Suppress DNAcopy's verbose progress output
     seg_result <- local({

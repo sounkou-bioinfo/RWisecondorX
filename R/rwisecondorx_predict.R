@@ -140,20 +140,86 @@ rwisecondorx_predict <- function(sample,
   # ---------- Step 4: normalize gonosomes ----------
   gon <- .normalize(sample, reference, ref_gender, maskrepeats)
 
-  # For gonosomal normalization, only keep the gonosomal bins (slice from ct)
-  ap <- if (ref_gender == "A") "" else paste0(".", ref_gender)
-  ct_gon <- reference[[paste0("masked_bins_per_chr_cum", ap)]][22]
-  gon_results_r   <- gon$results_r[-(seq_len(ct_gon))]
-  gon_results_z   <- gon$results_z[-(seq_len(ct_gon))]
-  gon_results_w   <- gon$results_w[-(seq_len(ct_gon))]
-  gon_ref_sizes   <- gon$ref_sizes[-(seq_len(ct_gon))]
+  # .normalize() with ref_gender="F"/"M" already returns ONLY the gonosomal
+  # bins (it sets ct = masked_bins_per_chr_cum.{F/M}[22] internally and starts
+  # iteration from there). No further slicing is needed — use results directly.
+  # This matches upstream main.py lines 221-223: results_r_2 from normalize()
+  # is appended directly with np.append(results_r, results_r_2).
+  gon_results_r   <- gon$results_r
+  gon_results_z   <- gon$results_z
+  gon_results_w   <- gon$results_w
+  gon_ref_sizes   <- gon$ref_sizes
 
-  # Null ratios: autosomal from "A", gonosomal from gender-specific (sliced)
-  null_ratios_aut <- reference$null_ratios
+  # ---------- Step 4b: remap autosomal results to gonosomal mask space ----------
+  # The A and F/M partitions can have different autosomal masked bin counts
+  # after PCA filtering (each partition filters independently). The combined
+  # results (autosomal + gonosomal) must align with the gonosomal partition's
+  # mask for inflation. Remap A-partition autosomal results into the F/M
+  # partition's autosomal masked coordinate space. Bins present in F/M but
+  # not in A get zero; bins present in A but not in F/M are dropped.
+  gon_ap <- paste0(".", ref_gender)
+  gon_mbpc_cum <- reference[[paste0("masked_bins_per_chr_cum", gon_ap)]]
+  n_aut_gon <- gon_mbpc_cum[22]  # autosomal masked bins in the gonosomal partition
+  n_aut_a   <- reference$masked_bins_per_chr_cum[22]  # autosomal masked bins in A
+
+  if (n_aut_a != n_aut_gon) {
+    # Build mapping via the unmasked autosomal position space.
+    # A-partition: mask covers first sum(bins_per_chr[1:22]) positions.
+    # F/M-partition: mask covers first sum(bins_per_chr.G[1:22]) positions.
+    # Both bins_per_chr are the same for chromosomes 1-22 (same genome),
+    # so the unmasked space is identical — only which positions are TRUE differs.
+    n_aut_unmask <- sum(reference$bins_per_chr[1:22])
+    mask_a   <- reference$mask[seq_len(n_aut_unmask)]
+    mask_gon <- reference[[paste0("mask", gon_ap)]][seq_len(n_aut_unmask)]
+
+    # Map: for each TRUE in mask_gon, find its position among mask_a TRUEs.
+    # If it's also TRUE in mask_a, copy the A result; otherwise zero.
+    a_idx <- which(mask_a)      # unmasked positions that are TRUE in A
+    g_idx <- which(mask_gon)    # unmasked positions that are TRUE in F/M
+
+    # For each gon-masked position, find if it exists in a_idx
+    a_rank <- integer(n_aut_unmask)
+    a_rank[a_idx] <- seq_along(a_idx)  # rank within A masked positions
+
+    remap_aut <- function(aut_vec) {
+      out <- numeric(n_aut_gon)
+      for (j in seq_along(g_idx)) {
+        a_r <- a_rank[g_idx[j]]
+        if (a_r > 0L) out[j] <- aut_vec[a_r]
+      }
+      out
+    }
+
+    aut_r_remapped <- remap_aut(aut$results_r)
+    aut_z_remapped <- remap_aut(aut$results_z)
+    aut_w_remapped <- remap_aut(aut$results_w)
+    aut_rs_remapped <- remap_aut(aut$ref_sizes)
+  } else {
+    aut_r_remapped  <- aut$results_r
+    aut_z_remapped  <- aut$results_z
+    aut_w_remapped  <- aut$results_w
+    aut_rs_remapped <- aut$ref_sizes
+  }
+
+  # Null ratios: autosomal from "A", gonosomal from gender-specific (sliced).
+  # Upstream slices gonosomal null_ratios at len(null_ratios_aut), which
+  # implicitly assumes A_aut == F_aut. When they differ, use the gonosomal
+  # partition's own autosomal cum count for a correct split.
+  null_ratios_aut_full <- reference$null_ratios
   null_ratios_gon_key <- paste0("null_ratios.", ref_gender)
   null_ratios_gon_full <- reference[[null_ratios_gon_key]]
-  n_aut_bins <- nrow(null_ratios_aut)
-  null_ratios_gon <- null_ratios_gon_full[-(seq_len(n_aut_bins)), , drop = FALSE]
+  null_ratios_gon <- null_ratios_gon_full[-(seq_len(n_aut_gon)), , drop = FALSE]
+
+  # Remap autosomal null ratios the same way if needed
+  if (n_aut_a != n_aut_gon) {
+    null_ratios_aut <- matrix(0, nrow = n_aut_gon, ncol = ncol(null_ratios_aut_full))
+    for (j in seq_along(g_idx)) {
+      a_r <- a_rank[g_idx[j]]
+      if (a_r > 0L) null_ratios_aut[j, ] <- null_ratios_aut_full[a_r, ]
+    }
+  } else {
+    null_ratios_aut <- null_ratios_aut_full
+  }
 
   # Align null ratio column counts (partitions may have different sample counts)
   n_null_min <- min(ncol(null_ratios_aut), ncol(null_ratios_gon))
@@ -161,10 +227,10 @@ rwisecondorx_predict <- function(sample,
   null_ratios_gon <- null_ratios_gon[, seq_len(n_null_min), drop = FALSE]
 
   # ---------- Step 5: combine ----------
-  results_r <- c(aut$results_r, gon_results_r)
-  results_z <- c(aut$results_z, gon_results_z) - aut$m_z
-  results_w <- c(aut$results_w * mean(gon_results_w, na.rm = TRUE),
-                 gon_results_w * mean(aut$results_w, na.rm = TRUE))
+  results_r <- c(aut_r_remapped, gon_results_r)
+  results_z <- c(aut_z_remapped, gon_results_z) - aut$m_z
+  results_w <- c(aut_w_remapped * mean(gon_results_w, na.rm = TRUE),
+                 gon_results_w * mean(aut_w_remapped, na.rm = TRUE))
   results_w <- results_w / mean(results_w, na.rm = TRUE)
 
   if (any(!is.finite(results_w))) {
@@ -172,7 +238,7 @@ rwisecondorx_predict <- function(sample,
     results_w <- rep(1, length(results_w))
   }
 
-  ref_sizes <- c(aut$ref_sizes, gon_ref_sizes)
+  ref_sizes <- c(aut_rs_remapped, gon_ref_sizes)
   null_ratios <- rbind(null_ratios_aut, null_ratios_gon)
 
   # ---------- Step 6: post-process ----------
@@ -389,7 +455,10 @@ rwisecondorx_predict <- function(sample,
     ref_sizes <- norm_once$ref_sizes
 
     # Mask aberrant bins: |z| >= qnorm(0.99) ~= 2.326
+    # NaN/Inf z-scores from zero-sd bins: Inf gets masked (|Inf| >= 2.326),
+    # NaN stays unmasked (matches numpy behavior: np.abs(nan) >= x is False).
     aberrant <- abs(results_z) >= stats::qnorm(0.99)
+    aberrant[is.na(aberrant)] <- FALSE
     # ct offsets into the full array; aberrant is already ct-relative
     idx_start <- ct + 1L
     idx_end   <- ct + length(results_z)
@@ -456,10 +525,17 @@ rwisecondorx_predict <- function(sample,
 
       if (length(ref_vals) > 0) {
         ref_mean <- mean(ref_vals)
-        ref_sd   <- stats::sd(ref_vals)
-        if (is.na(ref_sd) || ref_sd == 0) ref_sd <- 1e-10
+        # numpy np.std uses population sd (ddof=0, divides by N).
+        # R sd() uses sample sd (divides by N-1). Use population sd for
+        # upstream conformance.
+        n_rv <- length(ref_vals)
+        ref_sd <- if (n_rv > 1L) {
+          sqrt(sum((ref_vals - ref_mean)^2) / n_rv)
+        } else {
+          0
+        }
 
-        results_z[i2] <- (test_data[i] - ref_mean) / ref_sd
+        results_z[i2] <- (test_data[i] - ref_mean) / ref_sd  # Inf/NaN when sd==0
         results_r[i2] <- test_data[i] / stats::median(ref_vals)
       }
       ref_sizes[i2] <- length(ref_vals)

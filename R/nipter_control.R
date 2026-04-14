@@ -328,9 +328,6 @@ nipter_control_group_from_beds <- function(bed_dir,
 
   own_con <- is.null(con)
   if (own_con) {
-    if (!requireNamespace("Rduckhts", quietly = TRUE)) {
-      stop("Rduckhts is required.", call. = FALSE)
-    }
     drv <- duckdb::duckdb(config = list(allow_unsigned_extensions = "true"))
     con <- DBI::dbConnect(drv)
     Rduckhts::rduckhts_load(con)

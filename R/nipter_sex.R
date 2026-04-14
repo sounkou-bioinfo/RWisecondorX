@@ -67,14 +67,6 @@ nipter_sex_model <- function(control_group,
   method <- match.arg(method)
   stopifnot(inherits(control_group, "NIPTeRControlGroup"))
 
-  if (!requireNamespace("mclust", quietly = TRUE)) {
-    stop(
-      "Package 'mclust' is required for sex prediction. ",
-      "Install it with: install.packages('mclust')",
-      call. = FALSE
-    )
-  }
-
   n_samples <- length(control_group$samples)
   if (n_samples < 4L) {
     stop("At least 4 samples are needed to fit a sex model.", call. = FALSE)
@@ -208,14 +200,6 @@ nipter_predict_sex <- function(sample, ..., y_unique_ratio = NULL) {
     }
   }
 
-  if (!requireNamespace("mclust", quietly = TRUE)) {
-    stop(
-      "Package 'mclust' is required for sex prediction. ",
-      "Install it with: install.packages('mclust')",
-      call. = FALSE
-    )
-  }
-
   # Validate y_unique_ratio if provided
   if (!is.null(y_unique_ratio)) {
     stopifnot(is.numeric(y_unique_ratio), length(y_unique_ratio) == 1L)
@@ -330,14 +314,6 @@ nipter_sex_model_y_unique <- function(ratios) {
   stopifnot(is.numeric(ratios), length(ratios) >= 4L)
   if (is.null(names(ratios))) {
     names(ratios) <- paste0("sample_", seq_along(ratios))
-  }
-
-  if (!requireNamespace("mclust", quietly = TRUE)) {
-    stop(
-      "Package 'mclust' is required for sex prediction. ",
-      "Install it with: install.packages('mclust')",
-      call. = FALSE
-    )
   }
 
   gmm <- .mclust_fit(ratios, G = 2L, equalPro = TRUE)
@@ -470,11 +446,6 @@ nipter_y_unique_ratio <- function(bam,
   # Manage connection
   own_con <- is.null(con)
   if (own_con) {
-    if (!requireNamespace("Rduckhts", quietly = TRUE)) {
-      stop("Rduckhts is required. Install it with: ",
-           "remotes::install_github('RGenomicsETL/duckhts/r/Rduckhts')",
-           call. = FALSE)
-    }
     drv <- duckdb::duckdb(config = list(allow_unsigned_extensions = "true"))
     con <- DBI::dbConnect(drv)
     Rduckhts::rduckhts_load(con)

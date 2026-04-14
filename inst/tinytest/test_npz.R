@@ -35,9 +35,6 @@ test_bam <- .find_test_bam()
 if (is.null(test_bam)) {
   exit_file("No test BAM available")
 }
-if (!requireNamespace("Rduckhts", quietly = TRUE)) {
-  exit_file("Rduckhts not available")
-}
 Sys.setenv(RETICULATE_USE_MANAGED_VENV = "no")
 if (!requireNamespace("reticulate", quietly = TRUE)) {
   exit_file("reticulate not available; skipping NPZ tests")

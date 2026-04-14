@@ -204,13 +204,6 @@ nipter_bin_bam_bed <- function(bam,
 
   own_con <- is.null(con)
   if (own_con) {
-    if (!requireNamespace("Rduckhts", quietly = TRUE)) {
-      stop(
-        "Rduckhts is required. Install it with: ",
-        "remotes::install_github('RGenomicsETL/duckhts/r/Rduckhts')",
-        call. = FALSE
-      )
-    }
     drv <- duckdb::duckdb(config = list(allow_unsigned_extensions = "true"))
     con <- DBI::dbConnect(drv)
     Rduckhts::rduckhts_load(con)

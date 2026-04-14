@@ -38,9 +38,6 @@ nipter_gc_precompute <- function(fasta, binsize = 50000L, out, con = NULL) {
 
   own_con <- is.null(con)
   if (own_con) {
-    if (!requireNamespace("Rduckhts", quietly = TRUE)) {
-      stop("Rduckhts is required for GC precomputation.", call. = FALSE)
-    }
     drv <- duckdb::duckdb(config = list(allow_unsigned_extensions = "true"))
     con <- DBI::dbConnect(drv)
     Rduckhts::rduckhts_load(con)
@@ -232,9 +229,6 @@ nipter_gc_correct <- function(object,
 .load_gc_table <- function(path, con) {
   own_con <- is.null(con)
   if (own_con) {
-    if (!requireNamespace("Rduckhts", quietly = TRUE)) {
-      stop("Rduckhts is required to load a GC table.", call. = FALSE)
-    }
     drv <- duckdb::duckdb(config = list(allow_unsigned_extensions = "true"))
     con <- DBI::dbConnect(drv)
     Rduckhts::rduckhts_load(con)
@@ -278,9 +272,6 @@ nipter_gc_correct <- function(object,
 .get_gc_table <- function(fasta, binsize, con) {
   own_con <- is.null(con)
   if (own_con) {
-    if (!requireNamespace("Rduckhts", quietly = TRUE)) {
-      stop("Rduckhts is required for GC correction.", call. = FALSE)
-    }
     drv <- duckdb::duckdb(config = list(allow_unsigned_extensions = "true"))
     con <- DBI::dbConnect(drv)
     Rduckhts::rduckhts_load(con)

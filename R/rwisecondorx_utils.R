@@ -113,6 +113,11 @@ scale_sample <- function(sample, from_size, to_size) {
 #'
 #' @param samples List of sample objects (each a named list of integer vectors
 #'   keyed by chromosome `"1"`--`"24"`).
+#' @param ref_bins_per_chr Optional integer vector of length 24 giving the
+#'   minimum number of bins per chromosome. When supplied (e.g. from the global
+#'   mask), each chromosome is zero-padded to at least this many bins so that
+#'   the returned mask has the same length as the global mask. This avoids
+#'   length mismatches when combining gender-specific masks with `&`.
 #'
 #' @return A list with two elements:
 #'   \describe{
@@ -123,7 +128,7 @@ scale_sample <- function(sample, from_size, to_size) {
 #'   }
 #'
 #' @keywords internal
-.get_mask <- function(samples) {
+.get_mask <- function(samples, ref_bins_per_chr = NULL) {
   n_samples <- length(samples)
   bins_per_chr <- integer(24L)
   by_chr <- vector("list", 24L)
@@ -134,6 +139,11 @@ scale_sample <- function(sample, from_size, to_size) {
       x <- s[[chr_key]]
       if (is.null(x)) 0L else length(x)
     }, integer(1)))
+    # Ensure at least ref_bins_per_chr bins so the mask length matches the
+    # global mask when combining gender-specific masks with &.
+    if (!is.null(ref_bins_per_chr)) {
+      max_len <- max(max_len, ref_bins_per_chr[chr])
+    }
     bins_per_chr[chr] <- max_len
 
     mat <- matrix(0, nrow = max_len, ncol = n_samples)
@@ -191,11 +201,6 @@ scale_sample <- function(sample, from_size, to_size) {
   if (!is.null(yfrac)) {
     cutoff <- yfrac
   } else {
-    if (!requireNamespace("mclust", quietly = TRUE)) {
-      stop("mclust is required for gender model training. ",
-           "Install it with: install.packages('mclust')", call. = FALSE)
-    }
-
     fit <- .mclust_gender_fit(y_fractions)
 
     if (is.null(fit)) {

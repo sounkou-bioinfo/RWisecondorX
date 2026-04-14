@@ -89,10 +89,6 @@ if (is.null(test_bam)) {
   exit_file("No test BAM available; set WISECONDORX_TEST_BAM to run convert tests")
 }
 
-if (!requireNamespace("Rduckhts", quietly = TRUE)) {
-  exit_file("Rduckhts not available")
-}
-
 bins <- bam_convert(test_bam, binsize = 5000L, rmdup = "streaming")
 
 expect_true(is.list(bins), info = "bam_convert returns a list")

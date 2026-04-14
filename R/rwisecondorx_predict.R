@@ -225,11 +225,6 @@ rwisecondorx_predict <- function(sample,
   }
 
   # ---------- Step 7: CBS ----------
-  if (!requireNamespace("DNAcopy", quietly = TRUE)) {
-    stop("DNAcopy is required for CBS segmentation. ",
-         "Install with: BiocManager::install('DNAcopy')", call. = FALSE)
-  }
-
   cbs_result <- .exec_cbs(results_r_chr, results_w_chr, ref_gender, alpha,
                           binsize, seed, parallel, cpus = cpus)
 

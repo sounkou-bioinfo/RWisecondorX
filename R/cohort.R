@@ -4,12 +4,10 @@
 # lengths: each 100kb genomic bin maps to 100bp, so bin COUNT structure is
 # identical to real GRCh37 at 100kb resolution, but BAMs are tiny (~435KB each).
 #
-# Cohort composition (50 samples):
-#   35 euploid female (XX, zero Y reads)
-#   12 euploid male   (XY, ~50% X/Y relative to autosomes)
-#    1 trisomy 21 female (1.5x chr21)
-#    1 trisomy 18 female (1.5x chr18)
-#    1 trisomy 13 female (1.5x chr13)
+# Cohort composition (default 50 samples, configurable via n_samples):
+#   ~75% euploid female (XX, zero Y reads)
+#   ~25% euploid male   (XY, ~50% X/Y relative to autosomes)
+#    3 trisomy female (T21 1.5x chr21, T18 1.5x chr18, T13 1.5x chr13)
 #
 # Deterministic: sample i uses set.seed(42 + i).
 # NIPTeR-compatible: no unmapped reads, unique positions per chromosome.
@@ -81,16 +79,24 @@ READS_PER_BIN <- 3.0
 
 # ---- Cohort definition ---------------------------------------------------
 
-.build_cohort_profiles <- function() {
-  profiles <- vector("list", 50L)
+.build_cohort_profiles <- function(n_samples = 50L) {
+  n_samples <- as.integer(n_samples)
+  stopifnot(n_samples >= 6L)  # need room for 3 trisomy + at least 1M + 2F
+
+  n_trisomy <- 3L
+  n_euploid <- n_samples - n_trisomy
+  n_male    <- max(1L, round(n_euploid * 0.25))
+  n_female  <- n_euploid - n_male
+
+  profiles <- vector("list", n_samples)
   idx <- 1L
 
-  for (i in 1:35) {
-    profiles[[idx]] <- .euploid_female(sprintf("euploid_f_%02d", i))
+  for (i in seq_len(n_female)) {
+    profiles[[idx]] <- .euploid_female(sprintf("euploid_f_%03d", i))
     idx <- idx + 1L
   }
-  for (i in 1:12) {
-    profiles[[idx]] <- .euploid_male(sprintf("euploid_m_%02d", i))
+  for (i in seq_len(n_male)) {
+    profiles[[idx]] <- .euploid_male(sprintf("euploid_m_%03d", i))
     idx <- idx + 1L
   }
 
@@ -152,17 +158,19 @@ READS_PER_BIN <- 3.0
 
 #' Generate a synthetic BAM cohort for testing
 #'
-#' Creates 50 coordinate-sorted, indexed BAM files in a specified directory
+#' Creates coordinate-sorted, indexed BAM files in a specified directory
 #' using compressed chromosome lengths: each 100kb GRCh37 bin is represented
 #' as a 100bp region, yielding identical bin-count structure at a fraction
 #' of the file size (~435KB per BAM).
 #'
-#' The cohort contains 35 euploid females, 12 euploid males, and 3 trisomy
-#' females (T21, T18, T13). Each sample uses approximately 3 reads per bin
-#' (~91k reads total). Results are deterministic (sample *i* uses
-#' `set.seed(42 + i)`).
+#' The cohort contains approximately 75% euploid females, 25% euploid males,
+#' and 3 trisomy females (T21, T18, T13). Each sample uses approximately
+#' 3 reads per bin (~91k reads total). Results are deterministic (sample *i*
+#' uses `set.seed(42 + i)`).
 #'
 #' @param out_dir Directory to write BAM files into (created if needed).
+#' @param n_samples Total number of samples to generate (default 50L).
+#'   Must be at least 6 (3 trisomy + 1 male + 2 female minimum).
 #' @param verbose Logical; emit progress messages via [message()].
 #'
 #' @return A data frame (manifest) with columns: `sample_id`, `sex`,
@@ -184,13 +192,7 @@ READS_PER_BIN <- 3.0
 #' }
 #'
 #' @export
-generate_cohort <- function(out_dir, verbose = TRUE) {
-  if (!requireNamespace("Rduckhts", quietly = TRUE)) {
-    stop("Rduckhts is required. Install it with: ",
-         "remotes::install_github('RGenomicsETL/duckhts/r/Rduckhts')",
-         call. = FALSE)
-  }
-
+generate_cohort <- function(out_dir, n_samples = 50L, verbose = TRUE) {
   drv <- duckdb::duckdb(config = list(allow_unsigned_extensions = "true"))
   con <- DBI::dbConnect(drv)
   Rduckhts::rduckhts_load(con)
@@ -198,7 +200,7 @@ generate_cohort <- function(out_dir, verbose = TRUE) {
 
   dir.create(out_dir, showWarnings = FALSE, recursive = TRUE)
 
-  profiles <- .build_cohort_profiles()
+  profiles <- .build_cohort_profiles(n_samples)
   header_text <- .sam_header()
 
   manifest <- data.frame(

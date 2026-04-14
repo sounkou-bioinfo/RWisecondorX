@@ -82,18 +82,12 @@
   cna_obj <- DNAcopy::CNA(ratio_cbs, chr_cbs, pos_cbs,
                            data.type = "logratio", sampleid = "X")
 
-  # Run CBS — prefer ParDNAcopy when parallel = TRUE and the package is available.
-  # ParDNAcopy::parSegment() accepts a `num.cores` argument; pass cpus there.
-  # Fall back to DNAcopy::segment() (single-threaded) when ParDNAcopy is absent.
-  if (isTRUE(parallel) && requireNamespace("ParDNAcopy", quietly = TRUE)) {
+  # Run CBS — ParDNAcopy when parallel = TRUE, DNAcopy::segment() otherwise.
+  if (isTRUE(parallel)) {
     seg_result <- ParDNAcopy::parSegment(cna_obj, alpha = alpha,
                                          verbose = 0, weights = weight_cbs,
                                          num.cores = as.integer(cpus))
   } else {
-    if (isTRUE(parallel)) {
-      message("ParDNAcopy not available; falling back to DNAcopy (single-threaded). ",
-              "Install ParDNAcopy for parallel CBS.")
-    }
     # Suppress DNAcopy's verbose progress output
     seg_result <- local({
       seg_out <- NULL

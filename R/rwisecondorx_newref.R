@@ -182,12 +182,12 @@ rwisecondorx_newref <- function(samples         = NULL,
   # AND with gender-specific masks
   if (n_female > 4L) {
     female_samples <- samples[genders == "F"]
-    female_mask <- .get_mask(female_samples)$mask
+    female_mask <- .get_mask(female_samples, ref_bins_per_chr = bins_per_chr)$mask
     total_mask <- total_mask & female_mask
   }
   if (n_male > 4L && !nipt) {
     male_samples <- samples[genders == "M"]
-    male_mask <- .get_mask(male_samples)$mask
+    male_mask <- .get_mask(male_samples, ref_bins_per_chr = bins_per_chr)$mask
     total_mask <- total_mask & male_mask
   }
 

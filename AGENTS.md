@@ -138,7 +138,8 @@ The pipeline (`newref` + `predict`) is functionally complete and all 76 unit tes
 - `inst/tinytest/` — unit tests (one file per feature family).
 - `inst/extdata/` — synthetic BAM/CRAM fixtures and bundled reference data (`grch37_Y_UniqueRegions.txt`).
 - `inst/scripts/make_cohort.R` — CLI wrapper for cohort generation.
-- `inst/scripts/build_reference.R` — optparse CLI for building WisecondorX references or NIPTeR control groups from BAM/CRAM or BED.gz files. Supports `--mode wisecondorx|nipter`, `--bam-dir` (bins then builds), `--bed-dir` (builds from pre-binned BEDs), and all key parameters (binsize, mapq, rmdup, refsize, cpus, etc.).
+- `inst/scripts/build_reference.R` — optparse CLI for building WisecondorX references or NIPTeR control groups from BAM/CRAM or BED.gz files. Supports `--mode wisecondorx|nipter`, `--bam-dir`/`--bam-list` (bins then builds), `--bed-dir`/`--bed-list` (builds from pre-binned BEDs), `--gc-table` (NIPTeR GC correction during binning), `--bed-out-dir`, and all key parameters (binsize, mapq, rmdup, refsize, cpus, etc.).
+- `inst/scripts/convert_sample.R` — optparse CLI for converting a single BAM/CRAM to a binned BED.gz or NPZ file. Supports `--mode wisecondorx|nipter`, `--npz` (WisecondorX NPZ output for Python interop), `--gc-table` (NIPTeR GC correction), `--separate-strands`, and all binning parameters (binsize, mapq, rmdup, exclude-flags, require-flags, reference).
 - The WisecondorX upstream algorithm reference is `.sync/WisecondorX/`.
 - The NIPTeR upstream algorithm reference is `.sync/NIPTeR/`.
 - The WisecondorX conformance script is `../../duckhts/scripts/wisecondorx_convert_conformance.py`.

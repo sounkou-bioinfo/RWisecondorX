@@ -5,6 +5,7 @@
 # in test_integration.R which additionally requires condathis.
 
 library(tinytest)
+library(RWisecondorX)
 
 # ---------------------------------------------------------------------------
 # Find a usable test BAM (same logic as test_integration.R)
@@ -64,15 +65,31 @@ expect_true(file.info(npz_out)$size > 0L, info = "output NPZ is not empty")
 
 # Load back with numpy and verify structure
 data <- np$load(npz_out, allow_pickle = TRUE)
-keys <- reticulate::py_to_r(data$files)
+npz_keys <- reticulate::py_to_r(data$files)
 
-expect_true(length(keys) > 0L, info = "NPZ contains at least one array")
-expect_true(all(keys %in% as.character(1:24)),
-            info = "All NPZ keys are valid chromosome numbers (1-24)")
+# Upstream format has three top-level keys: "sample", "binsize", "quality"
+expect_true("sample" %in% npz_keys, info = "NPZ contains 'sample' key")
+expect_true("binsize" %in% npz_keys, info = "NPZ contains 'binsize' key")
+expect_true("quality" %in% npz_keys, info = "NPZ contains 'quality' key")
 
-# Each array should be int32 and non-negative
+# binsize should round-trip correctly
+bs <- reticulate::py_to_r(data["binsize"]$item())
+expect_equal(as.integer(bs), 5000L, info = "binsize round-trips as 5000")
+
+# sample should be a dict-like object extractable with .item()
+sample <- reticulate::py_to_r(data["sample"]$item())
+expect_true(is.list(sample), info = "sample.item() returns a list/dict")
+
+keys <- names(sample)
+expect_equal(length(keys), 24L, info = "sample dict has all 24 chromosome keys")
+expect_true(setequal(keys, as.character(1:24)),
+            info = "All sample keys are chromosome numbers 1-24")
+
+# Each non-None entry should be int32 and non-negative; None entries are allowed
+# (chromosomes without data in the BAM).
 for (k in keys) {
-  arr <- reticulate::py_to_r(data[k])
+  arr <- sample[[k]]
+  if (is.null(arr)) next
   expect_true(is.integer(arr) || is.numeric(arr),
               info = paste("chr", k, "array is numeric"))
   expect_true(all(arr >= 0L),
@@ -86,11 +103,14 @@ data$close()
 
 bins <- bam_convert(test_bam, binsize = 5000L, rmdup = "streaming")
 data2 <- np$load(npz_out, allow_pickle = TRUE)
+sample2 <- reticulate::py_to_r(data2["sample"]$item())
 
 for (k in keys) {
   r_vals  <- bins[[k]]
-  np_vals <- reticulate::py_to_r(data2[k])
+  np_vals <- sample2[[k]]
+  if (is.null(r_vals) && is.null(np_vals)) next
   if (is.null(r_vals)) r_vals <- integer(length(np_vals))
+  if (is.null(np_vals)) np_vals <- integer(length(r_vals))
   n <- min(length(r_vals), length(np_vals))
   expect_identical(as.integer(r_vals[seq_len(n)]), as.integer(np_vals[seq_len(n)]),
                    info = paste("chr", k, "round-trip identical"))

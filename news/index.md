@@ -18,8 +18,8 @@
   environment setup for the rest of the R session and force `condathis`
   to run from a known-existing working directory. This avoids redundant
   `create_env()` calls and fixes the libmamba `cannot get current path`
-  failure when a prior subprocess or test left R with a deleted current
-  directory.
+  failure when a prior subprocess or test left R with an invalid or
+  deleted current directory.
 
 - Python conformance tests no longer convert live `wisecondorx` runtime
   failures into skips. Missing optional dependencies (`condathis`,

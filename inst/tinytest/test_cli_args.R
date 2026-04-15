@@ -6,30 +6,10 @@ library(RWisecondorX)
 # ---------------------------------------------------------------------------
 
 # Expose internal helpers for unit testing
-.read_bam_call <- RWisecondorX:::.read_bam_call
 .wisecondorx_convert_args <- RWisecondorX:::.wisecondorx_convert_args
 .wisecondorx_newref_args <- RWisecondorX:::.wisecondorx_newref_args
 .wisecondorx_predict_args <- RWisecondorX:::.wisecondorx_predict_args
 .format_ylim <- RWisecondorX:::.format_ylim
-
-# ---------------------------------------------------------------------------
-# read_bam SQL call builder
-# ---------------------------------------------------------------------------
-
-expect_identical(
-  .read_bam_call("reads.bam"),
-  "read_bam('reads.bam')"
-)
-
-expect_identical(
-  .read_bam_call("reads.cram", reference = "ref.fa"),
-  "read_bam('reads.cram', reference := 'ref.fa')"
-)
-
-expect_identical(
-  .read_bam_call("a'b.cram", reference = "r'e.fa"),
-  "read_bam('a''b.cram', reference := 'r''e.fa')"
-)
 
 # ---------------------------------------------------------------------------
 # convert CLI argument mapping

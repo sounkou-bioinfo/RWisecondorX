@@ -2,7 +2,7 @@
 % Please edit documentation in R/nipter_bin.R
 \name{nipter_bin_bam_bed}
 \alias{nipter_bin_bam_bed}
-\title{Write NIPTeR-style bin counts to a bgzipped BED file}
+\title{Bin a BAM/CRAM and write NIPTeR-style counts to a bgzipped BED}
 \usage{
 nipter_bin_bam_bed(
   bam,
@@ -40,12 +40,12 @@ reads (\verb{samtools view -F 1024}).}
 \item{rmdup}{Duplicate removal strategy: \code{"none"} (default) or \code{"flag"}.}
 
 \item{separate_strands}{Logical; when \code{TRUE}, includes separate
-\code{count_fwd} and \code{count_rev} columns for forward- and reverse-strand
-counts. Default \code{FALSE}.}
+\code{count_fwd} and \code{count_rev} columns. Default \code{FALSE}.}
 
-\item{corrected}{Optional \code{NIPTeRSample} already processed by
-\code{nipter_gc_correct()}. When supplied, its corrected counts populate the
-\code{corrected_count} column; otherwise the column is \code{NA}.}
+\item{corrected}{Optional \code{NIPTeRSample} from \code{\link[=nipter_gc_correct]{nipter_gc_correct()}}.
+Embeds corrected counts without re-reading the BAM only when the sample
+was already binned externally; pass \code{NULL} (default) for the common
+no-correction case.}
 
 \item{con}{Optional open DBI connection with duckhts already loaded.}
 
@@ -57,21 +57,23 @@ counts. Default \code{FALSE}.}
 \code{bed} (invisibly).
 }
 \description{
-Bins a BAM/CRAM file with NIPTeR defaults and writes the result to a
-bgzipped, tabix-indexed BED file.
+Convenience wrapper that bins a BAM/CRAM with \code{\link[=nipter_bin_bam]{nipter_bin_bam()}} and
+immediately writes the result via \code{\link[=nipter_sample_to_bed]{nipter_sample_to_bed()}}.  The BAM is
+read exactly once.
 }
 \details{
-When \code{separate_strands = FALSE} (default), the output has five columns:
+If you need to GC-correct the sample before writing, call
+\code{\link[=nipter_bin_bam]{nipter_bin_bam()}} and \code{\link[=nipter_gc_correct]{nipter_gc_correct()}} yourself, then pass both to
+\code{\link[=nipter_sample_to_bed]{nipter_sample_to_bed()}}.  That avoids reading the BAM a second time.
+
+Column layout:
+\itemize{
+\item \strong{CombinedStrands} (default): 5 columns —
 \code{chrom}, \code{start}, \code{end}, \code{count}, \code{corrected_count}.
-
-When \code{separate_strands = TRUE}, the output has nine columns:
+\item \strong{SeparatedStrands} (\code{separate_strands = TRUE}): 9 columns —
 \code{chrom}, \code{start}, \code{end}, \code{count}, \code{count_fwd}, \code{count_rev},
-\code{corrected_count}, \code{corrected_fwd}, \code{corrected_rev}. \code{count} is the total
-(forward + reverse); \code{corrected_count} is the total of the per-strand
-corrected values.
-
-\code{corrected_count} (and \code{corrected_fwd}/\code{corrected_rev}) is \code{NA} until a
-GC-corrected sample is supplied via the \code{corrected} parameter.
+\code{corrected_count}, \code{corrected_fwd}, \code{corrected_rev}.
+}
 }
 \examples{
 \dontrun{
@@ -88,5 +90,6 @@ nipter_bin_bam_bed("sample.bam", "sample.stranded.bed.gz",
 
 }
 \seealso{
-\code{nipter_bin_bam()}, \code{nipter_gc_correct()}, \code{\link[=bam_convert_bed]{bam_convert_bed()}}
+\code{\link[=nipter_sample_to_bed]{nipter_sample_to_bed()}}, \code{\link[=nipter_bin_bam]{nipter_bin_bam()}}, \code{\link[=nipter_gc_correct]{nipter_gc_correct()}},
+\code{\link[=bam_convert_bed]{bam_convert_bed()}}
 }

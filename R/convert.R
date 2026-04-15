@@ -18,7 +18,10 @@
 #' that are not properly paired are excluded from both counting and the dedup
 #' state — this is intrinsic to the algorithm, not a flag option); `"flag"`
 #' additionally excludes reads with SAM flag `0x400` set (Picard / sambamba
-#' pre-marked duplicates); `"none"` applies no deduplication.
+#' pre-marked duplicates); `"none"` applies no deduplication. The heavy lifting
+#' is delegated to the native `bam_bin_counts(...)` kernel bundled in
+#' `Rduckhts`; `RWisecondorX` reshapes that fixed-bin output into the
+#' chromosome-keyed objects expected by the WisecondorX and NIPTeR layers.
 #'
 #' @param bam Path to an indexed BAM or CRAM file.
 #' @param binsize Bin size in base pairs. Default `5000L` (WisecondorX); use
@@ -106,18 +109,24 @@ bam_convert <- function(bam,
     on.exit(DBI::dbDisconnect(con, shutdown = TRUE), add = TRUE)
   }
 
-  sql <- .convert_sql(bam, binsize, mapq, require_flags, exclude_flags,
-                      rmdup, reference = reference,
-                      separate_strands = separate_strands)
-  rows <- DBI::dbGetQuery(con, sql)
+  rows <- Rduckhts::rduckhts_bam_bin_counts(
+    con,
+    path          = bam,
+    bin_width     = binsize,
+    reference     = reference,
+    mapq          = mapq,
+    require_flags = require_flags,
+    exclude_flags = exclude_flags,
+    rmdup         = rmdup
+  )
 
   if (isTRUE(separate_strands)) {
-    fwd_rows <- rows[rows$strand == "+", , drop = FALSE]
-    rev_rows <- rows[rows$strand == "-", , drop = FALSE]
-    list(fwd = .rows_to_bins(fwd_rows, binsize),
-         rev = .rows_to_bins(rev_rows, binsize))
+    list(
+      fwd = .count_rows_to_bins(rows, "count_fwd"),
+      rev = .count_rows_to_bins(rows, "count_rev")
+    )
   } else {
-    .rows_to_bins(rows, binsize)
+    .count_rows_to_bins(rows, "count_total")
   }
 }
 
@@ -264,130 +273,27 @@ bam_convert_bed <- function(bam,
   "Y" = "24", "y" = "24"
 )
 
-.convert_sql <- function(bam_path, binsize, mapq, require_flags, exclude_flags,
-                         rmdup, reference = NULL, separate_strands = FALSE) {
-  read_bam_call <- .read_bam_call(bam_path, reference = reference)
-
-  # User-supplied flag filters (samtools -f / -F style).
-  req_clause <- if (require_flags > 0L)
-    sprintf("AND (flag & %d) = %d", require_flags, require_flags) else ""
-  exc_clause <- if (exclude_flags > 0L)
-    sprintf("AND (flag & %d) = 0", exclude_flags) else ""
-
-  # Improper-pair filter: intrinsic to WisecondorX streaming dedup algorithm.
-  # Applied only when rmdup = "streaming"; NOT a user flag option.
-  improper_clause <- if (rmdup == "streaming")
-    "AND NOT ((flag & 1) != 0 AND (flag & 2) = 0)" else ""
-
-  # rmdup strategy
-  dedup_where <- switch(rmdup,
-    streaming = .dedup_where_streaming(),
-    none      = "TRUE",
-    flag      = "(flag & 1024) = 0"
-  )
-
-  # Strand separation support
-  strand_select <- if (isTRUE(separate_strands))
-    ",\n        CASE WHEN (flag & 16) = 0 THEN '+' ELSE '-' END AS strand" else ""
-  strand_group <- if (isTRUE(separate_strands)) ", strand" else ""
-
-  # Bin assignment: (pos - 1) converts duckhts 1-based POS to 0-based.
-  # Integer division `//` matches Python's int(pos / binsize) (truncation).
-  sprintf("
-WITH raw AS (
-    SELECT
-        rname,
-        pos - 1          AS pos0,
-        pnext - 1        AS pnext0,
-        mapq,
-        flag,
-        file_offset,
-        (flag & 1)       AS is_paired
-    FROM %s
-    WHERE rname IS NOT NULL
-      AND mapq >= %d
-      %s
-      %s
-      %s
-),
-with_lag AS (
-    SELECT *,
-        LAG(pos0) OVER (ORDER BY file_offset) AS prev_pos,
-        LAST_VALUE(CASE WHEN is_paired != 0 THEN pnext0 END IGNORE NULLS)
-            OVER (ORDER BY file_offset ROWS BETWEEN UNBOUNDED PRECEDING AND 1 PRECEDING)
-            AS prev_pnext
-    FROM raw
-),
-deduped AS (
-    SELECT * FROM with_lag
-    WHERE %s
-)
-SELECT
-    rname,
-    (pos0 // %d)::INTEGER AS bin%s,
-    COUNT(*)::INTEGER     AS n
-FROM deduped
-GROUP BY rname, bin%s
-ORDER BY
-    TRY_CAST(regexp_replace(
-        CASE upper(regexp_replace(rname, '^[Cc][Hh][Rr]', ''))
-            WHEN 'X' THEN '23'
-            WHEN 'Y' THEN '24'
-            WHEN 'M' THEN '25'
-            ELSE regexp_replace(rname, '^[Cc][Hh][Rr]', '')
-        END,
-    '[^0-9]', '', 'g') AS INTEGER),
-    bin
-", read_bam_call, mapq, req_clause, exc_clause, improper_clause, dedup_where,
-   binsize, strand_select, strand_group)
-}
-
-.read_bam_call <- function(bam_path, reference = NULL) {
-  bam_path <- gsub("'", "''", bam_path)
-
-  if (is.null(reference)) {
-    return(sprintf("read_bam('%s')", bam_path))
-  }
-
-  reference <- gsub("'", "''", reference)
-  sprintf("read_bam('%s', reference := '%s')", bam_path, reference)
-}
-
-.dedup_where_streaming <- function() {
-  # Exact replication of WisecondorX's larp/larp2 dedup.
-  # Drop a read if its (pos, pnext) matches the previous proper read's values,
-  # where pnext comparison uses the previous PAIRED read's pnext (larp2).
-  paste(
-    "NOT (",
-    "  prev_pos IS NOT NULL",
-    "  AND",
-    "  pos0 = prev_pos",
-    "  AND (is_paired = 0 OR pnext0 = prev_pnext)",
-    ")"
-  )
-}
-
-.rows_to_bins <- function(rows, binsize) {
+.count_rows_to_bins <- function(rows, value_col) {
   chr_keys <- as.character(1:24)
   result <- stats::setNames(vector("list", 24L), chr_keys)
 
   if (nrow(rows) == 0L) return(result)
 
-  # Normalize chromosome names: strip "chr" prefix, map X->23, Y->24
-  # read_bam() returns RNAME (uppercase); tolower the column lookup to be safe.
-  rname <- rows[[grep("^rname$", names(rows), ignore.case = TRUE, value = TRUE)]]
-  rname <- sub("^[Cc][Hh][Rr]", "", rname)
-  rname[rname == "X" | rname == "x"] <- "23"
-  rname[rname == "Y" | rname == "y"] <- "24"
+  chrom <- rows[[grep("^chrom$", names(rows), ignore.case = TRUE, value = TRUE)]]
+  chrom <- sub("^[Cc][Hh][Rr]", "", chrom)
+  chrom[chrom == "X" | chrom == "x"] <- "23"
+  chrom[chrom == "Y" | chrom == "y"] <- "24"
+  values <- as.integer(rows[[value_col]])
+  bins <- as.integer(rows$bin_id)
 
   for (chr in chr_keys) {
-    idx <- which(rname == chr)
+    idx <- which(chrom == chr & values > 0L)
     if (length(idx) == 0L) next
 
-    chr_rows <- rows[idx, , drop = FALSE]
-    max_bin <- max(chr_rows$bin)
+    chr_bins <- bins[idx]
+    max_bin <- max(chr_bins)
     counts <- integer(max_bin + 1L)
-    counts[chr_rows$bin + 1L] <- chr_rows$n   # bin is 0-based -> +1 for R index
+    counts[chr_bins + 1L] <- values[idx]
     result[[chr]] <- counts
   }
 

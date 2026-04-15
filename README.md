@@ -19,12 +19,13 @@ correction), following the [rewrites.bio](https://rewrites.bio)
 principles: exact emulation of upstream outputs, full credit to the
 original authors, and transparency about AI assistance.
 
-The core convert step runs entirely in R/SQL via `Rduckhts` with no
-Python dependency. `bam_convert()` returns per-bin read counts in
-memory; `bam_convert_bed()` writes them to a bgzipped, tabix-indexed BED
-file readable by DuckDB or any tabix-aware tool; and `bam_convert_npz()`
-serialises them to a WisecondorX-compatible `.npz` via `reticulate`. The
-convert implementation exactly replicates the upstream `larp` / `larp2`
+The core convert step now runs through the native `bam_bin_counts(...)`
+kernel bundled in `Rduckhts`, with no Python dependency. `bam_convert()`
+returns per-bin read counts in memory; `bam_convert_bed()` writes them
+to a bgzipped, tabix-indexed BED file readable by DuckDB or any
+tabix-aware tool; and `bam_convert_npz()` serialises them to a
+WisecondorX-compatible `.npz` via `reticulate`. The convert
+implementation exactly replicates the upstream `larp` / `larp2`
 streaming deduplication behaviour, achieving bin-for-bin agreement with
 the Python implementation.
 
@@ -257,7 +258,7 @@ c(
   npz_size    = file.info(fixture_npz)$size
 )
 #> npz_created    npz_size 
-#>           1         392
+#>           1        4792
 ```
 
 The CLI wrappers expose the upstream arguments documented in the

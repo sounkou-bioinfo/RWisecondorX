@@ -80,7 +80,10 @@ machine and also enforces the WisecondorX improper-pair rule (paired reads
 that are not properly paired are excluded from both counting and the dedup
 state — this is intrinsic to the algorithm, not a flag option); \code{"flag"}
 additionally excludes reads with SAM flag \code{0x400} set (Picard / sambamba
-pre-marked duplicates); \code{"none"} applies no deduplication.
+pre-marked duplicates); \code{"none"} applies no deduplication. The heavy lifting
+is delegated to the native \code{bam_bin_counts(...)} kernel bundled in
+\code{Rduckhts}; \code{RWisecondorX} reshapes that fixed-bin output into the
+chromosome-keyed objects expected by the WisecondorX and NIPTeR layers.
 }
 \examples{
 \dontrun{

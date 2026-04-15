@@ -384,7 +384,8 @@ if (has_mclust && has_dnacopy) {
       zscore    = 5,
       minrefbins = 5L,
       alpha     = 0.01,
-      seed      = 42
+      seed      = 42,
+      parallel  = FALSE
     )
   ))
 

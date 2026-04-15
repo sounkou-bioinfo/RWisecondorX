@@ -29,7 +29,9 @@ how to reproduce the result, and what remains unvalidated.
 **Status**: Validated ✓  
 **Claim**: `bam_convert()` with `rmdup="streaming"` produces bin counts
 identical (bin-for-bin, zero mismatches) to `wisecondorx convert` on the same
-BAM.
+BAM. The current implementation delegates counting to the native
+`Rduckhts::rduckhts_bam_bin_counts()` kernel and reshapes that output into the
+WisecondorX chromosome-keyed format.
 
 **Data**: `HG00106.chrom11.ILLUMINA.bwa.GBR.exome.20130415.bam`  
 **Validated bins**: 25,115 non-zero bins on chromosome 11  

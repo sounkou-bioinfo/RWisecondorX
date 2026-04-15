@@ -114,22 +114,114 @@ nipter_bin_bam <- function(bam,
 }
 
 
-#' Write NIPTeR-style bin counts to a bgzipped BED file
+#' Write an in-memory NIPTeRSample to a bgzipped BED file
 #'
-#' Bins a BAM/CRAM file with NIPTeR defaults and writes the result to a
-#' bgzipped, tabix-indexed BED file.
+#' Serialises an already-binned `NIPTeRSample` — optionally GC-corrected — to
+#' a bgzipped, tabix-indexed BED file without re-reading any BAM.
 #'
-#' When `separate_strands = FALSE` (default), the output has five columns:
-#' `chrom`, `start`, `end`, `count`, `corrected_count`.
+#' Use this when you have already called [nipter_bin_bam()] and optionally
+#' [nipter_gc_correct()]: the BAM is read exactly once and the result is
+#' written in one step.  For a single one-shot BAM → BED conversion with no
+#' intermediate sample object, see [nipter_bin_bam_bed()].
 #'
-#' When `separate_strands = TRUE`, the output has nine columns:
-#' `chrom`, `start`, `end`, `count`, `count_fwd`, `count_rev`,
-#' `corrected_count`, `corrected_fwd`, `corrected_rev`. `count` is the total
-#' (forward + reverse); `corrected_count` is the total of the per-strand
-#' corrected values.
+#' Column layout mirrors [nipter_bin_bam_bed()]:
+#' * **CombinedStrands** (default): 5 columns —
+#'   `chrom`, `start`, `end`, `count`, `corrected_count`.
+#' * **SeparatedStrands** (`separate_strands = TRUE`): 9 columns —
+#'   `chrom`, `start`, `end`, `count`, `count_fwd`, `count_rev`,
+#'   `corrected_count`, `corrected_fwd`, `corrected_rev`.
 #'
-#' `corrected_count` (and `corrected_fwd`/`corrected_rev`) is `NA` until a
-#' GC-corrected sample is supplied via the `corrected` parameter.
+#' @param sample A `NIPTeRSample` object (`CombinedStrands` or
+#'   `SeparatedStrands`) from [nipter_bin_bam()].
+#' @param bed Path for the output `.bed.gz` file.
+#' @param binsize Bin size in base pairs used when `sample` was created.
+#'   Required to reconstruct genomic coordinates.
+#' @param corrected Optional GC-corrected `NIPTeRSample` from
+#'   [nipter_gc_correct()]. Populated corrected-count columns when supplied;
+#'   those columns are `NA` otherwise.
+#' @param con Optional open DBI connection with duckhts already loaded.
+#' @param index Logical; write a tabix index alongside the BED (default `TRUE`).
+#'
+#' @return `bed` (invisibly).
+#'
+#' @seealso [nipter_bin_bam()], [nipter_bin_bam_bed()], [nipter_gc_correct()],
+#'   [bed_to_nipter_sample()]
+#'
+#' @examples
+#' \dontrun{
+#' # Bin once, write — no GC correction
+#' s <- nipter_bin_bam("sample.bam", binsize = 50000L)
+#' nipter_sample_to_bed(s, "sample.bed.gz", binsize = 50000L)
+#'
+#' # Bin once, GC-correct, write — BAM read only once
+#' s    <- nipter_bin_bam("sample.bam", binsize = 50000L)
+#' corr <- nipter_gc_correct(s, gc_table = "hg38_gc_50k.tsv.bgz")
+#' nipter_sample_to_bed(s, "sample.bed.gz", binsize = 50000L, corrected = corr)
+#' }
+#'
+#' @export
+nipter_sample_to_bed <- function(sample,
+                                 bed,
+                                 binsize,
+                                 corrected = NULL,
+                                 con       = NULL,
+                                 index     = TRUE) {
+  stopifnot(inherits(sample, "NIPTeRSample"))
+  stopifnot(is.character(bed), length(bed) == 1L, nzchar(bed))
+  stopifnot(is.numeric(binsize), length(binsize) == 1L, binsize >= 1L)
+  stopifnot(is.logical(index), length(index) == 1L)
+  if (!is.null(corrected)) stopifnot(inherits(corrected, "NIPTeRSample"))
+  binsize <- as.integer(binsize)
+
+  own_con <- is.null(con)
+  if (own_con) {
+    drv <- duckdb::duckdb(config = list(allow_unsigned_extensions = "true"))
+    con <- DBI::dbConnect(drv)
+    Rduckhts::rduckhts_load(con)
+    on.exit(DBI::dbDisconnect(con, shutdown = TRUE), add = TRUE)
+  }
+
+  if (inherits(sample, "SeparatedStrands")) {
+    df <- .nipter_bed_separated_strands(sample, binsize, corrected)
+  } else {
+    df <- .nipter_bed_combined_strands(sample, binsize, corrected)
+  }
+
+  tmp <- tempfile(fileext = ".bed")
+  on.exit(unlink(tmp), add = TRUE)
+  utils::write.table(df, tmp, sep = "\t", quote = FALSE, row.names = FALSE,
+                     col.names = FALSE)
+
+  Rduckhts::rduckhts_bgzip(con, tmp,
+                            output_path = bed,
+                            threads     = 1L,
+                            keep        = TRUE,
+                            overwrite   = TRUE)
+
+  if (isTRUE(index)) {
+    Rduckhts::rduckhts_tabix_index(con, bed, preset = "bed", threads = 1L)
+  }
+
+  invisible(bed)
+}
+
+
+#' Bin a BAM/CRAM and write NIPTeR-style counts to a bgzipped BED
+#'
+#' Convenience wrapper that bins a BAM/CRAM with [nipter_bin_bam()] and
+#' immediately writes the result via [nipter_sample_to_bed()].  The BAM is
+#' read exactly once.
+#'
+#' If you need to GC-correct the sample before writing, call
+#' [nipter_bin_bam()] and [nipter_gc_correct()] yourself, then pass both to
+#' [nipter_sample_to_bed()].  That avoids reading the BAM a second time.
+#'
+#' Column layout:
+#' * **CombinedStrands** (default): 5 columns —
+#'   `chrom`, `start`, `end`, `count`, `corrected_count`.
+#' * **SeparatedStrands** (`separate_strands = TRUE`): 9 columns —
+#'   `chrom`, `start`, `end`, `count`, `count_fwd`, `count_rev`,
+#'   `corrected_count`, `corrected_fwd`, `corrected_rev`.
 #'
 #' @param bam Path to an indexed BAM or CRAM file.
 #' @param bed Path for the output `.bed.gz` file. The tabix index is written
@@ -144,18 +236,19 @@ nipter_bin_bam <- function(bam,
 #'   reads (`samtools view -F 1024`).
 #' @param rmdup Duplicate removal strategy: `"none"` (default) or `"flag"`.
 #' @param separate_strands Logical; when `TRUE`, includes separate
-#'   `count_fwd` and `count_rev` columns for forward- and reverse-strand
-#'   counts. Default `FALSE`.
-#' @param corrected Optional `NIPTeRSample` already processed by
-#'   `nipter_gc_correct()`. When supplied, its corrected counts populate the
-#'   `corrected_count` column; otherwise the column is `NA`.
+#'   `count_fwd` and `count_rev` columns. Default `FALSE`.
+#' @param corrected Optional `NIPTeRSample` from [nipter_gc_correct()].
+#'   Embeds corrected counts without re-reading the BAM only when the sample
+#'   was already binned externally; pass `NULL` (default) for the common
+#'   no-correction case.
 #' @param con Optional open DBI connection with duckhts already loaded.
 #' @param reference Optional FASTA reference path for CRAM inputs.
 #' @param index Logical; create a tabix index (default `TRUE`).
 #'
 #' @return `bed` (invisibly).
 #'
-#' @seealso `nipter_bin_bam()`, `nipter_gc_correct()`, [bam_convert_bed()]
+#' @seealso [nipter_sample_to_bed()], [nipter_bin_bam()], [nipter_gc_correct()],
+#'   [bam_convert_bed()]
 #'
 #' @examples
 #' \dontrun{
@@ -183,25 +276,8 @@ nipter_bin_bam_bed <- function(bam,
                                con              = NULL,
                                reference        = NULL,
                                index            = TRUE) {
-  rmdup <- match.arg(rmdup)
-  stopifnot(is.character(bam), length(bam) == 1L, nzchar(bam))
-  stopifnot(file.exists(bam))
-  stopifnot(is.character(bed), length(bed) == 1L, nzchar(bed))
-  stopifnot(is.logical(separate_strands), length(separate_strands) == 1L)
-  if (!is.null(reference)) {
-    stopifnot(is.character(reference), length(reference) == 1L, nzchar(reference))
-    stopifnot(file.exists(reference))
-  }
-  stopifnot(is.numeric(binsize),       length(binsize)       == 1L, binsize       >= 1L)
-  stopifnot(is.numeric(mapq),          length(mapq)          == 1L, mapq          >= 0L)
-  stopifnot(is.numeric(require_flags), length(require_flags) == 1L, require_flags >= 0L)
-  stopifnot(is.numeric(exclude_flags), length(exclude_flags) == 1L, exclude_flags >= 0L)
-  stopifnot(is.logical(index), length(index) == 1L)
-  binsize       <- as.integer(binsize)
-  mapq          <- as.integer(mapq)
-  require_flags <- as.integer(require_flags)
-  exclude_flags <- as.integer(exclude_flags)
-
+  # Share one connection across nipter_bin_bam + nipter_sample_to_bed so
+  # both operations run in the same DuckDB session without double-open.
   own_con <- is.null(con)
   if (own_con) {
     drv <- duckdb::duckdb(config = list(allow_unsigned_extensions = "true"))
@@ -210,34 +286,21 @@ nipter_bin_bam_bed <- function(bam,
     on.exit(DBI::dbDisconnect(con, shutdown = TRUE), add = TRUE)
   }
 
-  sample <- nipter_bin_bam(bam, binsize = binsize, mapq = mapq,
-                           require_flags = require_flags,
-                           exclude_flags = exclude_flags,
-                           rmdup = rmdup, separate_strands = separate_strands,
-                           con = con, reference = reference)
+  sample <- nipter_bin_bam(bam,
+                            binsize          = binsize,
+                            mapq             = mapq,
+                            require_flags    = require_flags,
+                            exclude_flags    = exclude_flags,
+                            rmdup            = match.arg(rmdup),
+                            separate_strands = separate_strands,
+                            con              = con,
+                            reference        = reference)
 
-  if (isTRUE(separate_strands)) {
-    df <- .nipter_bed_separated_strands(sample, binsize, corrected)
-  } else {
-    df <- .nipter_bed_combined_strands(sample, binsize, corrected)
-  }
-
-  tmp <- tempfile(fileext = ".bed")
-  on.exit(unlink(tmp), add = TRUE)
-  utils::write.table(df, tmp, sep = "\t", quote = FALSE, row.names = FALSE,
-                     col.names = FALSE)
-
-  Rduckhts::rduckhts_bgzip(con, tmp,
-                           output_path = bed,
-                           threads     = 1L,
-                           keep        = TRUE,
-                           overwrite   = TRUE)
-
-  if (isTRUE(index)) {
-    Rduckhts::rduckhts_tabix_index(con, bed, preset = "bed", threads = 1L)
-  }
-
-  invisible(bed)
+  nipter_sample_to_bed(sample, bed,
+                        binsize   = binsize,
+                        corrected = corrected,
+                        con       = con,
+                        index     = index)
 }
 
 

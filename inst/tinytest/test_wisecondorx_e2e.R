@@ -49,7 +49,8 @@ ref <- suppressMessages(
 t21_id <- manifest$sample_id[manifest$trisomy == "T21"]
 pred_t21 <- suppressMessages(
   rwisecondorx_predict(all_samples[[t21_id]], ref,
-                       zscore = 3, minrefbins = 5L, alpha = 1e-4, seed = 42L)
+                       zscore = 3, minrefbins = 5L, alpha = 1e-4, seed = 42L,
+                       parallel = FALSE)
 )
 
 # pred$aberrations must be a data.frame with required columns
@@ -69,7 +70,8 @@ expect_true(nrow(chr21_gains) >= 1L,
 t18_id <- manifest$sample_id[manifest$trisomy == "T18"]
 pred_t18 <- suppressMessages(
   rwisecondorx_predict(all_samples[[t18_id]], ref,
-                       zscore = 3, minrefbins = 5L, alpha = 1e-4, seed = 42L)
+                       zscore = 3, minrefbins = 5L, alpha = 1e-4, seed = 42L,
+                       parallel = FALSE)
 )
 chr18_gains <- pred_t18$aberrations[pred_t18$aberrations$chr == "18" &
                                      pred_t18$aberrations$type == "gain", ]
@@ -80,7 +82,8 @@ expect_true(nrow(chr18_gains) >= 1L,
 t13_id <- manifest$sample_id[manifest$trisomy == "T13"]
 pred_t13 <- suppressMessages(
   rwisecondorx_predict(all_samples[[t13_id]], ref,
-                       zscore = 3, minrefbins = 5L, alpha = 1e-4, seed = 42L)
+                       zscore = 3, minrefbins = 5L, alpha = 1e-4, seed = 42L,
+                       parallel = FALSE)
 )
 chr13_gains <- pred_t13$aberrations[pred_t13$aberrations$chr == "13" &
                                      pred_t13$aberrations$type == "gain", ]
@@ -93,7 +96,8 @@ expect_true(nrow(chr13_gains) >= 1L,
 euploid_id <- manifest$sample_id[manifest$trisomy == "none"][1L]
 pred_euploid <- suppressMessages(
   rwisecondorx_predict(all_samples[[euploid_id]], ref,
-                       zscore = 5, minrefbins = 5L, alpha = 1e-4, seed = 42L)
+                       zscore = 5, minrefbins = 5L, alpha = 1e-4, seed = 42L,
+                       parallel = FALSE)
 )
 expect_equal(nrow(pred_euploid$aberrations), 0L,
              info = "euploid sample has zero aberration calls at zscore=5")

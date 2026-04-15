@@ -10,6 +10,13 @@
 library(tinytest)
 library(RWisecondorX)
 
+.helper_nipter <- system.file("tinytest", "helper_nipter.R", package = "RWisecondorX")
+if (nzchar(.helper_nipter)) {
+  sys.source(.helper_nipter, envir = environment())
+} else {
+  sys.source("inst/tinytest/helper_nipter.R", envir = environment())
+}
+
 
 # ---------------------------------------------------------------------------
 # 1. nipter_ssd_scores_cpp — known inputs

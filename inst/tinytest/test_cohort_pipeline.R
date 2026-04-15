@@ -112,7 +112,8 @@ for (i in seq_len(nrow(trisomy_samples))) {
       zscore    = 3,
       minrefbins = 5L,
       alpha     = 1e-4,
-      seed      = 42L
+      seed      = 42L,
+      parallel  = FALSE
     )
   )
 
@@ -173,7 +174,8 @@ pred_euploid <- suppressMessages(
     zscore    = 3,
     minrefbins = 5L,
     alpha     = 1e-4,
-    seed      = 42L
+    seed      = 42L,
+    parallel  = FALSE
   )
 )
 

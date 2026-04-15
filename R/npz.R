@@ -4,16 +4,16 @@
 #' `.npz` file that is byte-compatible with the file written by
 #' `wisecondorx convert`.  The NPZ must be created by numpy so that
 #' `wisecondorx newref` can load it; this function therefore requires
-#' `reticulate` and a Python environment with `numpy` installed (any version
-#' >= 1.16 works).
+#' `reticulate` and a Python environment with `numpy` installed; any numpy
+#' version from 1.16 onward works.
 #'
 #' The resulting NPZ has three top-level keys:
 #' \describe{
-#'   \item{`sample`}{0-d object array wrapping a dict of `"1"`..`"24"` ->
-#'     int32 arrays (chromosome bin counts).}
+#'   \item{`sample`}{0-d object array wrapping a dict mapping `"1"`..`"24"`
+#'     to int32 arrays (chromosome bin counts).}
 #'   \item{`binsize`}{Scalar int (bin size in bp).}
 #'   \item{`quality`}{0-d object array wrapping a dict of QC counters
-#'     (populated with zeros since DuckDB SQL binning does not track
+#'     (populated with zeros since the native binning kernel does not track
 #'     per-read filter stats).}
 #' }
 #'
@@ -118,7 +118,7 @@ bam_convert_npz <- function(bam,
   }
 
   # Quality info -- upstream stores read-level QC stats.  We populate with
-  # zeros since DuckDB SQL binning does not track per-read filter counters.
+  # zeros since the native binning kernel does not track per-read filter counters.
   # These fields are never read by newref or predict.
   quality_dict <- py_builtins$dict()
   for (qk in c("mapped", "unmapped", "no_coordinate", "filter_rmdup",

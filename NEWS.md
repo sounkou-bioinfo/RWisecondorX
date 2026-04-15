@@ -1,4 +1,19 @@
-# RWisecondorX (development version)
+# RWisecondorX 0.0.0.9001 (development version)
+
+## `bam_convert()` now delegates to native `bam_bin_counts(...)`
+
+* `bam_convert()` and the downstream WisecondorX/NIPTeR binning layer now use
+  the native `bam_bin_counts(...)` kernel bundled in `Rduckhts` instead of the
+  previous SQL/window-function implementation over `read_bam()` and
+  `FILE_OFFSET`.
+
+* Public behavior is preserved: `rmdup = "streaming"` still matches the
+  upstream WisecondorX `larp` / `larp2` semantics, while `rmdup = "flag"` and
+  `rmdup = "none"` continue to expose duplicate-flag and no-dedup modes.
+
+* This validates the new native counting primitive in real downstream code and
+  removes RWisecondorX's direct dependency on the old SQL/file-order dedup
+  workaround.
 
 ## SeparatedStrands BED expanded to 9 columns; BED readers switched to `read_tabix()`
 

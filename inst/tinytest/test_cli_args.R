@@ -10,6 +10,7 @@ library(RWisecondorX)
 .wisecondorx_newref_args <- RWisecondorX:::.wisecondorx_newref_args
 .wisecondorx_predict_args <- RWisecondorX:::.wisecondorx_predict_args
 .format_ylim <- RWisecondorX:::.format_ylim
+.condathis_safe_wd <- RWisecondorX:::.condathis_safe_wd
 
 # ---------------------------------------------------------------------------
 # convert CLI argument mapping

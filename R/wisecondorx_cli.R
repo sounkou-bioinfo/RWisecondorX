@@ -309,8 +309,13 @@ wisecondorx_predict <- function(npz,
 .wisecondorx_env_state <- new.env(parent = emptyenv())
 
 .condathis_safe_wd <- function() {
-  wd <- tryCatch(getwd(), error = function(e) NA_character_)
-  if (!is.na(wd) && nzchar(wd) && dir.exists(wd)) {
+  wd <- tryCatch(getwd(), error = function(e) NULL)
+  wd_ok <- is.character(wd) &&
+    length(wd) == 1L &&
+    !is.na(wd) &&
+    nzchar(wd) &&
+    isTRUE(tryCatch(dir.exists(wd), error = function(e) FALSE))
+  if (wd_ok) {
     return(wd)
   }
 

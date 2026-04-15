@@ -52,6 +52,8 @@
 #'
 #' @seealso [nipter_predict_sex()], [nipter_chi_correct()]
 #'
+#' @importFrom mclust Mclust emControl
+#'
 #' @examples
 #' \dontrun{
 #' # Build sex model from chi-corrected control group
@@ -401,19 +403,19 @@ nipter_sex_model_y_unique <- function(ratios) {
 #' @export
 nipter_y_unique_ratio <- function(bam,
                                   mapq          = 1L,
-                                  exclude_flags = 0L,
                                   require_flags = 0L,
+                                  exclude_flags = 0L,
                                   regions_file  = NULL,
                                   con           = NULL,
                                   reference     = NULL) {
   stopifnot(is.character(bam), length(bam) == 1L, nzchar(bam))
   stopifnot(file.exists(bam))
   stopifnot(is.numeric(mapq),          length(mapq)          == 1L, mapq          >= 0L)
-  stopifnot(is.numeric(exclude_flags), length(exclude_flags) == 1L, exclude_flags >= 0L)
   stopifnot(is.numeric(require_flags), length(require_flags) == 1L, require_flags >= 0L)
+  stopifnot(is.numeric(exclude_flags), length(exclude_flags) == 1L, exclude_flags >= 0L)
   mapq          <- as.integer(mapq)
-  exclude_flags <- as.integer(exclude_flags)
   require_flags <- as.integer(require_flags)
+  exclude_flags <- as.integer(exclude_flags)
 
   # Load regions
   if (is.null(regions_file)) {

@@ -47,8 +47,9 @@ NumericVector nipter_ssd_scores_cpp(NumericMatrix fracs,
     int n_rows = fracs.nrow();
 
 #ifdef _OPENMP
-    if (cpus > 1) omp_set_num_threads(cpus);
-#pragma omp parallel for schedule(static)
+    #pragma omp parallel for schedule(static) num_threads(cpus)
+#else
+    (void)cpus;
 #endif
     for (int s = 0; s < n_controls; ++s) {
         double ssd = 0.0;
@@ -81,8 +82,9 @@ NumericMatrix nipter_ssd_matrix_cpp(NumericMatrix fracs,
     std::fill(out.begin(), out.end(), 0.0);
 
 #ifdef _OPENMP
-    if (cpus > 1) omp_set_num_threads(cpus);
-#pragma omp parallel for schedule(dynamic)
+    #pragma omp parallel for schedule(dynamic) num_threads(cpus)
+#else
+    (void)cpus;
 #endif
     for (int i = 0; i < n_controls; ++i) {
         const double* ci = fp + i * n_rows;

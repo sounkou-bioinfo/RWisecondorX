@@ -68,7 +68,7 @@ nipter_gc_precompute <- function(fasta, binsize = 50000L, out, con = NULL) {
   }
 
   df <- do.call(rbind, Filter(Negate(is.null), rows))
-  write.table(df, tmp, sep = "\t", quote = FALSE, row.names = FALSE,
+  utils::write.table(df, tmp, sep = "\t", quote = FALSE, row.names = FALSE,
               col.names = FALSE, na = "NA")
 
   Rduckhts::rduckhts_bgzip(con, tmp, out, overwrite = TRUE)
@@ -367,16 +367,19 @@ nipter_gc_correct <- function(object,
 
   sample$autosomal_chromosome_reads <- corrected_auto
   sample$correction_status_autosomal <- .update_correction_status(
-    sample$correction_status_autosomal, "GC corrected"
+    sample$correction_status_autosomal, "GC Corrected"
   )
 
-  # Sex chromosome correction (nearest-neighbour lookup)
+  # Sex chromosome correction (nearest-neighbour lookup, vectorized per chromosome)
   if (include_sex) {
     sex_list <- sample$sex_chromosome_reads
 
-    # For each sex chromosome bin, find the nearest GC in the LOESS curve
+    # Pre-sort the autosomal GC/fitted-values for binary-search nearest-neighbour.
     gc_fitted_vals <- gc_auto[valid]
     fitted_reads   <- fitted_vals
+    sort_idx       <- order(gc_fitted_vals)
+    gc_sorted      <- gc_fitted_vals[sort_idx]
+    fit_sorted     <- fitted_reads[sort_idx]
 
     corrected_sex <- lapply(sex_list, function(sex_mat) {
       corrected <- sex_mat
@@ -391,20 +394,26 @@ nipter_gc_correct <- function(object,
         row_idx <- grep(paste0("^", chr_label), rownames(sex_mat))
         if (length(row_idx) == 0L) next
 
-        for (b in seq_len(n_bins)) {
-          if (is.na(gc_sex[b]) || sex_mat[row_idx, b] == 0) next
-          dists <- abs(gc_fitted_vals - gc_sex[b])
-          nearest <- which.min(dists)
-          cf <- median_reads / fitted_reads[nearest]
-          corrected[row_idx, b] <- sex_mat[row_idx, b] * cf
-        }
+        # Vectorised nearest-neighbour: binary search via findInterval, then
+        # check adjacent positions.  Replaces the O(n_bins * n_valid) loop.
+        cf_vec <- vapply(gc_sex, function(g) {
+          if (is.na(g)) return(1.0)
+          pos <- findInterval(g, gc_sorted)
+          candidates <- c(pos, pos + 1L)
+          candidates <- candidates[candidates >= 1L & candidates <= length(gc_sorted)]
+          if (length(candidates) == 0L) return(1.0)
+          best <- candidates[which.min(abs(gc_sorted[candidates] - g))]
+          median_reads / fit_sorted[best]
+        }, numeric(1L))
+
+        corrected[row_idx, ] <- sex_mat[row_idx, ] * cf_vec
       }
       corrected
     })
 
     sample$sex_chromosome_reads <- corrected_sex
     sample$correction_status_sex <- .update_correction_status(
-      sample$correction_status_sex, "GC corrected"
+      sample$correction_status_sex, "GC Corrected"
     )
   }
 
@@ -489,10 +498,10 @@ nipter_gc_correct <- function(object,
 
   sample$autosomal_chromosome_reads <- corrected_auto
   sample$correction_status_autosomal <- .update_correction_status(
-    sample$correction_status_autosomal, "GC corrected"
+    sample$correction_status_autosomal, "GC Corrected"
   )
 
-  # Sex chromosome correction
+  # Sex chromosome correction (vectorised per chromosome)
   if (include_sex) {
     corrected_sex <- lapply(sample$sex_chromosome_reads, function(sex_mat) {
       corrected <- sex_mat
@@ -507,20 +516,19 @@ nipter_gc_correct <- function(object,
         if (length(row_idx) == 0L) next
         gc_sex_bucket <- round(gc_sex * 1000)
 
-        for (b_pos in seq_len(n_bins)) {
-          if (is.na(gc_sex_bucket[b_pos]) || sex_mat[row_idx, b_pos] == 0) next
-          bm <- bucket_mean[as.character(gc_sex_bucket[b_pos])]
-          if (!is.na(bm) && bm > 0) {
-            corrected[row_idx, b_pos] <- sex_mat[row_idx, b_pos] * (global_mean / bm)
-          }
-        }
+        # Vectorised: look up bucket weights for all bins at once
+        bm_vals <- bucket_mean[as.character(gc_sex_bucket)]
+        use <- !is.na(gc_sex_bucket) & !is.na(bm_vals) & bm_vals > 0
+        cf_vec <- rep(1.0, n_bins)
+        cf_vec[use] <- global_mean / bm_vals[use]
+        corrected[row_idx, ] <- sex_mat[row_idx, ] * cf_vec
       }
       corrected
     })
 
     sample$sex_chromosome_reads <- corrected_sex
     sample$correction_status_sex <- .update_correction_status(
-      sample$correction_status_sex, "GC corrected"
+      sample$correction_status_sex, "GC Corrected"
     )
   }
 

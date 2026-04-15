@@ -48,14 +48,14 @@ scale_sample <- function(sample, from_size, to_size) {
   for (chr_name in names(sample)) {
     chr_data <- sample[[chr_name]]
     if (is.null(chr_data)) next
-    new_len <- as.integer(ceiling(length(chr_data) / scale))
-    scaled_chr <- integer(new_len)
-    for (i in seq_len(new_len)) {
-      s <- as.integer((i - 1L) * scale + 1L)
-      e <- min(as.integer(i * scale), length(chr_data))
-      scaled_chr[i] <- sum(chr_data[s:e])
-    }
-    result[[chr_name]] <- scaled_chr
+    n_src   <- length(chr_data)
+    new_len <- as.integer(ceiling(n_src / scale))
+    # Pad to an exact multiple of scale so matrix reshape works cleanly,
+    # then sum each column (= group of `scale` original bins).
+    padded_len <- new_len * scale
+    padded <- integer(padded_len)
+    padded[seq_len(n_src)] <- chr_data
+    result[[chr_name]] <- as.integer(colSums(matrix(padded, nrow = scale)))
   }
 
   result
@@ -208,7 +208,9 @@ scale_sample <- function(sample, from_size, to_size) {
       # smallest nonzero fraction and zero as the cutoff.
       nonzero <- y_fractions[y_fractions > 0]
       cutoff <- if (length(nonzero) > 0L) min(nonzero) / 2 else 0.001
-      message("GMM gender model did not converge; using cutoff ", cutoff)
+      warning("GMM gender model did not converge; using fallback cutoff ", cutoff,
+              ". Verify gender assignments before trusting gonosomal CNV calls.",
+              call. = FALSE)
     } else {
       # Find local minimum of the density on a fine grid [0, 0.02]
       gmm_x <- seq(0, 0.02, length.out = 5000)

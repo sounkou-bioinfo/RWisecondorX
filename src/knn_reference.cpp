@@ -66,10 +66,6 @@ List knn_reference_cpp(NumericMatrix pca_corrected,
         chr_end_0[c]   = masked_bins_per_chr_cum[c] - 1;  // inclusive
     }
 
-#ifdef _OPENMP
-    if (cpus > 1) omp_set_num_threads(cpus);
-#endif
-
     // Process each chromosome
     for (int chr_idx = 0; chr_idx < n_chrs; ++chr_idx) {
         int cs = chr_start_0[chr_idx];
@@ -94,7 +90,7 @@ List knn_reference_cpp(NumericMatrix pca_corrected,
         int k_actual = std::min(refsize, n_other);
 
         // Parallel over bins within this chromosome
-        #pragma omp parallel for schedule(dynamic, 64) if(cpus > 1)
+        #pragma omp parallel for schedule(dynamic, 64) num_threads(cpus) if(cpus > 1)
         for (int bin_i = cs; bin_i <= ce; ++bin_i) {
             // Pointer to this bin's contiguous feature vector in transposed layout
             const double* this_row = trans.data() +
@@ -149,11 +145,7 @@ NumericMatrix null_ratios_cpp(NumericMatrix pca_corrected,
 
     const double* pca_ptr = REAL(pca_corrected);
 
-#ifdef _OPENMP
-    if (cpus > 1) omp_set_num_threads(cpus);
-#endif
-
-    #pragma omp parallel for schedule(dynamic, 1) if(cpus > 1)
+    #pragma omp parallel for schedule(dynamic, 1) num_threads(cpus) if(cpus > 1)
     for (int null_i = 0; null_i < n_null; ++null_i) {
         int case_i = null_sample_idx[null_i] - 1;  // Convert to 0-based
 

@@ -296,6 +296,13 @@ nipter_match_matrix <- function(control_group,
 #'   \code{"General control group"}).
 #' @param con Optional open DBI connection with duckhts loaded.
 #'
+#' @details
+#' The column count (5 or 9) is detected automatically from the first file:
+#' 5-column BEDs produce a \code{CombinedStrands} control group;
+#' 9-column BEDs (written by \code{nipter_bin_bam_bed(separate_strands = TRUE)})
+#' produce a \code{SeparatedStrands} control group. All files in the directory
+#' must have the same column count.
+#'
 #' @return A \code{NIPTeRControlGroup}.
 #'
 #' @seealso [nipter_bin_bam_bed()], [nipter_as_control_group()],
@@ -337,11 +344,10 @@ nipter_control_group_from_beds <- function(bed_dir,
   # Register all files as a single multi-reader DuckDB table.
   # rduckhts_tabix_multi() builds UNION ALL BY NAME of per-file read_tabix()
   # queries and adds a `filename` column identifying the source.  The tabix
-  # reader returns all data columns as VARCHAR (column0..column4 for a
-  # 5-column BED), so we must NOT pass column_types here — the "NA" strings
-  # written by write.table() would fail a DOUBLE cast.  Cast in the SELECT
-  # below with TRY_CAST, mirroring the pattern in bed_reader.R.
-  tbl <- paste0("nipter_cg_beds_", as.integer(proc.time()[[3L]] * 1e6))
+  # reader returns all data columns as VARCHAR, so we cast in the SELECT below
+  # via TRY_CAST (handles literal "NA" written by write.table()).
+  tbl <- paste0("nipter_cg_beds_",
+                as.hexmode(sample.int(.Machine$integer.max, 1L)))
   Rduckhts::rduckhts_tabix_multi(con, tbl, files, overwrite = TRUE)
   on.exit(
     tryCatch(DBI::dbExecute(con, sprintf("DROP TABLE IF EXISTS \"%s\"", tbl)),
@@ -349,25 +355,44 @@ nipter_control_group_from_beds <- function(bed_dir,
     add = TRUE
   )
 
-  # Columns from read_tabix() without header_names: column0..column4 (VARCHAR).
-  # column0 = chrom, column1 = start, column2 = end,
-  # column3 = count, column4 = corrected_count ("NA" for uncorrected bins).
-  #
+  # Auto-detect strand type: 9-column BEDs (SeparatedStrands) have column8;
+  # 5-column BEDs (CombinedStrands) do not.
+  probe_sql <- sprintf('SELECT column8 FROM "%s" LIMIT 1', tbl)
+  is_separated <- tryCatch({
+    probe <- DBI::dbGetQuery(con, probe_sql)
+    nrow(probe) > 0L && !is.na(probe[[1L]][1L]) && nzchar(probe[[1L]][1L])
+  }, error = function(e) FALSE)
+
   # Row order across files is non-deterministic (UNION ALL does not guarantee
-  # order). This is safe because matrix assignment uses position-indexed access:
-  #   auto_mat[chr_row, bin_idx[sel] + 1L] <- count
-  # Each bin_idx is derived from start_pos, not from the position of the row
-  # in the data frame. Inter-file row interleaving does not affect correctness.
-  rows <- DBI::dbGetQuery(con, sprintf(
-    'SELECT
-       filename,
-       column0                       AS chrom,
-       CAST(column1 AS INTEGER)      AS start_pos,
-       CAST(column2 AS INTEGER)      AS end_pos,
-       CAST(column3 AS INTEGER)      AS count,
-       TRY_CAST(column4 AS DOUBLE)   AS corrected_count
-     FROM "%s"', tbl
-  ))
+  # order). Matrix assignment uses bin_idx derived from start_pos, so row order
+  # within a sample does not affect correctness.
+  if (is_separated) {
+    rows <- DBI::dbGetQuery(con, sprintf(
+      'SELECT
+         filename,
+         column0                       AS chrom,
+         CAST(column1 AS INTEGER)      AS start_pos,
+         CAST(column2 AS INTEGER)      AS end_pos,
+         CAST(column3 AS INTEGER)      AS count,
+         CAST(column4 AS INTEGER)      AS count_fwd,
+         CAST(column5 AS INTEGER)      AS count_rev,
+         TRY_CAST(column6 AS DOUBLE)   AS corrected_count,
+         TRY_CAST(column7 AS DOUBLE)   AS corrected_fwd,
+         TRY_CAST(column8 AS DOUBLE)   AS corrected_rev
+       FROM "%s"', tbl
+    ))
+  } else {
+    rows <- DBI::dbGetQuery(con, sprintf(
+      'SELECT
+         filename,
+         column0                       AS chrom,
+         CAST(column1 AS INTEGER)      AS start_pos,
+         CAST(column2 AS INTEGER)      AS end_pos,
+         CAST(column3 AS INTEGER)      AS count,
+         TRY_CAST(column4 AS DOUBLE)   AS corrected_count
+       FROM "%s"', tbl
+    ))
+  }
 
   if (nrow(rows) == 0L) {
     stop("All BED files in '", bed_dir, "' appear to be empty.", call. = FALSE)
@@ -389,10 +414,18 @@ nipter_control_group_from_beds <- function(bed_dir,
   n_bins_global <- max(bin_idx_all) + 1L
 
   sample_names <- unique(rows$sample_name)
-  samples <- lapply(sample_names, function(nm) {
-    sub_rows <- rows[rows$sample_name == nm, , drop = FALSE]
-    .bed_rows_to_nipter_combined(sub_rows, nm, binsize, n_bins_global)
-  })
+
+  if (is_separated) {
+    samples <- lapply(sample_names, function(nm) {
+      sub_rows <- rows[rows$sample_name == nm, , drop = FALSE]
+      .bed_rows_to_nipter_sep(sub_rows, nm, binsize, n_bins_global)
+    })
+  } else {
+    samples <- lapply(sample_names, function(nm) {
+      sub_rows <- rows[rows$sample_name == nm, , drop = FALSE]
+      .bed_rows_to_nipter_combined(sub_rows, nm, binsize, n_bins_global)
+    })
+  }
 
   nipter_as_control_group(samples, description = description)
 }
@@ -459,6 +492,96 @@ nipter_control_group_from_beds <- function(bed_dir,
     }
     obj$autosomal_chromosome_reads  <- list(corr_auto)
     obj$sex_chromosome_reads        <- list(corr_sex)
+    obj$correction_status_autosomal <- "GC Corrected"
+    obj$correction_status_sex       <- "GC Corrected"
+  }
+
+  obj
+}
+
+
+# Internal helper: build a SeparatedStrands NIPTeRSample from rows already
+# fetched from the multi-reader table.
+# Columns: chrom, start_pos, end_pos, count, count_fwd, count_rev,
+#          corrected_count, corrected_fwd, corrected_rev (all typed).
+# n_bins_global: shared column width (narrower chromosomes zero-padded).
+.bed_rows_to_nipter_sep <- function(rows, name, binsize, n_bins_global) {
+  fwd_auto_keys <- paste0(1:22, "F")
+  rev_auto_keys <- paste0(1:22, "R")
+  fwd_sex_keys  <- c("XF", "YF")
+  rev_sex_keys  <- c("XR", "YR")
+  # Numeric chromosome keys for lookup
+  auto_keys <- as.character(1:22)
+  sex_keys  <- c("23", "24")
+
+  chrom <- sub("^[Cc][Hh][Rr]", "", rows$chrom)
+  chrom[chrom == "X" | chrom == "x"] <- "23"
+  chrom[chrom == "Y" | chrom == "y"] <- "24"
+
+  bin_idx <- as.integer(rows$start_pos / binsize)
+  n_bins  <- n_bins_global
+  col_names <- as.character(seq_len(n_bins))
+
+  fwd_auto <- matrix(0L, nrow = 22L, ncol = n_bins,
+                     dimnames = list(fwd_auto_keys, col_names))
+  rev_auto <- matrix(0L, nrow = 22L, ncol = n_bins,
+                     dimnames = list(rev_auto_keys, col_names))
+  fwd_sex  <- matrix(0L, nrow = 2L, ncol = n_bins,
+                     dimnames = list(c("XF", "YF"), col_names))
+  rev_sex  <- matrix(0L, nrow = 2L, ncol = n_bins,
+                     dimnames = list(c("XR", "YR"), col_names))
+
+  for (i in seq_along(auto_keys)) {
+    sel <- which(chrom == auto_keys[i])
+    if (length(sel) > 0L) {
+      fwd_auto[i, bin_idx[sel] + 1L] <- as.integer(rows$count_fwd[sel])
+      rev_auto[i, bin_idx[sel] + 1L] <- as.integer(rows$count_rev[sel])
+    }
+  }
+  for (i in seq_along(sex_keys)) {
+    sel <- which(chrom == sex_keys[i])
+    if (length(sel) > 0L) {
+      fwd_sex[i, bin_idx[sel] + 1L] <- as.integer(rows$count_fwd[sel])
+      rev_sex[i, bin_idx[sel] + 1L] <- as.integer(rows$count_rev[sel])
+    }
+  }
+
+  obj <- structure(
+    list(autosomal_chromosome_reads  = list(fwd_auto, rev_auto),
+         sex_chromosome_reads        = list(fwd_sex, rev_sex),
+         correction_status_autosomal = "Uncorrected",
+         correction_status_sex       = "Uncorrected",
+         sample_name                 = name),
+    class = c("NIPTeRSample", "SeparatedStrands")
+  )
+
+  # Use GC-corrected counts when available (non-NA in corrected_fwd/corrected_rev)
+  has_corr <- !all(is.na(rows$corrected_fwd)) && !all(is.na(rows$corrected_rev))
+  if (has_corr) {
+    corr_fwd_auto <- matrix(0, nrow = 22L, ncol = n_bins,
+                            dimnames = list(fwd_auto_keys, col_names))
+    corr_rev_auto <- matrix(0, nrow = 22L, ncol = n_bins,
+                            dimnames = list(rev_auto_keys, col_names))
+    corr_fwd_sex  <- matrix(0, nrow = 2L, ncol = n_bins,
+                            dimnames = list(c("XF", "YF"), col_names))
+    corr_rev_sex  <- matrix(0, nrow = 2L, ncol = n_bins,
+                            dimnames = list(c("XR", "YR"), col_names))
+    for (i in seq_along(auto_keys)) {
+      sel <- which(chrom == auto_keys[i])
+      if (length(sel) > 0L) {
+        corr_fwd_auto[i, bin_idx[sel] + 1L] <- rows$corrected_fwd[sel]
+        corr_rev_auto[i, bin_idx[sel] + 1L] <- rows$corrected_rev[sel]
+      }
+    }
+    for (i in seq_along(sex_keys)) {
+      sel <- which(chrom == sex_keys[i])
+      if (length(sel) > 0L) {
+        corr_fwd_sex[i, bin_idx[sel] + 1L] <- rows$corrected_fwd[sel]
+        corr_rev_sex[i, bin_idx[sel] + 1L] <- rows$corrected_rev[sel]
+      }
+    }
+    obj$autosomal_chromosome_reads  <- list(corr_fwd_auto, corr_rev_auto)
+    obj$sex_chromosome_reads        <- list(corr_fwd_sex, corr_rev_sex)
     obj$correction_status_autosomal <- "GC Corrected"
     obj$correction_status_sex       <- "GC Corrected"
   }

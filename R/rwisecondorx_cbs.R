@@ -37,24 +37,29 @@
   # Determine which chromosomes to include
   chrs <- if (ref_gender == "M") seq_len(24L) else seq_len(23L)
 
-  # Flatten into vectors + chromosome/position labels
-  ratio_vec <- numeric(0)
-  weight_vec <- numeric(0)
-  chr_vec <- integer(0)
-  pos_vec <- integer(0)
+  # Pre-allocate then fill: avoids O(n²) copies from repeated c().
+  chr_lens <- vapply(chrs, function(chr) {
+    if (chr > length(results_r)) return(0L)
+    as.integer(length(results_r[[chr]]))
+  }, integer(1L))
+  total_n <- sum(chr_lens)
 
-  for (chr in chrs) {
-    if (chr > length(results_r)) next
-    n <- length(results_r[[chr]])
+  ratio_vec  <- numeric(total_n)
+  weight_vec <- numeric(total_n)
+  chr_vec    <- integer(total_n)
+  pos_vec    <- integer(total_n)
+
+  fill_pos <- 1L
+  for (ii in seq_along(chrs)) {
+    chr <- chrs[ii]
+    n <- chr_lens[ii]
     if (n == 0L) next
-
-    r <- results_r[[chr]]
-    w <- results_w[[chr]]
-
-    ratio_vec  <- c(ratio_vec, r)
-    weight_vec <- c(weight_vec, w)
-    chr_vec    <- c(chr_vec, rep(chr, n))
-    pos_vec    <- c(pos_vec, seq_len(n))
+    idx <- fill_pos:(fill_pos + n - 1L)
+    ratio_vec[idx]  <- results_r[[chr]]
+    weight_vec[idx] <- results_w[[chr]]
+    chr_vec[idx]    <- chr
+    pos_vec[idx]    <- seq_len(n)
+    fill_pos <- fill_pos + n
   }
 
   # Upstream convention: 0 ratios become NA (blacklisted bins)
@@ -82,8 +87,13 @@
   cna_obj <- DNAcopy::CNA(ratio_cbs, chr_cbs, pos_cbs,
                            data.type = "logratio", sampleid = "X")
 
-  # Run CBS — ParDNAcopy when parallel = TRUE, DNAcopy::segment() otherwise.
-  if (isTRUE(parallel)) {
+  # Run CBS — ParDNAcopy when parallel = TRUE and available, else DNAcopy::segment().
+  use_parallel <- isTRUE(parallel) && requireNamespace("ParDNAcopy", quietly = TRUE)
+  if (isTRUE(parallel) && !use_parallel) {
+    message("ParDNAcopy not available; falling back to DNAcopy::segment().")
+  }
+
+  if (use_parallel) {
     seg_result <- ParDNAcopy::parSegment(cna_obj,
                                          distrib = "Rparallel",
                                          njobs = as.integer(cpus),

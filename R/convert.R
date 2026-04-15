@@ -171,7 +171,7 @@ bam_convert_bed <- function(bam,
                             mapq          = 1L,
                             require_flags = 0L,
                             exclude_flags = 0L,
-                            rmdup         = c("streaming", "none", "flag"),
+                            rmdup         = c("streaming", "flag", "none"),
                             con           = NULL,
                             reference     = NULL,
                             index         = TRUE) {

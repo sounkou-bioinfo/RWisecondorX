@@ -23,8 +23,19 @@ library(RWisecondorX)
 
 
 # ---------------------------------------------------------------------------
-# Helpers — copied verbatim from test_nipter_stats.R so this file is
-# self-contained and can be run in isolation.
+# Helpers — intentionally self-contained; NOT shared via helper_nipter.R.
+#
+# This file must run correctly in isolation (e.g. via
+# tinytest::run_test_file()) without the auto-sourced helpers, and Arm B
+# runs in a separate process where helper_nipter.R is not guaranteed to be
+# loaded.  Do NOT "de-duplicate" these into the shared helper.
+#
+# Design differences from the shared helper_nipter.R helpers:
+#   - bin fill uses seq_len(rem) for fully deterministic output (no RNG);
+#     set.seed() in .make_sample_conf is a no-op (kept for call-site
+#     compatibility but the fill itself is not stochastic).
+#   - .make_ctrl_conf seeds each sample independently with seed*i (noise)
+#     and seed*i+1 (sample), rather than advancing a single global stream.
 # ---------------------------------------------------------------------------
 
 .make_sample_conf <- function(chr_totals, name, n_bins = 100L, seed = 42L) {

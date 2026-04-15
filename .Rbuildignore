@@ -17,3 +17,5 @@
 ^\.pre-commit-config\.yaml$
 ^RWisecondorX\.Rcheck$
 ^RWisecondorX_.*\.tar\.gz$
+^\.sync$
+^\.codex$

@@ -38,6 +38,13 @@ constructs a \code{NIPTeRControlGroup} from the results. This is much faster
 than \code{lapply(files, bed_to_nipter_sample)} for large cohorts because all
 files are read in one pass.
 }
+\details{
+The column count (5 or 9) is detected automatically from the first file:
+5-column BEDs produce a \code{CombinedStrands} control group;
+9-column BEDs (written by \code{nipter_bin_bam_bed(separate_strands = TRUE)})
+produce a \code{SeparatedStrands} control group. All files in the directory
+must have the same column count.
+}
 \examples{
 \dontrun{
 # Bin all controls to BED once

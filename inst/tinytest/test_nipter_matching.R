@@ -4,54 +4,11 @@
 #
 # All tests that need only synthetic data run unconditionally.
 # Tests that need BAM/FASTA fixtures skip cleanly when fixtures are absent.
+#
+# Simulation helpers come from helper_nipter.R (auto-sourced by tinytest).
 
 library(tinytest)
 library(RWisecondorX)
-
-
-# ---------------------------------------------------------------------------
-# Helpers (same pattern as test_nipter_stats.R)
-# ---------------------------------------------------------------------------
-
-.make_sample <- function(chr_totals, name, n_bins = 50L, seed = 42L) {
-  if (!is.null(seed)) set.seed(seed)
-  auto_mat <- matrix(0L, nrow = 22L, ncol = n_bins)
-  rownames(auto_mat) <- as.character(1:22)
-  colnames(auto_mat) <- as.character(seq_len(n_bins))
-  for (chr in names(chr_totals)) {
-    total <- chr_totals[[chr]]
-    if (total == 0L) next
-    base <- total %/% n_bins
-    rem  <- total - base * n_bins
-    counts <- rep(base, n_bins)
-    if (rem > 0L) counts[seq_len(rem)] <- counts[seq_len(rem)] + 1L
-    auto_mat[chr, ] <- as.integer(counts)
-  }
-  sex_mat <- matrix(0L, nrow = 2L, ncol = n_bins,
-                    dimnames = list(c("X", "Y"), as.character(seq_len(n_bins))))
-  structure(
-    list(autosomal_chromosome_reads  = list(auto_mat),
-         sex_chromosome_reads        = list(sex_mat),
-         correction_status_autosomal = "Uncorrected",
-         correction_status_sex       = "Uncorrected",
-         sample_name                 = name),
-    class = c("NIPTeRSample", "CombinedStrands")
-  )
-}
-
-# Build 5 synthetic samples with slight variation
-.make_cg <- function(n = 5L, n_bins = 50L) {
-  base_totals <- stats::setNames(rep(1000L, 22L), as.character(1:22))
-  samples <- lapply(seq_len(n), function(i) {
-    totals <- base_totals
-    # Add small per-sample noise
-    set.seed(i * 7L)
-    totals[as.character(1:22)] <- as.integer(base_totals + sample(-50:50, 22L, replace = TRUE))
-    totals[totals < 1L] <- 1L
-    .make_sample(totals, sprintf("ctrl_%02d", i), n_bins = n_bins, seed = i)
-  })
-  nipter_as_control_group(samples)
-}
 
 
 # ---------------------------------------------------------------------------
@@ -121,7 +78,7 @@ expect_true(all(rowMeans(ssd_mat) >= 0.0),
 #    nipter_match_control_group(mode = "report")
 # ---------------------------------------------------------------------------
 
-cg5 <- .make_cg(5L)
+cg5 <- nipter_as_control_group(.sim_nipter_control_set(5L, n_bins = 50L))
 
 mm <- nipter_match_matrix(cg5)
 
@@ -160,9 +117,9 @@ totals_b["18"] <- 2000L   # chr 18 is excluded by default
 totals_b["21"] <- 2000L   # chr 21 is excluded by default
 
 # Also add two "normal" samples as needed for a valid control group (min 2)
-sample_a <- .make_sample(totals_a, "a", seed = 1L)
-sample_b <- .make_sample(totals_b, "b", seed = 2L)
-sample_c <- .make_sample(totals_a, "c", seed = 3L)  # same as a
+sample_a <- .sim_nipter_sample(totals_a, "a", n_bins = 50L, seed = 1L)
+sample_b <- .sim_nipter_sample(totals_b, "b", n_bins = 50L, seed = 2L)
+sample_c <- .sim_nipter_sample(totals_a, "c", n_bins = 50L, seed = 3L)  # same as a
 
 cg_excl <- nipter_as_control_group(list(sample_a, sample_b, sample_c))
 
@@ -270,6 +227,93 @@ expect_equal(unname(diag(mm_beds)), rep(0.0, 3L),
 
 
 # ---------------------------------------------------------------------------
+# 5b. nipter_control_group_from_beds() — SeparatedStrands auto-detection
+#
+# Writes 9-column BED.gz files (separate_strands = TRUE) and verifies that
+# nipter_control_group_from_beds() returns a SeparatedStrands control group.
+# ---------------------------------------------------------------------------
+
+ss_bed_dir <- tempfile("nipter_ss_beds_")
+dir.create(ss_bed_dir)
+
+ss_bed_paths <- file.path(ss_bed_dir, paste0("ss_ctrl_", 1:3, ".bed.gz"))
+for (p in ss_bed_paths) {
+  nipter_bin_bam_bed(test_bam, p, binsize = 50000L, separate_strands = TRUE)
+}
+
+expect_true(all(file.exists(ss_bed_paths)),
+            info = "SS BED.gz fixture files created")
+expect_true(all(file.exists(paste0(ss_bed_paths, ".tbi"))),
+            info = "SS tabix indexes created")
+
+# Verify 9 tab-delimited columns per row
+ss_lines <- readLines(gzcon(file(ss_bed_paths[1L], "rb")), n = 3L)
+ss_lines <- ss_lines[nzchar(ss_lines)]
+if (length(ss_lines) > 0L) {
+  expect_true(all(lengths(strsplit(ss_lines, "\t")) == 9L),
+              info = "SeparatedStrands BED has 9 columns")
+}
+
+cg_ss_beds <- nipter_control_group_from_beds(ss_bed_dir, pattern = "*.bed.gz",
+                                              binsize = 50000L)
+
+expect_true(inherits(cg_ss_beds, "NIPTeRControlGroup"),
+            info = "SS from_beds returns NIPTeRControlGroup")
+expect_true(inherits(cg_ss_beds, "SeparatedStrands"),
+            info = "SS from_beds returns SeparatedStrands control group")
+expect_equal(length(cg_ss_beds$samples), 3L,
+             info = "3 SeparatedStrands samples loaded")
+
+ss_names_loaded <- sort(vapply(cg_ss_beds$samples, `[[`, character(1L),
+                               "sample_name"))
+expect_equal(ss_names_loaded, paste0("ss_ctrl_", 1:3),
+             info = "SS sample names derived from filenames")
+
+for (s in cg_ss_beds$samples) {
+  expect_true(inherits(s, "NIPTeRSample"),
+              info = paste("SS sample", s$sample_name, "inherits NIPTeRSample"))
+  expect_true(inherits(s, "SeparatedStrands"),
+              info = paste("SS sample", s$sample_name, "inherits SeparatedStrands"))
+  expect_identical(length(s$autosomal_chromosome_reads), 2L,
+                   info = paste("SS sample", s$sample_name, "has 2 auto matrices"))
+  expect_true(all(grepl("F$", rownames(s$autosomal_chromosome_reads[[1L]]))),
+              info = paste("SS sample", s$sample_name, "fwd auto rownames end in F"))
+  expect_true(all(grepl("R$", rownames(s$autosomal_chromosome_reads[[2L]]))),
+              info = paste("SS sample", s$sample_name, "rev auto rownames end in R"))
+  expect_identical(rownames(s$sex_chromosome_reads[[1L]]), c("XF", "YF"),
+                   info = paste("SS sample", s$sample_name, "fwd sex rownames XF/YF"))
+  expect_identical(rownames(s$sex_chromosome_reads[[2L]]), c("XR", "YR"),
+                   info = paste("SS sample", s$sample_name, "rev sex rownames XR/YR"))
+}
+
+# Verify all samples share identical matrix dimensions (global n_bins sync)
+ss_dims <- lapply(cg_ss_beds$samples, function(s) {
+  lapply(s$autosomal_chromosome_reads, dim)
+})
+expect_true(length(unique(lapply(ss_dims, `[[`, 1L))) == 1L,
+            info = "all SS samples share identical fwd auto matrix dimensions")
+
+# fwd + rev reads per chr should match raw bin count from single-file load
+ss_single <- bed_to_nipter_sample(ss_bed_paths[1L])
+ss_multi_s1 <- cg_ss_beds$samples[[
+  which(vapply(cg_ss_beds$samples, `[[`, character(1L), "sample_name") == "ss_ctrl_1")
+]]
+chr11_fwd_single <- ss_single$autosomal_chromosome_reads[[1L]]["11F", ]
+chr11_fwd_multi  <- ss_multi_s1$autosomal_chromosome_reads[[1L]]["11F", ]
+n_cmp_ss <- min(length(chr11_fwd_single), length(chr11_fwd_multi))
+expect_equal(chr11_fwd_single[seq_len(n_cmp_ss)],
+             chr11_fwd_multi[seq_len(n_cmp_ss)],
+             info = "SS multi-read chr11 fwd counts match single-file load")
+
+# nipter_match_matrix() must accept SeparatedStrands control groups
+mm_ss <- nipter_match_matrix(cg_ss_beds)
+expect_equal(dim(mm_ss), c(3L, 3L),
+             info = "nipter_match_matrix works on SS from_beds control group")
+expect_equal(unname(diag(mm_ss)), rep(0.0, 3L),
+             info = "SS from_beds match matrix diagonal is zero")
+
+
+# ---------------------------------------------------------------------------
 # 6. nipter_gc_precompute() and gc_table= parameter on nipter_gc_correct()
 # ---------------------------------------------------------------------------
 
@@ -306,7 +350,7 @@ corrected_path <- suppressWarnings(
 expect_true(inherits(corrected_path, "NIPTeRSample"),
             info = "nipter_gc_correct(gc_table=path) returns NIPTeRSample")
 expect_true(corrected_path$correction_status_autosomal %in%
-              c("Uncorrected", "GC corrected"),
+              c("Uncorrected", "GC Corrected"),
             info = "correction_status_autosomal is a known value after gc_table= call")
 
 # 6c. gc_table = path and fasta = path give the same correction

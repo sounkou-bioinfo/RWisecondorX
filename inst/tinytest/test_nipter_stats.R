@@ -9,91 +9,14 @@ library(RWisecondorX)
 #   nipter_regression.R — regression Z-score
 #
 # These tests use synthetic NIPTeRSample objects (no BAM fixture required).
+# Simulation helpers come from helper_nipter.R (auto-sourced by tinytest).
 # ---------------------------------------------------------------------------
-
-# ---------------------------------------------------------------------------
-# Helpers: build synthetic NIPTeRSample objects
-# ---------------------------------------------------------------------------
-
-# Create a fake NIPTeRSample with specified per-chromosome total reads.
-# chr_totals: named integer vector with keys "1"-"22" (autosomal).
-# n_bins: number of bins (reads spread evenly then jittered).
-.make_sample <- function(chr_totals, name, n_bins = 100L, seed = NULL) {
-  if (!is.null(seed)) set.seed(seed)
-  auto_mat <- matrix(0L, nrow = 22L, ncol = n_bins)
-  rownames(auto_mat) <- as.character(1:22)
-  colnames(auto_mat) <- as.character(seq_len(n_bins))
-
-  for (chr in names(chr_totals)) {
-    total <- chr_totals[chr]
-    if (total == 0L) next
-    # Spread reads roughly evenly across bins with some noise
-    base   <- total %/% n_bins
-    remainder <- total - base * n_bins
-    counts <- rep(base, n_bins)
-    if (remainder > 0L) {
-      bump <- sample(seq_len(n_bins), remainder)
-      counts[bump] <- counts[bump] + 1L
-    }
-    auto_mat[chr, ] <- as.integer(counts)
-  }
-
-  sex_mat <- matrix(0L, nrow = 2L, ncol = n_bins)
-  rownames(sex_mat) <- c("X", "Y")
-  colnames(sex_mat) <- as.character(seq_len(n_bins))
-
-  structure(
-    list(
-      autosomal_chromosome_reads  = list(auto_mat),
-      sex_chromosome_reads        = list(sex_mat),
-      correction_status_autosomal = "Uncorrected",
-      correction_status_sex       = "Uncorrected",
-      sample_name                 = name
-    ),
-    class = c("NIPTeRSample", "CombinedStrands")
-  )
-}
-
-# Generate a "normal" sample: reads roughly proportional to chromosome length.
-# Each chromosome gets ~1000 * scale reads per length unit.
-.normal_chr_totals <- function(scale = 1, trisomy_chr = NULL,
-                               trisomy_frac = 0.05) {
-  # Approximate relative chromosome sizes (hg38, Mb, rounded)
-  chr_sizes <- c(248, 242, 198, 190, 182, 171, 159, 145, 138, 134, 135, 133,
-                 114, 107, 102, 90, 83, 80, 59, 64, 47, 51)
-  totals <- as.integer(round(chr_sizes * 10 * scale))
-  names(totals) <- as.character(1:22)
-
-  # Add trisomy signal if requested
-  if (!is.null(trisomy_chr)) {
-    chr_key <- as.character(trisomy_chr)
-    extra <- as.integer(round(totals[chr_key] * trisomy_frac))
-    totals[chr_key] <- totals[chr_key] + extra
-  }
-
-  totals
-}
-
-# Build a set of n normal samples as a control group
-.make_control_set <- function(n = 10L, scale = 1, seed = 42L) {
-  set.seed(seed)
-  samples <- vector("list", n)
-  for (i in seq_len(n)) {
-    # Add small random noise to each sample's totals
-    noise <- runif(22, 0.95, 1.05)
-    chr_totals <- .normal_chr_totals(scale = scale)
-    chr_totals <- as.integer(round(chr_totals * noise))
-    names(chr_totals) <- as.character(1:22)
-    samples[[i]] <- .make_sample(chr_totals, paste0("ctrl_", i), seed = seed + i)
-  }
-  samples
-}
 
 # ===================================================================
 # CONTROL GROUP
 # ===================================================================
 
-ctrl_samples <- .make_control_set(10L)
+ctrl_samples <- .sim_nipter_control_set(10L)
 
 # --- nipter_as_control_group ---
 
@@ -150,8 +73,8 @@ expect_true(is.null(diag$aberrant_scores) ||
 
 # --- nipter_match_control_group ---
 
-test_sample <- .make_sample(.normal_chr_totals(scale = 1), "test_subject",
-                            seed = 999L)
+test_sample <- .sim_nipter_sample(.sim_chr_totals(scale = 1), "test_subject",
+                                  seed = 999L)
 
 matched <- nipter_match_control_group(test_sample, cg, n = 5L,
                                       mode = "subset")
@@ -192,8 +115,8 @@ expect_true(abs(z21$sample_z_score) < 5,
             info = "normal sample has moderate Z-score")
 
 # Test with a trisomy sample — should have elevated Z
-trisomy_sample <- .make_sample(
-  .normal_chr_totals(scale = 1, trisomy_chr = 21, trisomy_frac = 0.10),
+trisomy_sample <- .sim_nipter_sample(
+  .sim_chr_totals(scale = 1, trisomy_chr = 21, trisomy_frac = 0.10),
   "trisomy_21", seed = 777L
 )
 
@@ -276,7 +199,7 @@ expect_true(abs(corr_total - orig_total) / orig_total < 0.5,
 # ===================================================================
 
 # Need a larger control group for train/test split
-ctrl_large <- .make_control_set(20L, seed = 100L)
+ctrl_large <- .sim_nipter_control_set(20L, seed = 100L)
 cg_large   <- nipter_as_control_group(ctrl_large)
 
 reg21 <- nipter_regression(test_sample, cg_large, chromo_focus = 21L,
@@ -332,70 +255,12 @@ expect_error(
 # SEPARATED STRANDS
 # ===================================================================
 
-# Helper: build a synthetic SeparatedStrands NIPTeRSample.
-# chr_totals: named integer vector "1"-"22" of TOTAL reads per chromosome.
-# Reads are split ~50/50 between forward and reverse.
-.make_ss_sample <- function(chr_totals, name, n_bins = 100L, seed = NULL) {
-  if (!is.null(seed)) set.seed(seed)
-
-  .build_strand_mat <- function(suffix, frac) {
-    mat <- matrix(0L, nrow = 22L, ncol = n_bins)
-    rownames(mat) <- paste0(as.character(1:22), suffix)
-    colnames(mat) <- as.character(seq_len(n_bins))
-    for (chr in names(chr_totals)) {
-      total <- as.integer(round(chr_totals[chr] * frac))
-      if (total == 0L) next
-      base <- total %/% n_bins
-      remainder <- total - base * n_bins
-      counts <- rep(base, n_bins)
-      if (remainder > 0L) {
-        bump <- sample(seq_len(n_bins), remainder)
-        counts[bump] <- counts[bump] + 1L
-      }
-      mat[paste0(chr, suffix), ] <- as.integer(counts)
-    }
-    mat
-  }
-
-  fwd_auto <- .build_strand_mat("F", 0.5)
-  rev_auto <- .build_strand_mat("R", 0.5)
-
-  fwd_sex <- matrix(0L, nrow = 2L, ncol = n_bins)
-  rownames(fwd_sex) <- c("XF", "YF")
-  colnames(fwd_sex) <- as.character(seq_len(n_bins))
-  rev_sex <- matrix(0L, nrow = 2L, ncol = n_bins)
-  rownames(rev_sex) <- c("XR", "YR")
-  colnames(rev_sex) <- as.character(seq_len(n_bins))
-
-  structure(
-    list(
-      autosomal_chromosome_reads  = list(fwd_auto, rev_auto),
-      sex_chromosome_reads        = list(fwd_sex, rev_sex),
-      correction_status_autosomal = "Uncorrected",
-      correction_status_sex       = "Uncorrected",
-      sample_name                 = name
-    ),
-    class = c("NIPTeRSample", "SeparatedStrands")
-  )
-}
-
-.make_ss_control_set <- function(n = 10L, scale = 1, seed = 42L) {
-  set.seed(seed)
-  samples <- vector("list", n)
-  for (i in seq_len(n)) {
-    noise <- runif(22, 0.95, 1.05)
-    chr_totals <- .normal_chr_totals(scale = scale)
-    chr_totals <- as.integer(round(chr_totals * noise))
-    names(chr_totals) <- as.character(1:22)
-    samples[[i]] <- .make_ss_sample(chr_totals, paste0("ss_ctrl_", i),
-                                    seed = seed + i)
-  }
-  samples
-}
+# Helpers from helper_nipter.R (auto-sourced):
+#   .sim_nipter_ss_sample(), .sim_nipter_ss_control_set(), .sim_chr_totals()
 
 # --- SeparatedStrands object structure ---
 
-ss_sample <- .make_ss_sample(.normal_chr_totals(), "ss_test", seed = 500L)
+ss_sample <- .sim_nipter_ss_sample(.sim_chr_totals(), "ss_test", seed = 500L)
 expect_true(inherits(ss_sample, "SeparatedStrands"),
             info = "SS sample has SeparatedStrands class")
 expect_identical(length(ss_sample$autosomal_chromosome_reads), 2L,
@@ -411,7 +276,7 @@ expect_true(all(grepl("R$", rownames(ss_sample$autosomal_chromosome_reads[[2L]])
 
 # --- SeparatedStrands control group ---
 
-ss_ctrl <- .make_ss_control_set(10L)
+ss_ctrl <- .sim_nipter_ss_control_set(10L)
 ss_cg <- nipter_as_control_group(ss_ctrl)
 
 expect_true(inherits(ss_cg, "SeparatedStrands"),
@@ -436,8 +301,8 @@ expect_true(abs(ss_z21$sample_z_score) < 5,
             info = "SS normal sample has moderate Z-score")
 
 # Trisomy SS sample should have elevated Z
-ss_trisomy <- .make_ss_sample(
-  .normal_chr_totals(scale = 1, trisomy_chr = 21, trisomy_frac = 0.10),
+ss_trisomy <- .sim_nipter_ss_sample(
+  .sim_chr_totals(scale = 1, trisomy_chr = 21, trisomy_frac = 0.10),
   "ss_trisomy_21", seed = 777L
 )
 ss_z21_tri <- nipter_z_score(ss_trisomy, ss_cg, chromo_focus = 21L)
@@ -479,7 +344,7 @@ expect_true(all(ss_chi$sample$autosomal_chromosome_reads[[2L]] >= 0),
 
 # --- SeparatedStrands regression ---
 
-ss_ctrl_large <- .make_ss_control_set(20L, seed = 200L)
+ss_ctrl_large <- .sim_nipter_ss_control_set(20L, seed = 200L)
 ss_cg_large   <- nipter_as_control_group(ss_ctrl_large)
 
 ss_reg21 <- nipter_regression(ss_sample, ss_cg_large, chromo_focus = 21L,

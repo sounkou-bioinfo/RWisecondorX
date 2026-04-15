@@ -40,8 +40,23 @@ Runs \code{\link[=bam_convert]{bam_convert()}} and serialises the resulting bin-
 \code{.npz} file that is byte-compatible with the file written by
 \verb{wisecondorx convert}.  The NPZ must be created by numpy so that
 \verb{wisecondorx newref} can load it; this function therefore requires
-\code{reticulate} and a Python environment with \code{numpy} installed (any version
-≥ 1.16 works — the format is stable).
+\code{reticulate} and a Python environment with \code{numpy} installed (any version= 1.16 works).
+}
+\details{
+The resulting NPZ has three top-level keys:
+\describe{
+\item{\code{sample}}{0-d object array wrapping a dict of \code{"1"}..\code{"24"} ->
+int32 arrays (chromosome bin counts).}
+\item{\code{binsize}}{Scalar int (bin size in bp).}
+\item{\code{quality}}{0-d object array wrapping a dict of QC counters
+(populated with zeros since DuckDB SQL binning does not track
+per-read filter stats).}
+}
+
+When the writer's numpy is >= 2.0 the internal pickle references
+\code{numpy._core}, which older numpy (< 2.0) cannot unpickle.  This function
+patches the pickle bytestream to use \code{numpy.core} so the NPZ is readable
+by both numpy 1.x and 2.x.
 }
 \examples{
 \dontrun{

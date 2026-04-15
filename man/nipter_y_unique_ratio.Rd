@@ -7,8 +7,8 @@
 nipter_y_unique_ratio(
   bam,
   mapq = 1L,
-  exclude_flags = 0L,
   require_flags = 0L,
+  exclude_flags = 0L,
   regions_file = NULL,
   con = NULL,
   reference = NULL
@@ -19,11 +19,11 @@ nipter_y_unique_ratio(
 
 \item{mapq}{Minimum mapping quality. Default \code{1L}.}
 
-\item{exclude_flags}{Integer bitmask; reads with any of these flags set
-are dropped (samtools \code{-F}). Default \code{0L}.}
-
 \item{require_flags}{Integer bitmask; only reads with all bits set are
 kept (samtools \code{-f}). Default \code{0L}.}
+
+\item{exclude_flags}{Integer bitmask; reads with any of these flags set
+are dropped (samtools \code{-F}). Default \code{0L}.}
 
 \item{regions_file}{Path to a TSV file of Y-unique regions with columns
 \code{Chromosome}, \code{Start}, \code{End}, \code{GeneName}. Defaults

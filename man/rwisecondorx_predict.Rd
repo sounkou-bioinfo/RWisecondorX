@@ -18,7 +18,7 @@ rwisecondorx_predict(
   gender = NULL,
   seed = NULL,
   parallel = TRUE,
-  cpus = 1L
+  cpus = 4L
 )
 }
 \arguments{
@@ -61,7 +61,7 @@ available. Default \code{TRUE}. Falls back to \code{DNAcopy::segment()} with a
 message if ParDNAcopy is not installed.}
 
 \item{cpus}{Integer; number of threads for parallel CBS (\code{parSegment}) and
-any other OpenMP-accelerated steps. Default \code{1L}.}
+any other OpenMP-accelerated steps. Default \code{4L}.}
 }
 \value{
 A list with class \code{"WisecondorXPrediction"} containing:

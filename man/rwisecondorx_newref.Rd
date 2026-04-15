@@ -11,7 +11,7 @@ rwisecondorx_newref(
   nipt = FALSE,
   refsize = 300L,
   yfrac = NULL,
-  cpus = 1L,
+  cpus = 4L,
   bed_dir = NULL,
   bed_pattern = "*.bed.gz",
   con = NULL
@@ -39,7 +39,7 @@ Default \code{300L}.}
 classification. If \code{NULL} (default), the cutoff is derived from a GMM.}
 
 \item{cpus}{Integer; number of threads for reference bin finding.
-Default \code{1L}.}
+Default \code{4L}.}
 
 \item{bed_dir}{Optional character; path to a directory of 4-column bgzipped
 BED files (as written by \code{\link[=bam_convert_bed]{bam_convert_bed()}}). All files matching

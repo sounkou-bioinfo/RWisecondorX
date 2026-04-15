@@ -191,3 +191,97 @@ expect_identical(
 
 expect_identical(.format_ylim(c(-2, 2)), "[-2,2]")
 expect_identical(.format_ylim(NULL), NULL)
+
+# ---------------------------------------------------------------------------
+# Error paths
+# ---------------------------------------------------------------------------
+
+# Invalid gender → match.arg error
+expect_error(
+  .wisecondorx_predict_args(
+    npz           = sample_npz,
+    ref           = reference_npz,
+    output_prefix = output_prefix,
+    minrefbins    = 150L,
+    maskrepeats   = 5L,
+    zscore        = 5,
+    alpha         = 1e-4,
+    beta          = NULL,
+    blacklist     = NULL,
+    gender        = "X",
+    bed           = FALSE,
+    plot          = FALSE,
+    regions       = NULL,
+    ylim          = NULL,
+    cairo         = FALSE,
+    seed          = NULL,
+    add_plot_title = FALSE,
+    extra_args    = character(0)
+  ),
+  info = "invalid gender 'X' errors via match.arg"
+)
+
+# ylim of wrong length → stopifnot error
+expect_error(
+  .wisecondorx_predict_args(
+    npz           = sample_npz,
+    ref           = reference_npz,
+    output_prefix = output_prefix,
+    minrefbins    = 150L,
+    maskrepeats   = 5L,
+    zscore        = 5,
+    alpha         = 1e-4,
+    beta          = NULL,
+    blacklist     = NULL,
+    gender        = NULL,
+    bed           = FALSE,
+    plot          = FALSE,
+    regions       = NULL,
+    ylim          = c(-2, 0, 2),
+    cairo         = FALSE,
+    seed          = NULL,
+    add_plot_title = FALSE,
+    extra_args    = character(0)
+  ),
+  info = "ylim of length 3 errors"
+)
+
+# cpus < 1 → stopifnot error
+expect_error(
+  .wisecondorx_newref_args(
+    npz_files   = c(npz1, npz2),
+    output      = output_ref,
+    ref_binsize = 50000L,
+    nipt        = FALSE,
+    refsize     = 300L,
+    yfrac       = NULL,
+    plotyfrac   = NULL,
+    cpus        = 0L,
+    extra_args  = character(0)
+  ),
+  info = "cpus = 0 errors"
+)
+
+# NULL gender → --gender absent from args vector
+predict_args_no_gender <- .wisecondorx_predict_args(
+  npz           = sample_npz,
+  ref           = reference_npz,
+  output_prefix = output_prefix,
+  minrefbins    = 150L,
+  maskrepeats   = 5L,
+  zscore        = 5,
+  alpha         = 1e-4,
+  beta          = NULL,
+  blacklist     = NULL,
+  gender        = NULL,
+  bed           = FALSE,
+  plot          = FALSE,
+  regions       = NULL,
+  ylim          = NULL,
+  cairo         = FALSE,
+  seed          = NULL,
+  add_plot_title = FALSE,
+  extra_args    = character(0)
+)
+expect_false("--gender" %in% predict_args_no_gender,
+             info = "NULL gender omits --gender flag")

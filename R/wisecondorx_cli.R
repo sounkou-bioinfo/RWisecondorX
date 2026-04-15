@@ -99,7 +99,7 @@ wisecondorx_convert <- function(bam,
 #'   `--yfrac`.
 #' @param plotyfrac Optional output path for the Y-fraction histogram and
 #'   mixture-model plot. Passed to upstream `--plotyfrac`.
-#' @param cpus Number of CPUs to pass to `wisecondorx newref` (default 1).
+#' @param cpus Number of CPUs to pass to `wisecondorx newref` (default 4).
 #' @param env_name Name of the conda environment containing `wisecondorx`
 #'   (default `"wisecondorx"`). Created automatically by condathis on first
 #'   use via the `bioconda` channel.
@@ -121,7 +121,7 @@ wisecondorx_convert <- function(bam,
 #'   nipt = TRUE,
 #'   refsize = 300L,
 #'   yfrac = 0.05,
-#'   cpus = 1L
+#'   cpus = 4L
 #' )
 #' }
 #'
@@ -134,7 +134,7 @@ wisecondorx_newref <- function(npz_files,
                                refsize     = 300L,
                                yfrac       = NULL,
                                plotyfrac   = NULL,
-                               cpus        = 1L,
+                               cpus        = 4L,
                                env_name    = "wisecondorx",
                                extra_args  = character(0)) {
   .check_condathis()
@@ -306,6 +306,19 @@ wisecondorx_predict <- function(npz,
   }
 }
 
+.wisecondorx_env_state <- new.env(parent = emptyenv())
+
+.condathis_safe_wd <- function() {
+  wd <- tryCatch(getwd(), error = function(e) NA_character_)
+  if (!is.na(wd) && nzchar(wd) && dir.exists(wd)) {
+    return(wd)
+  }
+
+  fallback <- tempdir()
+  dir.create(fallback, recursive = TRUE, showWarnings = FALSE)
+  fallback
+}
+
 .with_condathis_cache <- function(expr) {
   # condathis resets most conda/mamba env vars itself, but libmamba still uses
   # HOME/XDG cache roots for proc-lock state. Isolating both avoids stale
@@ -314,6 +327,8 @@ wisecondorx_predict <- function(npz,
   old_home <- Sys.getenv("HOME", unset = NA_character_)
   old_xdg_data <- Sys.getenv("XDG_DATA_HOME", unset = NA_character_)
   old_xdg_config <- Sys.getenv("XDG_CONFIG_HOME", unset = NA_character_)
+  old_wd <- tryCatch(getwd(), error = function(e) NA_character_)
+  safe_wd <- .condathis_safe_wd()
   resolved_xdg_data <- if (!is.na(old_xdg_data) && nzchar(old_xdg_data)) {
     old_xdg_data
   } else {
@@ -333,12 +348,18 @@ wisecondorx_predict <- function(npz,
     XDG_DATA_HOME = resolved_xdg_data,
     XDG_CONFIG_HOME = resolved_xdg_config
   )
+  if (is.na(old_wd) || !identical(old_wd, safe_wd)) {
+    setwd(safe_wd)
+  }
   on.exit(
     {
       if (is.na(old_home)) Sys.unsetenv("HOME") else Sys.setenv(HOME = old_home)
       if (is.na(old_xdg_cache)) Sys.unsetenv("XDG_CACHE_HOME") else Sys.setenv(XDG_CACHE_HOME = old_xdg_cache)
       if (is.na(old_xdg_data)) Sys.unsetenv("XDG_DATA_HOME") else Sys.setenv(XDG_DATA_HOME = old_xdg_data)
       if (is.na(old_xdg_config)) Sys.unsetenv("XDG_CONFIG_HOME") else Sys.setenv(XDG_CONFIG_HOME = old_xdg_config)
+      if (!is.na(old_wd) && nzchar(old_wd) && dir.exists(old_wd)) {
+        setwd(old_wd)
+      }
     },
     add = TRUE
   )
@@ -346,6 +367,10 @@ wisecondorx_predict <- function(npz,
 }
 
 .ensure_wisecondorx_env <- function(env_name) {
+  if (isTRUE(get0(env_name, envir = .wisecondorx_env_state, inherits = FALSE))) {
+    return(invisible(NULL))
+  }
+
   # Create the environment if it does not exist yet.
   # condathis::create_env() is idempotent if the env already exists.
   tryCatch(
@@ -365,6 +390,8 @@ wisecondorx_predict <- function(npz,
       )
     }
   )
+  assign(env_name, TRUE, envir = .wisecondorx_env_state)
+  invisible(NULL)
 }
 
 .run_wisecondorx_cli <- function(args, env_name) {

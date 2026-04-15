@@ -24,7 +24,7 @@
 
 \item{gender}{\code{"A"}, \code{"F"}, or \code{"M"}.}
 
-\item{cpus}{Number of threads for parallel computation. Default \code{1L}.}
+\item{cpus}{Number of threads for parallel computation.}
 }
 \value{
 List with \code{indexes} (integer matrix), \code{distances} (numeric matrix),

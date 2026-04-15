@@ -1,9 +1,19 @@
 # RWisecondorX 0.0.0.9001 (development version)
 
+* `wisecondorx_newref()` now defaults to `cpus = 4L`, matching the native
+  `rwisecondorx_newref()` implementation and the package CLI defaults. This
+  removes an unnecessary single-thread slow path in the public Python wrapper.
+
 * The `wisecondorx_*()` CLI wrappers now isolate `condathis`/libmamba cache
   state from the shared `~/.cache/mamba` tree by setting a session-local
   `XDG_CACHE_HOME` during environment creation and command execution. This
   avoids stale `proc.lock` failures from unrelated mamba sessions.
+
+* The Python `wisecondorx_*()` wrappers now cache successful `condathis`
+  environment setup for the rest of the R session and force `condathis` to run
+  from a known-existing working directory. This avoids redundant `create_env()`
+  calls and fixes the libmamba `cannot get current path` failure when a prior
+  subprocess or test left R with a deleted current directory.
 
 * Python conformance tests no longer convert live `wisecondorx` runtime
   failures into skips. Missing optional dependencies (`condathis`,

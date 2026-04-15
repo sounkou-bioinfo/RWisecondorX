@@ -13,7 +13,7 @@ wisecondorx_newref(
   refsize = 300L,
   yfrac = NULL,
   plotyfrac = NULL,
-  cpus = 1L,
+  cpus = 4L,
   env_name = "wisecondorx",
   extra_args = character(0)
 )
@@ -40,7 +40,7 @@ upstream \code{--refsize}.}
 \item{plotyfrac}{Optional output path for the Y-fraction histogram and
 mixture-model plot. Passed to upstream \code{--plotyfrac}.}
 
-\item{cpus}{Number of CPUs to pass to \verb{wisecondorx newref} (default 1).}
+\item{cpus}{Number of CPUs to pass to \verb{wisecondorx newref} (default 4).}
 
 \item{env_name}{Name of the conda environment containing \code{wisecondorx}
 (default \code{"wisecondorx"}). Created automatically by condathis on first
@@ -74,7 +74,7 @@ wisecondorx_newref(
   nipt = TRUE,
   refsize = 300L,
   yfrac = 0.05,
-  cpus = 1L
+  cpus = 4L
 )
 }
 

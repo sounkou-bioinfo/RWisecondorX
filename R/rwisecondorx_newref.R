@@ -258,16 +258,9 @@ rwisecondorx_newref <- function(samples         = NULL,
   pca_result <- .train_pca(masked_data)
   corrected <- pca_result$corrected
 
-  # PCA distance filtering: remove anomalous bins
+  # PCA distance filtering: remove anomalous bins by comparing each bin's
+  # cross-sample profile to the per-bin median profile, matching upstream.
   med_prof <- apply(corrected, 1, stats::median)
-  dist_to_med <- colSums((t(corrected) - med_prof)^2)
-  # Actually: dist_to_med[i] = sum((corrected[,i] - med_prof)^2) for columns
-
-  # Wait - corrected is (n_bins, n_samples), but upstream computes distance
-  # per BIN (row), not per sample. Let me re-read upstream...
-  # upstream: corrected shape = (n_bins, n_samples), med_prof = median over axis=0
-  # dist_to_med = sum((corrected - med_prof)**2, axis=1) -- that's sum over samples
-  # So it's distance per BIN, checking for bins that don't match across samples.
   dist_to_med <- rowSums((corrected - med_prof)^2)
   mad_val <- stats::median(abs(dist_to_med - stats::median(dist_to_med)))
   cutoff_pca <- max(stats::median(dist_to_med) + 10 * mad_val, 5.0)
@@ -330,7 +323,7 @@ rwisecondorx_newref <- function(samples         = NULL,
 #' @param masked_bins_per_chr_cum Integer vector (cumulative).
 #' @param refsize Number of reference bins per target.
 #' @param gender `"A"`, `"F"`, or `"M"`.
-#' @param cpus Number of threads for parallel computation. Default `1L`.
+#' @param cpus Number of threads for parallel computation.
 #'
 #' @return List with `indexes` (integer matrix), `distances` (numeric matrix),
 #'   `null_ratios` (numeric matrix).

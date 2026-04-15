@@ -107,6 +107,26 @@ expect_identical(
   )
 )
 
+expect_identical(
+  formals(wisecondorx_newref)$cpus,
+  4L,
+  info = "wisecondorx_newref defaults to 4 CPUs"
+)
+
+.with_deleted_wd <- function(code) {
+  old_wd <- getwd()
+  doomed_wd <- tempfile(tmpdir = tempdir())
+  dir.create(doomed_wd, recursive = TRUE, showWarnings = FALSE)
+  setwd(doomed_wd)
+  unlink(doomed_wd, recursive = TRUE)
+  on.exit(setwd(old_wd), add = TRUE)
+  force(code)
+}
+
+fallback_wd <- .with_deleted_wd(.condathis_safe_wd())
+expect_true(dir.exists(fallback_wd),
+            info = ".condathis_safe_wd falls back to an existing directory")
+
 # ---------------------------------------------------------------------------
 # predict CLI argument mapping
 # ---------------------------------------------------------------------------

@@ -1,6 +1,6 @@
 # test_newref_bed_dir.R — Smoke test for rwisecondorx_newref(bed_dir=)
 #
-# Creates 11 copies of the fixture BAM's BED output, then verifies that
+# Creates 10 copies of the fixture BAM's BED output, then verifies that
 # rwisecondorx_newref() accepts bed_dir= and returns a WisecondorXReference.
 # Uses nipt=TRUE so no male gonosomal reference is attempted (fixture is chr11
 # only; fewer than 5 samples per gender would fail the gonosomal sub-ref).
@@ -16,17 +16,17 @@ if (!nzchar(fixture_bam)) {
   exit_file("hg00106_chr11_fixture.bam not available; skipping bed_dir tests")
 }
 
-# Write 11 BED.gz copies (minimum sample count for rwisecondorx_newref is 10)
+# Write 10 BED.gz copies (minimum sample count for rwisecondorx_newref is 10)
 bed_dir <- tempfile("newref_beds_")
 dir.create(bed_dir)
 
-bed_paths <- file.path(bed_dir, paste0("sample_", 1:11, ".bed.gz"))
+bed_paths <- file.path(bed_dir, paste0("sample_", 1:10, ".bed.gz"))
 for (p in bed_paths) {
   bam_convert_bed(fixture_bam, p, binsize = 5000L, rmdup = "streaming")
 }
 
 expect_true(all(file.exists(bed_paths)),
-            info = "all 11 BED.gz files created")
+            info = "all 10 BED.gz files created")
 
 # rwisecondorx_newref with bed_dir= should succeed and return a reference.
 # yfrac is explicit because the fixture is chr11-only (no Y reads → all

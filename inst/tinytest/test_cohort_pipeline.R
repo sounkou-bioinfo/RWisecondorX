@@ -3,6 +3,15 @@ library(RWisecondorX)
 library(mclust)
 library(DNAcopy)
 
+.test_threads <- function(default = 4L) {
+  threads <- suppressWarnings(as.integer(Sys.getenv("THREADS", unset = as.character(default))))
+  if (is.na(threads) || threads < 1L) {
+    default
+  } else {
+    max(default, threads)
+  }
+}
+
 # ---------------------------------------------------------------------------
 # End-to-end pipeline test using synthetic BAM cohort
 #
@@ -11,12 +20,15 @@ library(DNAcopy)
 # the trisomy samples with rwisecondorx_predict().
 # ---------------------------------------------------------------------------
 
+test_ref_cpus <- .test_threads()
 
 # ---- Generate cohort ------------------------------------------------------
 
 cohort_dir <- file.path(tempdir(), "cohort_pipeline_test")
 message("Generating synthetic BAM cohort into ", cohort_dir)
-manifest <- suppressMessages(generate_cohort(cohort_dir, verbose = TRUE))
+manifest <- suppressMessages(
+  generate_cohort(cohort_dir, verbose = TRUE)
+)
 
 expect_equal(nrow(manifest), 50L,
              info = "cohort has 50 samples")
@@ -74,7 +86,7 @@ ref <- rwisecondorx_newref(
     binsize = COMPRESSED_BINSIZE,
     nipt    = TRUE,
     refsize = 10L,
-    cpus    = 1L
+    cpus    = test_ref_cpus
   )
 
 expect_true(inherits(ref, "WisecondorXReference") || is.list(ref),

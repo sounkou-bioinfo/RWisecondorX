@@ -15,6 +15,16 @@ library(tinytest)
 library(RWisecondorX)
 library(DNAcopy)
 
+.test_threads <- function(default = 4L) {
+  threads <- suppressWarnings(as.integer(Sys.getenv("THREADS", unset = as.character(default))))
+  if (is.na(threads) || threads < 1L) {
+    default
+  } else {
+    max(default, threads)
+  }
+}
+
+test_ref_cpus <- .test_threads()
 
 # ---------------------------------------------------------------------------
 # Section 1: Aberration calls on synthetic trisomy samples
@@ -25,7 +35,9 @@ library(DNAcopy)
 
 cohort_dir <- file.path(tempdir(), "e2e_wcx")
 message("Generating synthetic cohort for E2E test ...")
-manifest <- suppressMessages(generate_cohort(cohort_dir, verbose = FALSE))
+manifest <- suppressMessages(
+  generate_cohort(cohort_dir, verbose = FALSE)
+)
 
 all_samples <- vector("list", nrow(manifest))
 names(all_samples) <- manifest$sample_id
@@ -39,7 +51,7 @@ for (i in seq_len(nrow(manifest))) {
 
 ref <- suppressMessages(
   rwisecondorx_newref(samples = all_samples, binsize = COMPRESSED_BINSIZE,
-                      nipt = TRUE, refsize = 10L, cpus = 1L)
+                      nipt = TRUE, refsize = 10L, cpus = test_ref_cpus)
 )
 
 # T21 sample prediction
@@ -126,7 +138,7 @@ expect_true(length(Sys.glob(file.path(bed_dir, "*.bed.gz"))) == nrow(manifest),
 
 ref_bed <- suppressMessages(
   rwisecondorx_newref(bed_dir = bed_dir, binsize = COMPRESSED_BINSIZE,
-                      nipt = TRUE, refsize = 10L, cpus = 1L)
+                      nipt = TRUE, refsize = 10L, cpus = test_ref_cpus)
 )
 
 expect_true(inherits(ref_bed, "WisecondorXReference"),
@@ -195,7 +207,7 @@ suppressMessages(
       binsize     = COMPRESSED_BINSIZE,
       ref_binsize = COMPRESSED_BINSIZE,
       nipt        = TRUE,
-      cpus        = 1L
+      cpus        = test_ref_cpus
     ),
     error = function(e) {
       stop("Python wisecondorx newref failed: ", conditionMessage(e), call. = FALSE)

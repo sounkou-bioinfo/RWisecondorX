@@ -42,15 +42,19 @@ jobs:
 
       - name: Add r-universe repos
         run: |
-          cat(
-            'options(repos = c(',
-            '  rgenomicsetl = "https://rgenomicsetl.r-universe.dev",',
-            '  gsun2018 = "https://gsun2018.r-universe.dev",',
-            '  getOption("repos")))',
-            sep = "\n",
-            file = file.path(R.home("etc"), "Rprofile.site"),
-            append = TRUE
-          )
+          rprofile <- file.path(Sys.getenv("HOME"), ".Rprofile")
+          existing <- if (file.exists(rprofile)) readLines(rprofile, warn = FALSE) else character()
+          if (!any(grepl("rgenomicsetl\\.r-universe\\.dev", existing))) {
+            cat(
+              'options(repos = c(',
+              '  rgenomicsetl = "https://rgenomicsetl.r-universe.dev",',
+              '  gsun2018 = "https://gsun2018.r-universe.dev",',
+              '  getOption("repos")))',
+              sep = "\n",
+              file = rprofile,
+              append = TRUE
+            )
+          }
         shell: Rscript {0}
 
       - uses: r-lib/actions/setup-r-dependencies@v2

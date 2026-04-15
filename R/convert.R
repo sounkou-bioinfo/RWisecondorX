@@ -52,7 +52,9 @@
 #' @return When `separate_strands = FALSE` (default): a named list with one
 #'   integer vector per chromosome key (`"1"`–`"22"`, `"23"` for X, `"24"` for
 #'   Y). Each vector contains per-bin read counts (bin 0 = positions 0 to
-#'   `binsize - 1`). Chromosomes absent from the BAM are `NULL`.
+#'   `binsize - 1`). Chromosomes present in the BAM header are returned as dense
+#'   vectors padded with trailing zeros up to the chromosome span implied by the
+#'   header and `binsize`; chromosomes absent from the header are `NULL`.
 #'
 #'   When `separate_strands = TRUE`: a list with two elements, `fwd` and `rev`,
 #'   each structured like the default return.
@@ -119,14 +121,21 @@ bam_convert <- function(bam,
     exclude_flags = exclude_flags,
     rmdup         = rmdup
   )
+  chr_lengths <- .bam_chr_lengths(con, bam)
 
   if (isTRUE(separate_strands)) {
     list(
-      fwd = .count_rows_to_bins(rows, "count_fwd"),
-      rev = .count_rows_to_bins(rows, "count_rev")
+      fwd = .count_rows_to_bins(rows, "count_fwd",
+                                chr_lengths = chr_lengths,
+                                binsize = binsize),
+      rev = .count_rows_to_bins(rows, "count_rev",
+                                chr_lengths = chr_lengths,
+                                binsize = binsize)
     )
   } else {
-    .count_rows_to_bins(rows, "count_total")
+    .count_rows_to_bins(rows, "count_total",
+                        chr_lengths = chr_lengths,
+                        binsize = binsize)
   }
 }
 
@@ -143,7 +152,7 @@ bam_convert <- function(bam,
 #' Coordinates are 0-based half-open intervals matching the BED convention
 #' (`start = bin_index * binsize`, `end = start + binsize`). Chromosomes are
 #' written as `1`–`22`, `X`, `Y` (no `chr` prefix) in numeric order. All
-#' bins are written, including those with a count of zero.
+#' header-defined bins are written, including those with a count of zero.
 #'
 #' bgzip and tabix indexing are performed via [Rduckhts::rduckhts_bgzip()] and
 #' [Rduckhts::rduckhts_tabix_index()], so no external tools are required.
@@ -273,9 +282,52 @@ bam_convert_bed <- function(bam,
   "Y" = "24", "y" = "24"
 )
 
-.count_rows_to_bins <- function(rows, value_col) {
+#' Query BAM header for chromosome lengths, keyed "1"-"24"
+#'
+#' Returns a named list: keys are "1"-"24" (matching bam_convert() convention),
+#' values are integer chromosome lengths. Only chromosomes 1-22/X/Y present in
+#' the BAM header are included; contigs, decoys, etc. are ignored.
+#'
+#' @param con Open DBI connection with duckhts loaded.
+#' @param bam Path to BAM/CRAM.
+#' @return Named list of integer lengths.
+#' @keywords internal
+.bam_chr_lengths <- function(con, bam) {
+  hdr <- Rduckhts::rduckhts_hts_header(con, bam)
+  sq  <- hdr[hdr$record_type == "SQ", c("id", "length"), drop = FALSE]
+
+  result <- list()
+  for (i in seq_len(nrow(sq))) {
+    nm  <- sq$id[i]
+    len <- sq$length[i]
+    key <- sub("^[Cc][Hh][Rr]", "", nm)
+    if (key == "X" || key == "x") key <- "23"
+    if (key == "Y" || key == "y") key <- "24"
+    if (key %in% as.character(1:24)) {
+      result[[key]] <- as.integer(len)
+    }
+  }
+  result
+}
+
+.chr_n_bins_dense <- function(chr_length, binsize) {
+  if (is.null(chr_length) || is.na(chr_length) || chr_length <= 0L) return(0L)
+  as.integer((as.double(chr_length) + as.double(binsize) - 1) %/% as.double(binsize))
+}
+
+.count_rows_to_bins <- function(rows, value_col, chr_lengths = NULL, binsize = NULL) {
   chr_keys <- as.character(1:24)
   result <- stats::setNames(vector("list", 24L), chr_keys)
+  if (!is.null(chr_lengths)) {
+    stopifnot(!is.null(binsize), length(binsize) == 1L, binsize >= 1L)
+    for (chr in chr_keys) {
+      chr_length <- chr_lengths[[chr]]
+      if (!is.null(chr_length)) {
+        n_bins <- .chr_n_bins_dense(chr_length, binsize)
+        result[[chr]] <- integer(n_bins)
+      }
+    }
+  }
 
   if (nrow(rows) == 0L) return(result)
 
@@ -287,12 +339,15 @@ bam_convert_bed <- function(bam,
   bins <- as.integer(rows$bin_id)
 
   for (chr in chr_keys) {
-    idx <- which(chrom == chr & values > 0L)
+    idx <- which(chrom == chr)
     if (length(idx) == 0L) next
 
     chr_bins <- bins[idx]
     max_bin <- max(chr_bins)
-    counts <- integer(max_bin + 1L)
+    counts <- result[[chr]]
+    if (is.null(counts) || length(counts) < (max_bin + 1L)) {
+      counts <- integer(max_bin + 1L)
+    }
     counts[chr_bins + 1L] <- values[idx]
     result[[chr]] <- counts
   }

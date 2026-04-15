@@ -1,5 +1,32 @@
 # RWisecondorX 0.0.0.9001 (development version)
 
+* The `wisecondorx_*()` CLI wrappers now isolate `condathis`/libmamba cache
+  state from the shared `~/.cache/mamba` tree by setting a session-local
+  `XDG_CACHE_HOME` during environment creation and command execution. This
+  avoids stale `proc.lock` failures from unrelated mamba sessions.
+
+* Python conformance tests no longer convert live `wisecondorx` runtime
+  failures into skips. Missing optional dependencies (`condathis`,
+  `reticulate`, `numpy`) still skip, but environment creation, upstream
+  `wisecondorx convert/newref/predict`, and Python-side NPZ loading now fail
+  loudly with contextual errors.
+
+* `bam_convert()` now keeps the native dense-bin contract from `Rduckhts`:
+  chromosomes present in the BAM header come back as trailing-zero-padded
+  vectors across the full header span, while `bam_convert_npz()` adds only the
+  extra upstream WisecondorX `int(length / binsize + 1)` NPZ padding quirk at
+  serialisation time. The NPZ tests now assert exact padded lengths instead of
+  comparing only shared prefixes.
+
+* The bundled `nipter_conformance_fixture.bam` is now treated as a real package
+  invariant rather than an optional convenience. The generator validates that
+  every chromosome 1-22/X/Y has both forward and reverse reads, fixture tests
+  assert that property. Live cross-package checks against the installed
+  `NIPTeR` package now skip with an explicit message when upstream
+  `NIPTeR::bin_bam_sample()` is incompatible with the current
+  `Rsamtools`/Bioconductor stack; the always-on inline formula and fixture
+  tests remain strict.
+
 ## `bam_convert()` now delegates to native `bam_bin_counts(...)`
 
 * `bam_convert()` and the downstream WisecondorX/NIPTeR binning layer now use

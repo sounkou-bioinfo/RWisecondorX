@@ -32,6 +32,22 @@ library(RWisecondorX)
   candidates[[1L]]
 }
 
+.with_duckhts_con <- function(fun) {
+  drv <- duckdb::duckdb(config = list(allow_unsigned_extensions = "true"))
+  con <- DBI::dbConnect(drv)
+  Rduckhts::rduckhts_load(con)
+  on.exit(DBI::dbDisconnect(con, shutdown = TRUE), add = TRUE)
+  fun(con)
+}
+
+.bam_chr_lengths_test <- function(bam) {
+  # tinytest evaluates top-level expressions one-by-one, so registering
+  # on.exit() cleanup for a test-owned connection at file scope disconnects it
+  # before later assertions run. Keep the full connection lifecycle inside this
+  # helper and exercise the package's DuckDB-backed header path directly.
+  .with_duckhts_con(function(con) RWisecondorX:::.bam_chr_lengths(con, bam))
+}
+
 test_bam <- .find_test_bam()
 if (is.null(test_bam)) {
   exit_file("No test BAM available")
@@ -56,7 +72,6 @@ if (length(Filter(Negate(is.null), probe)) == 0L) {
 }
 
 npz_out <- tempfile(fileext = ".npz")
-on.exit(unlink(npz_out), add = TRUE)
 
 bam_convert_npz(test_bam, npz_out, binsize = 5000L, rmdup = "streaming", np = np)
 
@@ -98,24 +113,45 @@ for (k in keys) {
 data$close()
 
 # ---------------------------------------------------------------------------
-# Round-trip: bam_convert() values match what we wrote to NPZ
+# Exact NPZ shape + round-trip: native bins padded to upstream WisecondorX
+# layout match what we wrote to NPZ
 # ---------------------------------------------------------------------------
 
 bins <- bam_convert(test_bam, binsize = 5000L, rmdup = "streaming")
+chr_lengths <- .bam_chr_lengths_test(test_bam)
 data2 <- np$load(npz_out, allow_pickle = TRUE)
 sample2 <- reticulate::py_to_r(data2["sample"]$item())
 
 for (k in keys) {
-  r_vals  <- bins[[k]]
+  chr_length <- chr_lengths[[k]]
   np_vals <- sample2[[k]]
-  if (is.null(r_vals) && is.null(np_vals)) next
-  if (is.null(r_vals)) r_vals <- integer(length(np_vals))
-  if (is.null(np_vals)) np_vals <- integer(length(r_vals))
-  n <- min(length(r_vals), length(np_vals))
-  expect_identical(as.integer(r_vals[seq_len(n)]), as.integer(np_vals[seq_len(n)]),
-                   info = paste("chr", k, "round-trip identical"))
+
+  if (is.null(chr_length)) {
+    expect_true(is.null(np_vals),
+                info = paste("chr", k, "is absent from the BAM header and stays NULL"))
+    next
+  }
+
+  expected_n_bins <- as.integer(as.double(chr_length) / 5000) + 1L
+  native_vals <- bins[[k]]
+  if (is.null(native_vals)) {
+    native_vals <- integer(expected_n_bins)
+  } else {
+    native_vals <- as.integer(native_vals)
+    expect_true(length(native_vals) <= expected_n_bins,
+                info = paste("chr", k, "native dense vector does not exceed NPZ layout"))
+    if (length(native_vals) < expected_n_bins) {
+      native_vals <- c(native_vals, integer(expected_n_bins - length(native_vals)))
+    }
+  }
+
+  expect_identical(length(np_vals), expected_n_bins,
+                   info = paste("chr", k, "NPZ length matches WisecondorX header quirk"))
+  expect_identical(as.integer(np_vals), native_vals,
+                   info = paste("chr", k, "NPZ payload matches padded native bins"))
 }
 data2$close()
+unlink(npz_out)
 
 # ---------------------------------------------------------------------------
 # CRAM path: bam_convert_npz() accepts a reference FASTA
@@ -126,7 +162,6 @@ test_ref <- .fixture_path("fixture_ref.fa")
 
 if (!is.null(test_cram) && !is.null(test_ref)) {
   npz_cram <- tempfile(fileext = ".npz")
-  on.exit(unlink(npz_cram), add = TRUE)
 
   bam_convert_npz(
     bam = test_cram,
@@ -138,6 +173,7 @@ if (!is.null(test_cram) && !is.null(test_ref)) {
   )
 
   expect_true(file.exists(npz_cram), info = "bam_convert_npz supports CRAM inputs with reference")
+  unlink(npz_cram)
 }
 
 # ---------------------------------------------------------------------------
@@ -147,7 +183,6 @@ if (!is.null(test_cram) && !is.null(test_ref)) {
 filter_bam <- .fixture_path("fixture_mixed.bam")
 if (!is.null(filter_bam)) {
   npz_filtered <- tempfile(fileext = ".npz")
-  on.exit(unlink(npz_filtered), add = TRUE)
 
   bam_convert_npz(
     bam = filter_bam,
@@ -183,4 +218,5 @@ if (!is.null(filter_bam)) {
                      info = paste("filtered NPZ round-trip identical for chr", k))
   }
   filtered_npz$close()
+  unlink(npz_filtered)
 }

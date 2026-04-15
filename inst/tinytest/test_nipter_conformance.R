@@ -100,7 +100,7 @@ test_sample <- .make_sample_conf(.trisomy_totals("21", 0.1), "test_t21")
 
 
 # --- 1. Z-score formula -------------------------------------------------------
-# NIPTeR formula (from NIPTeR::chromosomal.zscore source):
+# NIPTeR formula (from NIPTeR::calculate_z_score source):
 #   sample_z = (sample_frac - mean(ctrl_fracs)) / sd(ctrl_fracs)
 # where fracs are chromosomal fractions (chr reads / total reads).
 
@@ -131,7 +131,7 @@ expect_true(our_z > 0,
 
 
 # --- 2. Chi-squared correction formula ----------------------------------------
-# NIPTeR algorithm (from chi.correct source):
+# NIPTeR algorithm (from chi_correct source):
 #   1. Scale each ctrl's total reads to overall mean
 #   2. Expected = per-bin mean of scaled counts
 #   3. chi2_bin = sum_samples (expected - scaled)^2 / expected
@@ -423,7 +423,39 @@ if (is.na(conf_bam) || !nzchar(conf_bam) || !file.exists(conf_bam)) {
                           package = "RWisecondorX")
 }
 if (!nzchar(conf_bam) || !file.exists(conf_bam)) {
-  exit_file("NIPTeR conformance fixture not available; run `make fixtures`")
+  stop("Bundled NIPTeR conformance fixture is missing; run `make fixtures` and commit it.",
+       call. = FALSE)
+}
+
+nipter_exports <- getNamespaceExports("NIPTeR")
+required_nipter_exports <- c(
+  "bin_bam_sample",
+  "as_control_group",
+  "chi_correct",
+  "calculate_z_score",
+  "gc_correct"
+)
+missing_nipter_exports <- setdiff(required_nipter_exports, nipter_exports)
+if (length(missing_nipter_exports) > 0L) {
+  stop(paste(
+    "Installed NIPTeR package does not expose the expected current API:",
+    paste(missing_nipter_exports, collapse = ", ")
+  ), call. = FALSE)
+}
+
+.make_real_control_variants <- function(sample, prefix, n = 12L) {
+  stopifnot(inherits(sample, "NIPTSample") || inherits(sample, "NIPTeRSample"))
+  stopifnot(length(sample$autosomal_chromosome_reads) == 1L)
+  lapply(seq_len(n), function(i) {
+    s <- sample
+    auto <- s$autosomal_chromosome_reads[[1L]]
+    bump_chr <- as.character(((i - 1L) %% 4L) + 1L)
+    bump_bin <- ((i - 1L) %% ncol(auto)) + 1L
+    auto[bump_chr, bump_bin] <- auto[bump_chr, bump_bin] + i
+    s$autosomal_chromosome_reads[[1L]] <- auto
+    s$sample_name <- sprintf("%s_%02d", prefix, i)
+    s
+  })
 }
 
 # --- B1. Binning (NIPTeR::bin_bam_sample vs nipter_bin_bam) ------------------
@@ -436,22 +468,35 @@ nipter_s_real <- tryCatch(
   NIPTeR::bin_bam_sample(bam_filepath = conf_bam, do_sort = FALSE,
                          separate_strands = FALSE),
   error = function(e) {
-    exit_file(paste("NIPTeR::bin_bam_sample failed:", conditionMessage(e)))
+    stop(paste(
+      "Upstream NIPTeR::bin_bam_sample is incompatible with the current",
+      "Rsamtools/Bioconductor stack:",
+      conditionMessage(e)
+    ), call. = FALSE)
   }
 )
 
-# Build control group from replicated sample (synthetic control from one BAM)
-# This lets us test the statistical functions without needing multiple BAMs.
+# Build control groups from deterministic perturbations of a single real BAM.
+# Exact clones produce zero-variance control fractions, which makes upstream
+# NIPTeR's Shapiro-based z-score summary undefined after scaling.
 our_cg_real <- nipter_as_control_group(
-  lapply(1:12, function(i) { s <- our_s_real; s$sample_name <- paste0("ctrl_", i); s })
+  .make_real_control_variants(our_s_real, "ctrl")
 )
-nipter_cg_real <- NIPTeR::as.control.group(
-  lapply(1:12, function(i) { s <- nipter_s_real; s$sample.name <- paste0("ctrl_", i); s })
+nipter_cg_real <- NIPTeR::as_control_group(
+  .make_real_control_variants(nipter_s_real, "ctrl")
 )
 
 # --- B3. Chi correction agreement --------------------------------------------
 our_chi  <- nipter_chi_correct(our_s_real,   our_cg_real)
-nipter_chi <- NIPTeR::chi.correct(nipter_s_real, nipter_cg_real)
+nipter_chi <- tryCatch(
+  NIPTeR::chi_correct(nipter_s_real, nipter_cg_real),
+  error = function(e) {
+    stop(paste(
+      "Upstream NIPTeR::chi_correct failed on the bundled conformance setup:",
+      conditionMessage(e)
+    ), call. = FALSE)
+  }
+)
 
 # Number of overdispersed bins should be identical (both use same formula)
 our_n_overdispersed <- sum(
@@ -471,14 +516,24 @@ expect_equal(our_n_overdispersed, nipter_n_overdispersed, tolerance = 0L,
 
 # Build matching structures
 our_cg_chi <- our_chi$control_group
-nipter_cg_chi <- nipter_chi$control.group
+nipter_cg_chi <- nipter_chi$control_group
 
 # Repack NIPTeR chi output into our structures for z-score (and vice versa)
 # Actually compute z-score from our corrected sample vs our corrected cg
 our_z21    <- nipter_z_score(our_chi$sample, our_chi$control_group, 21L)$sample_z_score
-nipter_z21 <- NIPTeR::chromosomal.zscore(nipter_chi$sample,
-                                          nipter_chi$control.group,
-                                          chromo.focus = 21)$sample.z.score
+nipter_z21 <- tryCatch(
+  NIPTeR::calculate_z_score(
+    nipter_chi$sample,
+    nipter_chi$control_group,
+    chromo_focus = 21
+  )$sample_Zscore,
+  error = function(e) {
+    stop(paste(
+      "Upstream NIPTeR::calculate_z_score failed on the bundled conformance setup:",
+      conditionMessage(e)
+    ), call. = FALSE)
+  }
+)
 
 expect_equal(our_z21, nipter_z21, tolerance = 0.01,
              info = "chr21 z-score agrees with NIPTeR within 0.01")
@@ -497,12 +552,12 @@ if (!is.null(our_gc) && !is.na(Sys.getenv("RWXCONF_FASTA", unset = NA_character_
               info = "gc_correct returns NIPTeRSample (structural check)")
   # NIPTeR GC correction
   nipter_gc <- tryCatch(
-    NIPTeR::gc.correct(nipter_s_real, nipter_cg_real),
+    NIPTeR::gc_correct(nipter_s_real),
     error = function(e) NULL
   )
   if (!is.null(nipter_gc)) {
-    expect_true(!is.null(nipter_gc$sample),
-                info = "NIPTeR gc.correct returns a result (structural check)")
+    expect_true(inherits(nipter_gc, class(nipter_s_real)[1L]),
+                info = "NIPTeR gc_correct returns a sample-like result (structural check)")
     message(
       "[GC conformance note] nipter_gc_correct uses rduckhts_fasta_nuc(); ",
       "NIPTeR uses bundled GC tables. Numeric divergence is expected and documented."

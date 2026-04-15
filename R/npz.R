@@ -22,6 +22,15 @@
 #' patches the pickle bytestream to use `numpy.core` so the NPZ is readable
 #' by both numpy 1.x and 2.x.
 #'
+#' Native [bam_convert()] returns dense vectors covering the chromosome span in
+#' the BAM header. Upstream `wisecondorx convert` has one additional historical
+#' quirk: it allocates `int(length / binsize + 1)` bins for every chromosome in
+#' the header, so chromosomes whose lengths are exact multiples of `binsize`
+#' carry one extra trailing all-zero bin. This function pads to that upstream
+#' NPZ layout during serialisation so Python `wisecondorx newref/predict`
+#' remains byte-compatible, while the native R list/BED paths keep the cleaner
+#' header-span contract.
+#'
 #' @param bam Path to an indexed BAM or CRAM file.
 #' @param reference Optional FASTA reference path for CRAM inputs. Passed to
 #'   [bam_convert()].
@@ -108,31 +117,51 @@ bam_convert_npz <- function(bam,
   )
 
   if (all(vapply(bins, is.null, logical(1L)))) {
-    stop("bam_convert returned no data for ", bam, call. = FALSE)
+    stop("bam_convert returned no chr1-22/X/Y bins for ", bam, call. = FALSE)
   }
 
-  # Upstream convert_reads() creates np.zeros(int(length/binsize + 1)) for every
-  # chromosome in the BAM header, even those with 0 reads.  train_gender_model()
-  # does float(np.sum(sample["24"])) which crashes on None.  Query the BAM
-  # header for chromosome lengths and fill NULL entries with zero-length arrays.
+  # Upstream convert_reads() allocates int(length / binsize + 1) bins for every
+  # chromosome in the BAM header, even chromosomes with 0 reads. Mirror that
+  # quirk here so Python wisecondorx newref/predict can consume our NPZs
+  # without shape mismatches, while bam_convert() itself keeps the denser
+  # native header-span contract.
   chr_lengths <- .bam_chr_lengths(con, bam)
   for (nm in names(bins)) {
-    if (is.null(bins[[nm]]) && !is.null(chr_lengths[[nm]])) {
-      n_bins <- as.integer(chr_lengths[[nm]] / binsize) + 1L
-      bins[[nm]] <- integer(n_bins)
+    chr_length <- chr_lengths[[nm]]
+    if (!is.null(chr_length)) {
+      n_bins <- as.integer(as.double(chr_length) / as.double(binsize)) + 1L
+      if (is.null(bins[[nm]])) {
+        bins[[nm]] <- integer(n_bins)
+      } else if (length(bins[[nm]]) < n_bins) {
+        bins[[nm]] <- c(as.integer(bins[[nm]]),
+                        integer(n_bins - length(bins[[nm]])))
+      } else if (length(bins[[nm]]) > n_bins) {
+        stop("bam_convert produced more bins than the WisecondorX NPZ layout for chr ",
+             nm, call. = FALSE)
+      }
+    } else if (is.null(bins[[nm]])) {
+      next
+    } else {
+      stop("bam_convert returned bins for chromosome ", nm,
+           " that is absent from the BAM header", call. = FALSE)
     }
   }
 
-  # Build a Python dict with string keys "1"-"24".  Chromosomes with data get
-  # int32 numpy arrays; chromosomes still NULL (not in BAM header at all) get
-  # Python None.
+  for (nm in names(bins)) {
+    if (!is.null(bins[[nm]])) {
+      bins[[nm]] <- as.integer(bins[[nm]])
+    }
+  }
+
+  # Chromosomes still NULL are absent from the BAM header entirely and should
+  # remain Python None in the serialized dict.
   py_builtins <- reticulate::import_builtins(convert = FALSE)
   sample_dict <- py_builtins$dict()
   for (nm in names(bins)) {
     if (is.null(bins[[nm]])) {
       sample_dict[nm] <- py_builtins$None
     } else {
-      sample_dict[nm] <- np$array(as.integer(bins[[nm]]), dtype = np$int32)
+      sample_dict[nm] <- np$array(bins[[nm]], dtype = np$int32)
     }
   }
 
@@ -178,38 +207,4 @@ def _write_compat_npz(path, sample, quality, binsize):
   writer(npz, sample_dict, quality_dict, as.integer(binsize))
 
   invisible(npz)
-}
-
-
-# ---------- internal helpers ----------
-
-#' Query BAM header for chromosome lengths, keyed "1"-"24"
-#'
-#' Returns a named list: keys are "1"-"24" (matching bam_convert() convention),
-#' values are integer chromosome lengths.  Only chromosomes 1-22/X/Y present in
-#' the BAM header are included; contigs, decoys, etc. are ignored.
-#'
-#' @param con Open DBI connection with duckhts loaded.
-#' @param bam Path to BAM/CRAM.
-#' @return Named list of integer lengths.
-#' @keywords internal
-.bam_chr_lengths <- function(con, bam) {
-  hdr <- Rduckhts::rduckhts_hts_header(con, bam)
-  sq  <- hdr[hdr$record_type == "SQ", c("id", "length"), drop = FALSE]
-
-  # Map chromosome names to our "1"-"24" keys
-  result <- list()
-  for (i in seq_len(nrow(sq))) {
-    nm  <- sq$id[i]
-    len <- sq$length[i]
-    # Strip chr prefix
-    key <- sub("^[Cc][Hh][Rr]", "", nm)
-    if (key == "X" || key == "x") key <- "23"
-    if (key == "Y" || key == "y") key <- "24"
-    # Only keep 1-24
-    if (key %in% as.character(1:24)) {
-      result[[key]] <- as.integer(len)
-    }
-  }
-  result
 }

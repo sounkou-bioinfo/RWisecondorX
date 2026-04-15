@@ -42,12 +42,15 @@ expect_identical(sum(mixed_none[["11"]]), 10L, info = "mixed fixture total with 
 expect_identical(sum(mixed_streaming[["11"]]), 5L, info = "mixed fixture total with rmdup=streaming")
 expect_identical(sum(mixed_flag[["11"]]), 8L, info = "mixed fixture total with rmdup=flag")
 
-expect_identical(as.integer(mixed_none[["11"]][1:3]), c(4L, 2L, 2L),
-                 info = "mixed fixture bins for rmdup=none")
-expect_identical(as.integer(mixed_streaming[["11"]][1:3]), c(2L, 2L, 1L),
-                 info = "mixed fixture bins for rmdup=streaming")
-expect_identical(as.integer(mixed_flag[["11"]][1:3]), c(4L, 0L, 2L),
-                 info = "mixed fixture bins for rmdup=flag")
+expect_identical(as.integer(mixed_none[["11"]]),
+                 c(4L, 2L, 2L, 2L, 0L, 0L, 0L, 0L, 0L, 0L),
+                 info = "mixed fixture dense bins for rmdup=none")
+expect_identical(as.integer(mixed_streaming[["11"]]),
+                 c(2L, 2L, 1L, 0L, 0L, 0L, 0L, 0L, 0L, 0L),
+                 info = "mixed fixture dense bins for rmdup=streaming")
+expect_identical(as.integer(mixed_flag[["11"]]),
+                 c(4L, 0L, 2L, 2L, 0L, 0L, 0L, 0L, 0L, 0L),
+                 info = "mixed fixture dense bins for rmdup=flag")
 
 mixed_cram_streaming <- bam_convert(
   mixed_cram,
@@ -60,8 +63,18 @@ expect_identical(mixed_cram_streaming[["11"]], mixed_streaming[["11"]],
                  info = "CRAM fixture matches BAM fixture when reference is supplied")
 
 nipter_conf_bins <- bam_convert(nipter_conformance_bam, binsize = 50000L, rmdup = "none")
+nipter_conf_stranded <- bam_convert(nipter_conformance_bam, binsize = 50000L,
+                                    rmdup = "none", separate_strands = TRUE)
 
 expect_true(length(Filter(Negate(is.null), nipter_conf_bins)) == 24L,
             info = "NIPTeR conformance fixture has all 24 chromosomes")
 expect_true(sum(unlist(lapply(nipter_conf_bins, function(x) if (is.null(x)) 0L else sum(x)))) > 0L,
             info = "NIPTeR conformance fixture contains reads")
+expect_true(all(vapply(nipter_conf_stranded$fwd, function(x) {
+  !is.null(x) && sum(x) > 0L
+}, logical(1L))),
+            info = "NIPTeR conformance fixture has forward-strand reads on all 24 chromosomes")
+expect_true(all(vapply(nipter_conf_stranded$rev, function(x) {
+  !is.null(x) && sum(x) > 0L
+}, logical(1L))),
+            info = "NIPTeR conformance fixture has reverse-strand reads on all 24 chromosomes")

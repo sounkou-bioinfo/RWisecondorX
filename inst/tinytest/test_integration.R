@@ -26,49 +26,43 @@
 # Helper: run official wisecondorx convert via condathis
 # ---------------------------------------------------------------------------
 
-.wisecondorx_ref_bins <- function(bam, binsize = 5000L) {
-  if (!requireNamespace("condathis", quietly = TRUE)) return(NULL)
-
+.wisecondorx_ref_bins <- function(bam, np, binsize = 5000L) {
+  stopifnot(!is.null(np))
   npz_out <- tempfile(fileext = ".npz")
   on.exit(unlink(npz_out), add = TRUE)
 
-  # Ensure the wisecondorx conda environment exists before running.
-  env_ok <- tryCatch({
-    condathis::create_env(
-      packages = "wisecondorx",
-      channels = c("bioconda", "conda-forge"),
+  tryCatch(
+    wisecondorx_convert(
+      bam = bam,
+      npz = npz_out,
+      binsize = binsize,
       env_name = "wisecondorx"
-    )
-    TRUE
-  }, error = function(e) FALSE)
-
-  if (!env_ok) return(NULL)
-
-  status <- tryCatch(
-    do.call(
-      condathis::run,
-      c(
-        list("wisecondorx"),
-        as.list(c("convert", bam, npz_out,
-                  "--binsize", as.character(binsize))),
-        list(env_name = "wisecondorx")
-      )
     ),
-    error = function(e) NULL
+    error = function(e) {
+      stop(
+        "Upstream wisecondorx convert failed on the conformance BAM: ",
+        conditionMessage(e),
+        call. = FALSE
+      )
+    }
   )
 
-  if (is.null(status) || !file.exists(npz_out)) return(NULL)
+  if (!file.exists(npz_out)) {
+    stop("Upstream wisecondorx convert did not create NPZ output: ", npz_out,
+         call. = FALSE)
+  }
 
   # Load npz with reticulate/numpy and extract bin counts
-  if (!requireNamespace("reticulate", quietly = TRUE)) return(NULL)
-  np <- tryCatch(reticulate::import("numpy", convert = FALSE), error = function(e) NULL)
-  if (is.null(np)) return(NULL)
-
   data <- tryCatch(
     np$load(npz_out, allow_pickle = TRUE),
-    error = function(e) NULL
+    error = function(e) {
+      stop(
+        "numpy failed to load the NPZ written by upstream wisecondorx convert: ",
+        conditionMessage(e),
+        call. = FALSE
+      )
+    }
   )
-  if (is.null(data)) return(NULL)
 
   # npz keys are chromosome numbers as strings
   keys <- reticulate::py_to_r(data$files)
@@ -120,11 +114,19 @@ expect_true(total_none >= total_streaming,
 # Conformance test: compare against official wisecondorx via condathis
 # ---------------------------------------------------------------------------
 
-ref_bins <- .wisecondorx_ref_bins(test_bam, binsize = 5000L)
-
-if (is.null(ref_bins)) {
-  exit_file("condathis/wisecondorx not available; skipping conformance test")
+if (!requireNamespace("condathis", quietly = TRUE)) {
+  exit_file("condathis not available; skipping conformance test")
 }
+Sys.setenv(RETICULATE_USE_MANAGED_VENV = "no")
+if (!requireNamespace("reticulate", quietly = TRUE)) {
+  exit_file("reticulate not available; skipping conformance test")
+}
+np <- tryCatch(reticulate::import("numpy", convert = FALSE), error = function(e) NULL)
+if (is.null(np)) {
+  exit_file("numpy not found in active Python environment; skipping conformance test")
+}
+
+ref_bins <- .wisecondorx_ref_bins(test_bam, np = np, binsize = 5000L)
 
 for (chr in intersect(names(bins), names(ref_bins))) {
   our_v   <- bins[[chr]]

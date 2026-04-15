@@ -13,7 +13,13 @@
 #
 # Read placement: 1 read per 100kb bin at the bin start position + a small
 # per-bin offset to avoid exact multiples (which could alias across binsize
-# choices). This gives ~26,700 reads total across all chromosomes.
+# choices). Strand alternates within every chromosome so upstream NIPTeR's
+# brittle split-by-strand code sees both `+` and `-` for all 24 chromosomes.
+# We additionally emit one terminal-bin read on the opposite strand so the
+# forward and reverse splits share the same global max bin count; upstream
+# NIPTeR otherwise crashes when `Reduce("+", ...)` sees non-conformable
+# matrices. Same-position collisions are still impossible within a strand.
+# This gives ~31k reads total across all chromosomes.
 #
 # Usage:
 #   Rscript inst/scripts/make_nipter_fixture.R
@@ -85,13 +91,18 @@ for (chr in CHR_NAMES) {
   positions <- positions + 1L  # convert to 1-based SAM coordinates
   flags <- ifelse(seq_len(n_bins) %% 2L == 0L, 16L, 0L)
 
+  terminal_pos <- positions[n_bins]
+  terminal_flag <- if (flags[n_bins] == 16L) 0L else 16L
+  positions_out <- c(positions, terminal_pos)
+  flags_out <- c(flags, terminal_flag)
+
   read_idx_start <- read_idx + 1L
   recs <- sprintf("r%d\t%d\t%s\t%d\t60\t%s\t*\t0\t0\t%s\t%s\tRG:Z:fixture",
-                  read_idx_start + seq_len(n_bins) - 1L,
-                  flags, chr, positions,
+                  read_idx_start + seq_along(positions_out) - 1L,
+                  flags_out, chr, positions_out,
                   READ_CIGAR, READ_SEQ, READ_QUAL)
   records <- c(records, recs)
-  read_idx <- read_idx + n_bins
+  read_idx <- read_idx + length(positions_out)
 }
 
 message(sprintf("Writing %d reads across %d chromosomes ...", read_idx, length(CHR_NAMES)))
@@ -111,10 +122,6 @@ ret_idx  <- system2("samtools", c("index", out_bam))
 if (ret_idx != 0L) stop("samtools index failed")
 
 unlink(c(out_sam, tmp_unsorted))
-
-# ---- Verify ------------------------------------------------------------------
-stats_out <- system2("samtools", c("flagstat", out_bam), stdout = TRUE)
-message("BAM flagstat:\n", paste(stats_out, collapse = "\n"))
 
 message("\nNIPTeR conformance fixture written to:\n  ", out_bam)
 message("\nInstalled-package tests now use this bundled fixture by default.")

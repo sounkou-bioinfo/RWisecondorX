@@ -241,7 +241,7 @@ bins <- tabulate(reads, nbins = n_bins)
 ```
 `tabulate()` here counts unique *positions per bin*, not reads. A PCR duplicate at a unique position survives; two distinct reads at the same position are silently merged. This is not equivalent to `-F 1024`.
 
-**Consequence for conformance testing.** Exact bin-for-bin match against `NIPTeR::bin_bam_sample()` requires a BAM with no unmapped reads and no two reads sharing a start position per strand. The `NIPTER_CONFORMANCE_BAM` env var must point to such a BAM. Our `rmdup = "none"` is the closest mode but counts each read independently rather than unique positions.
+**Consequence for conformance testing.** Exact bin-for-bin match against `NIPTeR::bin_bam_sample()` requires a BAM with no unmapped reads and no two reads sharing a start position per strand. The package now bundles such a fixture as `inst/extdata/nipter_conformance_fixture.bam`; `NIPTER_CONFORMANCE_BAM` is only an override for a custom fixture with the same constraints. Our `rmdup = "none"` is the closest mode but counts each read independently rather than unique positions.
 
 ---
 

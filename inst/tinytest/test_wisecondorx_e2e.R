@@ -8,15 +8,12 @@
 #   3. Python arm (conditional): condathis wisecondorx convert/newref/predict
 #      compared against native R predictions for aberration agreement.
 #
-# Sections 1-2 always run (require samtools + DNAcopy).
+# Sections 1-2 always run (require DNAcopy).
 # Section 3 requires condathis + reticulate + numpy + wisecondorx bioconda.
 
 library(tinytest)
 library(RWisecondorX)
 library(DNAcopy)
-
-has_samtools <- nchar(Sys.which("samtools")) > 0L
-if (!has_samtools) exit_file("samtools not available")
 
 
 # ---------------------------------------------------------------------------
@@ -154,22 +151,19 @@ message("Section 2 complete: bed_dir= pipeline verified.")
 # Expected agreement ≥ 80% on chr-level gain/loss calls.
 # ---------------------------------------------------------------------------
 
-has_condathis   <- requireNamespace("condathis",   quietly = TRUE)
-has_reticulate  <- requireNamespace("reticulate",  quietly = TRUE)
-has_numpy       <- has_reticulate && tryCatch(
-  { reticulate::import("numpy", convert = FALSE); TRUE },
-  error = function(e) FALSE
-)
-condathis_ok <- has_condathis && has_numpy
-
-if (!condathis_ok) {
-  message("condathis/reticulate/numpy not available; skipping Python conformance arm.")
-  exit_file("condathis/reticulate/numpy not available")
+if (!requireNamespace("condathis", quietly = TRUE)) {
+  exit_file("condathis not available")
+}
+Sys.setenv(RETICULATE_USE_MANAGED_VENV = "no")
+if (!requireNamespace("reticulate", quietly = TRUE)) {
+  exit_file("reticulate not available")
+}
+np <- tryCatch(reticulate::import("numpy", convert = FALSE), error = function(e) NULL)
+if (is.null(np)) {
+  exit_file("numpy not found in active Python environment")
 }
 
 message("Section 3: running Python WisecondorX conformance ...")
-
-np <- reticulate::import("numpy", convert = FALSE)
 
 # Convert all samples to NPZ
 npz_dir <- file.path(tempdir(), "e2e_wcx_npz")
@@ -193,8 +187,8 @@ expect_equal(length(npz_files), nrow(manifest),
 
 # Python reference
 py_ref <- file.path(tempdir(), "e2e_py_ref.npz")
-py_newref_ok <- tryCatch({
-  suppressMessages(
+suppressMessages(
+  tryCatch(
     wisecondorx_newref(
       npz_files   = npz_files,
       output      = py_ref,
@@ -202,17 +196,12 @@ py_newref_ok <- tryCatch({
       ref_binsize = COMPRESSED_BINSIZE,
       nipt        = TRUE,
       cpus        = 1L
-    )
+    ),
+    error = function(e) {
+      stop("Python wisecondorx newref failed: ", conditionMessage(e), call. = FALSE)
+    }
   )
-  TRUE
-}, error = function(e) {
-  message("Python wisecondorx newref failed: ", conditionMessage(e))
-  FALSE
-})
-
-if (!py_newref_ok) {
-  message("Skipping Python conformance assertions (newref failed).")
-} else {
+)
 
 expect_true(file.exists(py_ref),
             info = "Python reference NPZ created")
@@ -221,12 +210,18 @@ expect_true(file.exists(py_ref),
 py_t21_out <- file.path(tempdir(), "e2e_py_t21")
 t21_npz <- file.path(npz_dir, paste0(t21_id, ".npz"))
 suppressMessages(
-  wisecondorx_predict(
-    npz           = t21_npz,
-    ref           = py_ref,
-    output_prefix = py_t21_out,
-    bed           = TRUE,
-    seed          = 1L
+  tryCatch(
+    wisecondorx_predict(
+      npz           = t21_npz,
+      ref           = py_ref,
+      output_prefix = py_t21_out,
+      bed           = TRUE,
+      seed          = 1L
+    ),
+    error = function(e) {
+      stop("Python wisecondorx predict failed on the T21 sample: ",
+           conditionMessage(e), call. = FALSE)
+    }
   )
 )
 
@@ -265,8 +260,6 @@ if (length(r_chrs) > 0L && length(py_chrs) > 0L) {
 
 message("Section 3 complete: Python WisecondorX conformance checked.")
 
-}  # end if (py_newref_ok)
-
 
 # ---------------------------------------------------------------------------
 # Cleanup
@@ -274,8 +267,6 @@ message("Section 3 complete: Python WisecondorX conformance checked.")
 
 unlink(cohort_dir, recursive = TRUE)
 unlink(bed_dir,   recursive = TRUE)
-if (condathis_ok) {
-  unlink(npz_dir, recursive = TRUE)
-  if (exists("py_ref")) unlink(py_ref)
-  if (exists("py_t21_out")) unlink(paste0(py_t21_out, "_aberrations.bed"))
-}
+unlink(npz_dir, recursive = TRUE)
+if (exists("py_ref")) unlink(py_ref)
+if (exists("py_t21_out")) unlink(paste0(py_t21_out, "_aberrations.bed"))

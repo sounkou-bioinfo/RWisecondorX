@@ -25,3 +25,4 @@ src/*.o
 src/*.so
 src/*.dll
 src/symbols.rds
+.codex

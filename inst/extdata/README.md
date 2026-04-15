@@ -13,6 +13,10 @@ Packaged alignment fixtures:
   improper-pair fixture for unit tests
 - `fixture_mixed.cram` / `.crai`: CRAM rendering of `fixture_mixed.bam`
 - `fixture_ref.fa` / `.fai`: reference FASTA for the CRAM fixture
+- `nipter_conformance_fixture.bam` / `.bai`: bundled whole-genome fixture for
+  installed-package NIPTeR cross-package conformance; every chromosome 1-22/X/Y
+  has forward and reverse reads, with no unmapped records and no same-position
+  collisions per strand
 
 Regenerate the synthetic fixtures with:
 

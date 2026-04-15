@@ -70,8 +70,7 @@ wisecondorx_convert <- function(bam,
     extra_args = extra_args
   )
 
-  do.call(condathis::run, c(list("wisecondorx"), as.list(args),
-                            list(env_name = env_name)))
+  .run_wisecondorx_cli(args, env_name)
   invisible(npz)
 }
 
@@ -160,8 +159,7 @@ wisecondorx_newref <- function(npz_files,
     extra_args = extra_args
   )
 
-  do.call(condathis::run, c(list("wisecondorx"), as.list(args),
-                            list(env_name = env_name)))
+  .run_wisecondorx_cli(args, env_name)
   invisible(output)
 }
 
@@ -289,8 +287,7 @@ wisecondorx_predict <- function(npz,
     extra_args = extra_args
   )
 
-  do.call(condathis::run, c(list("wisecondorx"), as.list(args),
-                            list(env_name = env_name)))
+  .run_wisecondorx_cli(args, env_name)
   invisible(output_prefix)
 }
 
@@ -309,14 +306,55 @@ wisecondorx_predict <- function(npz,
   }
 }
 
+.with_condathis_cache <- function(expr) {
+  # condathis resets most conda/mamba env vars itself, but libmamba still uses
+  # HOME/XDG cache roots for proc-lock state. Isolating both avoids stale
+  # ~/.cache/mamba/proc/proc.lock failures from unrelated sessions.
+  old_xdg_cache <- Sys.getenv("XDG_CACHE_HOME", unset = NA_character_)
+  old_home <- Sys.getenv("HOME", unset = NA_character_)
+  old_xdg_data <- Sys.getenv("XDG_DATA_HOME", unset = NA_character_)
+  old_xdg_config <- Sys.getenv("XDG_CONFIG_HOME", unset = NA_character_)
+  resolved_xdg_data <- if (!is.na(old_xdg_data) && nzchar(old_xdg_data)) {
+    old_xdg_data
+  } else {
+    file.path(path.expand("~"), ".local", "share")
+  }
+  resolved_xdg_config <- if (!is.na(old_xdg_config) && nzchar(old_xdg_config)) {
+    old_xdg_config
+  } else {
+    file.path(path.expand("~"), ".config")
+  }
+  cache_home <- file.path(tempdir(), "rwisecondorx-condathis-home")
+  cache_dir <- file.path(cache_home, ".cache")
+  dir.create(cache_dir, recursive = TRUE, showWarnings = FALSE)
+  Sys.setenv(
+    HOME = cache_home,
+    XDG_CACHE_HOME = cache_dir,
+    XDG_DATA_HOME = resolved_xdg_data,
+    XDG_CONFIG_HOME = resolved_xdg_config
+  )
+  on.exit(
+    {
+      if (is.na(old_home)) Sys.unsetenv("HOME") else Sys.setenv(HOME = old_home)
+      if (is.na(old_xdg_cache)) Sys.unsetenv("XDG_CACHE_HOME") else Sys.setenv(XDG_CACHE_HOME = old_xdg_cache)
+      if (is.na(old_xdg_data)) Sys.unsetenv("XDG_DATA_HOME") else Sys.setenv(XDG_DATA_HOME = old_xdg_data)
+      if (is.na(old_xdg_config)) Sys.unsetenv("XDG_CONFIG_HOME") else Sys.setenv(XDG_CONFIG_HOME = old_xdg_config)
+    },
+    add = TRUE
+  )
+  force(expr)
+}
+
 .ensure_wisecondorx_env <- function(env_name) {
   # Create the environment if it does not exist yet.
   # condathis::create_env() is idempotent if the env already exists.
   tryCatch(
-    condathis::create_env(
-      packages  = "wisecondorx",
-      channels  = c("bioconda", "conda-forge"),
-      env_name  = env_name
+    .with_condathis_cache(
+      condathis::create_env(
+        packages  = "wisecondorx",
+        channels  = c("bioconda", "conda-forge"),
+        env_name  = env_name
+      )
     ),
     error = function(e) {
       stop(
@@ -326,6 +364,15 @@ wisecondorx_predict <- function(npz,
         call. = FALSE
       )
     }
+  )
+}
+
+.run_wisecondorx_cli <- function(args, env_name) {
+  .with_condathis_cache(
+    do.call(
+      condathis::run,
+      c(list("wisecondorx"), as.list(args), list(env_name = env_name))
+    )
   )
 }
 

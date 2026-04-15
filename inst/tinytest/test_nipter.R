@@ -83,7 +83,6 @@ expect_true(total_nodup < total_default,  info = "exclude_flags=1024 removes som
 # ---------------------------------------------------------------------------
 
 bed_out <- tempfile(fileext = ".bed.gz")
-on.exit(unlink(c(bed_out, paste0(bed_out, ".tbi"))), add = TRUE)
 
 nipter_bin_bam_bed(test_bam, bed_out, binsize = 50000L)
 
@@ -95,6 +94,7 @@ expect_true(file.info(bed_out)$size > 0L,            info = "BED.gz is non-empty
 lines <- readLines(gzcon(file(bed_out, "rb")), n = 5L)
 expect_identical(lengths(strsplit(lines, "\t")), rep(5L, 5L),
                  info = "BED rows have 5 tab-delimited columns")
+unlink(c(bed_out, paste0(bed_out, ".tbi")))
 
 # ---------------------------------------------------------------------------
 # Conformance against NIPTeR::bin_bam_sample()
@@ -130,7 +130,8 @@ if (is.na(conf_bam) || !nzchar(conf_bam) || !file.exists(conf_bam)) {
   conf_bam <- .fixture_path("nipter_conformance_fixture.bam")
 }
 if (is.null(conf_bam) || !file.exists(conf_bam)) {
-  exit_file("NIPTeR conformance fixture not available; run `make fixtures`")
+  stop("Bundled NIPTeR conformance fixture is missing; run `make fixtures` and commit it.",
+       call. = FALSE)
 }
 
 our_sample <- nipter_bin_bam(conf_bam, binsize = 50000L,
@@ -140,7 +141,11 @@ ref_sample <- tryCatch(
   NIPTeR::bin_bam_sample(bam_filepath = conf_bam, do_sort = FALSE,
                          separate_strands = FALSE),
   error = function(e) {
-    exit_file(paste("NIPTeR::bin_bam_sample failed:", conditionMessage(e)))
+    stop(paste(
+      "Upstream NIPTeR::bin_bam_sample is incompatible with the current",
+      "Rsamtools/Bioconductor stack:",
+      conditionMessage(e)
+    ), call. = FALSE)
   }
 )
 
@@ -151,20 +156,48 @@ our_sex  <- our_sample$sex_chromosome_reads[[1L]]
 
 # Total read counts must agree: NIPTeR drops strand="*" (unmapped),
 # we drop rname IS NULL — equivalent filters.
-expect_identical(sum(our_auto) + sum(our_sex),
-                 sum(ref_auto) + sum(ref_sex),
-                 info = "total read count matches NIPTeR")
+expect_equal(sum(our_auto) + sum(our_sex),
+             sum(ref_auto) + sum(ref_sex),
+             tolerance = 0,
+             info = "total read count matches NIPTeR")
 
-# Bin-for-bin comparison; trim to the shorter column count (edge-bin tolerance).
-n_auto <- min(ncol(ref_auto), ncol(our_auto))
-n_sex  <- min(ncol(ref_sex),  ncol(our_sex))
+# NIPTeR sizes matrices by the last observed read position; RWisecondorX keeps
+# dense header-span width. That semantic difference must remain explicit.
+hdr_targets <- Rsamtools::scanBamHeader(conf_bam)[[1L]]$targets
+hdr_targets <- hdr_targets[names(hdr_targets) %in% c(as.character(1:22), "X", "Y")]
+expected_dense_bins <- max(((as.integer(hdr_targets) - 1L) %/% 50000L) + 1L)
+
+expect_identical(ncol(our_auto), expected_dense_bins,
+                 info = "RWisecondorX autosomal width matches dense header-derived bins")
+expect_identical(ncol(our_sex), expected_dense_bins,
+                 info = "RWisecondorX sex-chromosome width matches dense header-derived bins")
+expect_true(ncol(ref_auto) <= ncol(our_auto),
+            info = "NIPTeR autosomal width does not exceed RWisecondorX dense width")
+expect_true(ncol(ref_sex) <= ncol(our_sex),
+            info = "NIPTeR sex-chromosome width does not exceed RWisecondorX dense width")
+
+if (ncol(ref_auto) < ncol(our_auto)) {
+  extra_auto <- our_auto[, seq.int(ncol(ref_auto) + 1L, ncol(our_auto)), drop = FALSE]
+  expect_true(all(extra_auto == 0L),
+              info = "extra RWisecondorX autosomal tail bins are zero-only")
+}
+if (ncol(ref_sex) < ncol(our_sex)) {
+  extra_sex <- our_sex[, seq.int(ncol(ref_sex) + 1L, ncol(our_sex)), drop = FALSE]
+  expect_true(all(extra_sex == 0L),
+              info = "extra RWisecondorX sex-chromosome tail bins are zero-only")
+}
 
 for (chr in as.character(1:22)) {
-  expect_identical(our_auto[chr, seq_len(n_auto)],
-                   ref_auto[chr, seq_len(n_auto)],
+  expect_equal(unname(our_auto[chr, seq_len(ncol(ref_auto))]),
+               unname(ref_auto[chr, ]),
+               tolerance = 0,
                    info = paste("chr", chr, "autosomal bins match NIPTeR"))
 }
-expect_identical(our_sex["X", seq_len(n_sex)], ref_sex["X", seq_len(n_sex)],
+expect_equal(unname(our_sex["X", seq_len(ncol(ref_sex))]),
+             unname(ref_sex["X", ]),
+             tolerance = 0,
                  info = "chrX bins match NIPTeR")
-expect_identical(our_sex["Y", seq_len(n_sex)], ref_sex["Y", seq_len(n_sex)],
+expect_equal(unname(our_sex["Y", seq_len(ncol(ref_sex))]),
+             unname(ref_sex["Y", ]),
+             tolerance = 0,
                  info = "chrY bins match NIPTeR")

@@ -102,7 +102,10 @@ state machine and also enforces the WisecondorX improper-pair rule
 counting and the dedup state — this is intrinsic to the algorithm, not a
 flag option); `"flag"` additionally excludes reads with SAM flag `0x400`
 set (Picard / sambamba pre-marked duplicates); `"none"` applies no
-deduplication.
+deduplication. The heavy lifting is delegated to the native
+`bam_bin_counts(...)` kernel bundled in `Rduckhts`; `RWisecondorX`
+reshapes that fixed-bin output into the chromosome-keyed objects
+expected by the WisecondorX and NIPTeR layers.
 
 ## See also
 

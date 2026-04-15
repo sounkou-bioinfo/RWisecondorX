@@ -7,7 +7,7 @@
 
     <a class="navbar-brand me-2" href="../index.html">RWisecondorX</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.0.0.9000</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.0.0.9001</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -32,10 +32,22 @@
     </div>
 
     <div class="section level2">
-<h2 class="pkg-version" data-toc-text="development version" id="rwisecondorx-development-version">RWisecondorX (development version)<a class="anchor" aria-label="anchor" href="#rwisecondorx-development-version"></a></h2>
+<h2 class="pkg-version" data-toc-text="0.0.0.9001" id="rwisecondorx-0009001-development-version">RWisecondorX 0.0.0.9001 (development version)<a class="anchor" aria-label="anchor" href="#rwisecondorx-0009001-development-version"></a></h2>
 <div class="section level3">
-<h3 id="separatedstrands-bed-expanded-to-columns-bed-readers-switched-to-read_tabix-development-version">SeparatedStrands BED expanded to 9 columns; BED readers switched to <code>read_tabix()</code>
-<a class="anchor" aria-label="anchor" href="#separatedstrands-bed-expanded-to-columns-bed-readers-switched-to-read_tabix-development-version"></a></h3>
+<h3 id="bam_convert-now-delegates-to-native-bam_bin_counts-0-0-0-9001">
+<code>bam_convert()</code> now delegates to native <code>bam_bin_counts(...)</code>
+<a class="anchor" aria-label="anchor" href="#bam_convert-now-delegates-to-native-bam_bin_counts-0-0-0-9001"></a></h3>
+<ul><li><p><code><a href="../reference/bam_convert.html">bam_convert()</a></code> and the downstream WisecondorX/NIPTeR binning layer now use the native <code>bam_bin_counts(...)</code> kernel bundled in <code>Rduckhts</code> instead of the previous SQL/window-function implementation over <code>read_bam()</code> and <code>FILE_OFFSET</code>.</p></li>
+<li><p>Public behavior is preserved: <code>rmdup = "streaming"</code> still matches the upstream WisecondorX <code>larp</code> / <code>larp2</code> semantics, while <code>rmdup = "flag"</code> and <code>rmdup = "none"</code> continue to expose duplicate-flag and no-dedup modes.</p></li>
+<li><p>This validates the new native counting primitive in real downstream code and removes RWisecondorX’s direct dependency on the old SQL/file-order dedup workaround.</p></li>
+<li><p><code><a href="../reference/bam_convert_npz.html">bam_convert_npz()</a></code> now accepts the same native filter knobs as <code><a href="../reference/bam_convert.html">bam_convert()</a></code> and <code><a href="../reference/bam_convert_bed.html">bam_convert_bed()</a></code> (<code>mapq</code>, <code>require_flags</code>, <code>exclude_flags</code>). <code>inst/scripts/convert_sample.R</code> now forwards those filters in NPZ mode instead of silently ignoring them.</p></li>
+<li><p><code><a href="../reference/nipter_bin_bam_bed.html">nipter_bin_bam_bed()</a></code> is now a strict bin-and-write convenience wrapper. GC-corrected BED export goes through <code><a href="../reference/nipter_sample_to_bed.html">nipter_sample_to_bed()</a></code> instead of an awkward <code>corrected =</code> side path. This removes the double-binning trap from <code>inst/scripts/convert_sample.R</code> and <code>inst/scripts/build_reference.R</code>.</p></li>
+<li><p>The CLI scripts under <code>inst/scripts/</code> no longer depend on <code>%||%</code> before the package namespace is loaded. <code>make_cohort.R</code> also uses a simpler, more robust dev-tree fallback path.</p></li>
+<li><p>The package now bundles a whole-genome <code>nipter_conformance_fixture.bam</code> and installed-package NIPTeR conformance tests use it by default. The <code>NIPTER_CONFORMANCE_BAM</code> environment variable is now only an override for a custom pre-filtered BAM, not a hard gate.</p></li>
+</ul></div>
+<div class="section level3">
+<h3 id="separatedstrands-bed-expanded-to-columns-bed-readers-switched-to-read_tabix-0-0-0-9001">SeparatedStrands BED expanded to 9 columns; BED readers switched to <code>read_tabix()</code>
+<a class="anchor" aria-label="anchor" href="#separatedstrands-bed-expanded-to-columns-bed-readers-switched-to-read_tabix-0-0-0-9001"></a></h3>
 <ul><li><p><code>nipter_bin_bam_bed(separate_strands = TRUE)</code> now writes <strong>9-column</strong> BED files: <code>chrom</code>, <code>start</code>, <code>end</code>, <code>count</code>, <code>count_fwd</code>, <code>count_rev</code>, <code>corrected_count</code>, <code>corrected_fwd</code>, <code>corrected_rev</code>. The previous 7-column format lacked per-strand corrected values, so GC-corrected SeparatedStrands samples lost their per-strand correction information on the BED round-trip.</p></li>
 <li><p><code><a href="../reference/bed_to_sample.html">bed_to_sample()</a></code> and <code><a href="../reference/bed_to_nipter_sample.html">bed_to_nipter_sample()</a></code> now use <code>read_tabix()</code> instead of <code>read_bed()</code> for reading BED.gz files. <code>read_tabix()</code> returns all columns as VARCHAR with no BED-schema type coercion, avoiding the problem where <code>read_bed()</code> maps columns 7-8 to <code>thick_start</code>/<code>thick_end</code> (INTEGER) and rejects double-precision corrected values.</p></li>
 <li><p><code><a href="../reference/bed_to_nipter_sample.html">bed_to_nipter_sample()</a></code> format detection now uses <code><a href="https://rdrr.io/r/base/conditions.html" class="external-link">tryCatch()</a></code> around the <code>column5</code> probe query, so it correctly falls back to CombinedStrands when the file has only 5 columns (where <code>column5</code> does not exist in <code>read_tabix</code>).</p></li>
@@ -44,7 +56,7 @@
 <li><p>Total test count: 391 assertions, all passing.</p></li>
 </ul></div>
 <div class="section level3">
-<h3 id="bedgz-reader-functions--close-the-round-trip-development-version">BED.gz reader functions — close the round-trip<a class="anchor" aria-label="anchor" href="#bedgz-reader-functions--close-the-round-trip-development-version"></a></h3>
+<h3 id="bedgz-reader-functions--close-the-round-trip-0-0-0-9001">BED.gz reader functions — close the round-trip<a class="anchor" aria-label="anchor" href="#bedgz-reader-functions--close-the-round-trip-0-0-0-9001"></a></h3>
 <ul><li><p>New <code><a href="../reference/bed_to_sample.html">bed_to_sample()</a></code> reads a 4-column BED.gz file (written by <code><a href="../reference/bam_convert_bed.html">bam_convert_bed()</a></code>) back into the named-list-of-integer-vectors format expected by <code><a href="../reference/rwisecondorx_newref.html">rwisecondorx_newref()</a></code> and <code><a href="../reference/rwisecondorx_predict.html">rwisecondorx_predict()</a></code>. This closes the WisecondorX round-trip: bin once with <code><a href="../reference/bam_convert_bed.html">bam_convert_bed()</a></code>, store the BED.gz, and reload for analysis without re-reading the BAM.</p></li>
 <li><p>New <code><a href="../reference/bed_to_nipter_sample.html">bed_to_nipter_sample()</a></code> reads a 5-column (CombinedStrands) or 9-column (SeparatedStrands) BED.gz file (written by <code><a href="../reference/nipter_bin_bam_bed.html">nipter_bin_bam_bed()</a></code>) into a <code>NIPTeRSample</code> object compatible with all NIPTeR statistical functions. Column count is auto-detected. Handles literal <code>"NA"</code> strings in the <code>corrected_count</code> field via <code>TRY_CAST</code>. Sample name is inferred from the filename or set explicitly.</p></li>
 <li><p>Both functions accept an optional DuckDB connection for reuse across multiple files, creating one internally (with <code>allow_unsigned_extensions = "true"</code>) when none is supplied.</p></li>
@@ -52,41 +64,41 @@
 <li><p>Total test count: 391 assertions (46 in test_bed_reader.R), all passing.</p></li>
 </ul></div>
 <div class="section level3">
-<h3 id="native-wisecondorx-implementation-development-version">Native WisecondorX implementation<a class="anchor" aria-label="anchor" href="#native-wisecondorx-implementation-development-version"></a></h3>
+<h3 id="native-wisecondorx-implementation-0-0-0-9001">Native WisecondorX implementation<a class="anchor" aria-label="anchor" href="#native-wisecondorx-implementation-0-0-0-9001"></a></h3>
 <ul><li><p>New <code><a href="../reference/rwisecondorx_newref.html">rwisecondorx_newref()</a></code> — pure-R/Rcpp implementation of the WisecondorX <code>newref</code> pipeline. Takes a list of binned samples (from <code><a href="../reference/bam_convert.html">bam_convert()</a></code>) and builds a PCA-based reference: gender model training (2-component GMM on Y-fractions), global bin masking, per-partition normalize/PCA/filter/KNN reference building, and null ratio computation. Supports NIPT mode, custom Y-fraction cutoff, and multi-threaded KNN via OpenMP.</p></li>
 <li><p>New <code><a href="../reference/rwisecondorx_predict.html">rwisecondorx_predict()</a></code> — pure-R implementation of the WisecondorX <code>predict</code> pipeline. Coverage normalization, PCA projection, iterative within-sample normalization with aberration masking, gonosomal normalization, result inflation, log-transformation, optional blacklist masking, CBS segmentation (via DNAcopy or ParDNAcopy), segment Z-scoring, and aberration calling. Supports both Z-score and beta/ratio calling modes.</p></li>
 <li><p>New <code>rwisecondorx_write_bins_bed()</code>, <code>rwisecondorx_write_segments_bed()</code>, <code>rwisecondorx_write_aberrations_bed()</code>, and <code>rwisecondorx_write_statistics()</code> for writing prediction results to BED and statistics files.</p></li>
 <li><p>New <code><a href="../reference/scale_sample.html">scale_sample()</a></code> for rescaling binned samples between different bin sizes (e.g. 5kb → 100kb).</p></li>
 <li><p><code>R/rwisecondorx_utils.R</code> — shared utilities including <code><a href="../reference/dot-train_gender_model.html">.train_gender_model()</a></code> (with mclust NULL fallback for zero-variance Y-fractions in all-female cohorts), <code><a href="../reference/dot-gender_correct.html">.gender_correct()</a></code>, <code><a href="../reference/dot-get_mask.html">.get_mask()</a></code>, <code><a href="../reference/dot-normalize_and_mask.html">.normalize_and_mask()</a></code>, <code><a href="../reference/dot-train_pca.html">.train_pca()</a></code>, <code><a href="../reference/dot-project_pc.html">.project_pc()</a></code>, <code><a href="../reference/dot-predict_gender.html">.predict_gender()</a></code>.</p></li>
-<li><p><code>R/rwisecondorx_cbs.R</code> — <code><a href="../reference/dot-exec_cbs.html">.exec_cbs()</a></code> wrapper around DNAcopy’s <code>segment()</code> with the upstream WisecondorX conventions (0→NA, 0 weights→1e-99, split segments at large NA gaps, recalculate weighted means). Supports ParDNAcopy for parallel segmentation.</p></li>
+<li><p><code>R/rwisecondorx_cbs.R</code> — <code><a href="../reference/dot-exec_cbs.html">.exec_cbs()</a></code> wrapper around DNAcopy’s <code><a href="https://rdrr.io/pkg/DNAcopy/man/segment.html" class="external-link">segment()</a></code> with the upstream WisecondorX conventions (0→NA, 0 weights→1e-99, split segments at large NA gaps, recalculate weighted means). Supports ParDNAcopy for parallel segmentation.</p></li>
 </ul></div>
 <div class="section level3">
-<h3 id="rcpp-acceleration-for-knn-reference-building-development-version">Rcpp acceleration for KNN reference building<a class="anchor" aria-label="anchor" href="#rcpp-acceleration-for-knn-reference-building-development-version"></a></h3>
+<h3 id="rcpp-acceleration-for-knn-reference-building-0-0-0-9001">Rcpp acceleration for KNN reference building<a class="anchor" aria-label="anchor" href="#rcpp-acceleration-for-knn-reference-building-0-0-0-9001"></a></h3>
 <ul><li><p>New <code>src/knn_reference.cpp</code> implementing <code>knn_reference_cpp()</code> and <code>null_ratios_cpp()</code> in C++ with OpenMP parallelization. Replaces the O(n_bins² × n_samples) pure-R double for-loop with compiled code. The KNN reference-finding step that previously took minutes now completes in seconds.</p></li>
 <li><p><code>Rcpp</code> added to <code>Imports</code> and <code>LinkingTo</code> in DESCRIPTION. OpenMP flags in <code>src/Makevars</code> and <code>src/Makevars.win</code>.</p></li>
 </ul></div>
 <div class="section level3">
-<h3 id="fix-knn-index-semantics-in-predict-normalization-development-version">Fix: KNN index semantics in predict normalization<a class="anchor" aria-label="anchor" href="#fix-knn-index-semantics-in-predict-normalization-development-version"></a></h3>
+<h3 id="fix-knn-index-semantics-in-predict-normalization-0-0-0-9001">Fix: KNN index semantics in predict normalization<a class="anchor" aria-label="anchor" href="#fix-knn-index-semantics-in-predict-normalization-0-0-0-9001"></a></h3>
 <ul><li><p>Fixed a correctness bug in <code><a href="../reference/dot-normalize_once.html">.normalize_once()</a></code> where global KNN indexes (stored by <code>knn_reference_cpp()</code>) were used directly to index into <code>chr_data</code>, the leave-one-chromosome-out subset. Global index <code>g</code> is now correctly mapped to local space: <code>g</code> if before the excluded chromosome, <code>g - n_chr</code> if after. This bug caused reference bins to be looked up at wrong positions during within-sample normalization.</p></li>
 <li><p>Note: upstream WisecondorX has the inverse issue — it stores LOCAL indexes during <code>newref</code> but uses them as GLOBAL indexes in the <code>null_ratio</code> computation. Our implementation stores GLOBAL indexes and now correctly handles both predict (local conversion) and null_ratio (global direct use).</p></li>
 </ul></div>
 <div class="section level3">
-<h3 id="fix-null-ratio-column-count-mismatch-development-version">Fix: null ratio column count mismatch<a class="anchor" aria-label="anchor" href="#fix-null-ratio-column-count-mismatch-development-version"></a></h3>
+<h3 id="fix-null-ratio-column-count-mismatch-0-0-0-9001">Fix: null ratio column count mismatch<a class="anchor" aria-label="anchor" href="#fix-null-ratio-column-count-mismatch-0-0-0-9001"></a></h3>
 <ul><li>Fixed <code><a href="../reference/rwisecondorx_predict.html">rwisecondorx_predict()</a></code> crash when the autosomal sub-reference (“A”) and gonosomal sub-reference (“F”) have different numbers of null-ratio columns (due to different sample counts per partition). Both are now truncated to <code>min(ncol(aut), ncol(gon))</code> before <code><a href="https://rdrr.io/r/base/cbind.html" class="external-link">rbind()</a></code>.</li>
 </ul></div>
 <div class="section level3">
-<h3 id="fix-mclust-gmm-on-zero-variance-y-fractions-development-version">Fix: mclust GMM on zero-variance Y-fractions<a class="anchor" aria-label="anchor" href="#fix-mclust-gmm-on-zero-variance-y-fractions-development-version"></a></h3>
+<h3 id="fix-mclust-gmm-on-zero-variance-y-fractions-0-0-0-9001">Fix: mclust GMM on zero-variance Y-fractions<a class="anchor" aria-label="anchor" href="#fix-mclust-gmm-on-zero-variance-y-fractions-0-0-0-9001"></a></h3>
 <ul><li>
 <code><a href="../reference/dot-train_gender_model.html">.train_gender_model()</a></code> now handles the case where all female samples have exactly 0.0 Y-fraction (no Y reads). <code>mclust::Mclust(..., G=2)</code> returns <code>NULL</code> in this scenario; the fix falls back to a gap-based cutoff: <code>min(nonzero_y_fractions) / 2</code>.</li>
 </ul></div>
 <div class="section level3">
-<h3 id="synthetic-cohort-generator-development-version">Synthetic cohort generator<a class="anchor" aria-label="anchor" href="#synthetic-cohort-generator-development-version"></a></h3>
+<h3 id="synthetic-cohort-generator-0-0-0-9001">Synthetic cohort generator<a class="anchor" aria-label="anchor" href="#synthetic-cohort-generator-0-0-0-9001"></a></h3>
 <ul><li><p>New <code><a href="../reference/generate_cohort.html">generate_cohort()</a></code> creates synthetic BAM files for testing using “compressed” chromosome lengths (100bp per bin instead of 100kb). Produces identical bin COUNT structure to GRCh37 at 100kb resolution with ~435KB BAMs. Supports injecting trisomy signal (extra reads on target chromosome).</p></li>
 <li><p>New <code>COMPRESSED_BINSIZE</code> constant (100L) exported for use with <code>bam_convert(binsize = COMPRESSED_BINSIZE)</code>.</p></li>
 <li><p><code>inst/scripts/make_cohort.R</code> — CLI wrapper for cohort generation.</p></li>
 </ul></div>
 <div class="section level3">
-<h3 id="test-infrastructure-cleanup-development-version">Test infrastructure cleanup<a class="anchor" aria-label="anchor" href="#test-infrastructure-cleanup-development-version"></a></h3>
+<h3 id="test-infrastructure-cleanup-0-0-0-9001">Test infrastructure cleanup<a class="anchor" aria-label="anchor" href="#test-infrastructure-cleanup-0-0-0-9001"></a></h3>
 <ul><li><p>All test files now use <code><a href="https://sounkou-bioinfo.github.io/RWisecondorX/">library(RWisecondorX)</a></code> instead of <code><a href="https://rdrr.io/r/base/source.html" class="external-link">source()</a></code> hacks to load R code directly. This is required because functions call compiled C++ code (<code>knn_reference_cpp</code>, <code>null_ratios_cpp</code>) which is only available in an installed package.</p></li>
 <li><p>Fixed <code>tinytest</code> assertion: <code>expect_message(..., pattern = NA)</code> does NOT mean “expect no messages” — it fails if no message is emitted. Replaced with <code>expect_silent()</code>.</p></li>
 <li><p>New <code>inst/tinytest/test_rwisecondorx.R</code> — 76 assertions covering reference building (gender model, masking, PCA, KNN indexes, null ratios), prediction (normalization, CBS, aberration calling), and trisomy detection sensitivity.</p></li>
@@ -94,26 +106,26 @@
 <li><p>Total test count: 345 assertions, all passing.</p></li>
 </ul></div>
 <div class="section level3">
-<h3 id="y-unique-region-ratio-for-sex-prediction-development-version">Y-unique region ratio for sex prediction<a class="anchor" aria-label="anchor" href="#y-unique-region-ratio-for-sex-prediction-development-version"></a></h3>
+<h3 id="y-unique-region-ratio-for-sex-prediction-0-0-0-9001">Y-unique region ratio for sex prediction<a class="anchor" aria-label="anchor" href="#y-unique-region-ratio-for-sex-prediction-0-0-0-9001"></a></h3>
 <ul><li><p>New <code><a href="../reference/nipter_y_unique_ratio.html">nipter_y_unique_ratio()</a></code> counts reads overlapping 7 Y-chromosome unique gene regions (HSFY1, BPY2, BPY2B, BPY2C, XKRY, PRY, PRY2) and computes the ratio to total nuclear genome reads. Uses DuckDB/duckhts index-based region queries (<code>read_bam(region := ...)</code>) for efficient BAM access. The bundled GRCh37 regions file can be replaced with a custom file for other assemblies.</p></li>
 <li><p>New <code><a href="../reference/nipter_sex_model_y_unique.html">nipter_sex_model_y_unique()</a></code> fits a 2-component GMM on Y-unique ratios (one per BAM in a cohort), producing a <code>NIPTeRSexModel</code> compatible with <code><a href="../reference/nipter_predict_sex.html">nipter_predict_sex()</a></code>.</p></li>
 <li><p><code><a href="../reference/nipter_predict_sex.html">nipter_predict_sex()</a></code> gains a <code>y_unique_ratio</code> parameter for passing a pre-computed Y-unique ratio when a <code>"y_unique"</code> model is included in the consensus vote. This enables the full 3-model majority-vote sex prediction pipeline (Y-unique ratio + Y fraction + XY fractions).</p></li>
 <li><p>Bundled <code>inst/extdata/grch37_Y_UniqueRegions.txt</code> — TSV of 7 GRCh37 Y-unique regions used for the Y-unique ratio calculation.</p></li>
 </ul></div>
 <div class="section level3">
-<h3 id="sex-prediction-via-gaussian-mixture-models-development-version">Sex prediction via Gaussian mixture models<a class="anchor" aria-label="anchor" href="#sex-prediction-via-gaussian-mixture-models-development-version"></a></h3>
+<h3 id="sex-prediction-via-gaussian-mixture-models-0-0-0-9001">Sex prediction via Gaussian mixture models<a class="anchor" aria-label="anchor" href="#sex-prediction-via-gaussian-mixture-models-0-0-0-9001"></a></h3>
 <ul><li><p>New <code><a href="../reference/nipter_sex_model.html">nipter_sex_model()</a></code> fits a 2-component GMM on sex chromosome fractions from a <code>NIPTeRControlGroup</code> using <code><a href="https://mclust-org.github.io/mclust/reference/Mclust.html" class="external-link">mclust::Mclust()</a></code>. Supports <code>"y_fraction"</code> (univariate on Y-chromosome fraction) and <code>"xy_fraction"</code> (bivariate on X + Y fractions) methods. The male cluster is identified as the component with higher median Y fraction.</p></li>
 <li><p>New <code><a href="../reference/nipter_predict_sex.html">nipter_predict_sex()</a></code> classifies a <code>NIPTeRSample</code> as male or female given one or more <code>NIPTeRSexModel</code> objects. Multiple models use majority vote consensus (tie defaults to “female” — conservative for NIPT).</p></li>
 <li><p><code>mclust</code> added to <code>Suggests</code> in DESCRIPTION.</p></li>
 </ul></div>
 <div class="section level3">
-<h3 id="nipter_bin_bam_bed-separatedstrands-output-development-version">
-<code>nipter_bin_bam_bed()</code> SeparatedStrands output<a class="anchor" aria-label="anchor" href="#nipter_bin_bam_bed-separatedstrands-output-development-version"></a></h3>
+<h3 id="nipter_bin_bam_bed-separatedstrands-output-0-0-0-9001">
+<code>nipter_bin_bam_bed()</code> SeparatedStrands output<a class="anchor" aria-label="anchor" href="#nipter_bin_bam_bed-separatedstrands-output-0-0-0-9001"></a></h3>
 <ul><li>
 <code><a href="../reference/nipter_bin_bam_bed.html">nipter_bin_bam_bed()</a></code> gains a <code>separate_strands</code> parameter. When <code>TRUE</code>, outputs a 9-column BED (<code>chrom</code>, <code>start</code>, <code>end</code>, <code>count</code>, <code>count_fwd</code>, <code>count_rev</code>, <code>corrected_count</code>, <code>corrected_fwd</code>, <code>corrected_rev</code>) where <code>count = count_fwd + count_rev</code>. When <code>FALSE</code> (default), the 5-column BED format is unchanged.</li>
 </ul></div>
 <div class="section level3">
-<h3 id="separatedstrands-support-development-version">SeparatedStrands support<a class="anchor" aria-label="anchor" href="#separatedstrands-support-development-version"></a></h3>
+<h3 id="separatedstrands-support-0-0-0-9001">SeparatedStrands support<a class="anchor" aria-label="anchor" href="#separatedstrands-support-0-0-0-9001"></a></h3>
 <ul><li><p><code><a href="../reference/bam_convert.html">bam_convert()</a></code> gains a <code>separate_strands</code> parameter. When <code>TRUE</code>, returns a list with <code>fwd</code> (forward strand) and <code>rev</code> (reverse strand) data frames.</p></li>
 <li><p><code><a href="../reference/nipter_bin_bam.html">nipter_bin_bam()</a></code> gains <code>separate_strands = TRUE</code> support, producing <code>NIPTeRSample</code> objects with class <code>c("NIPTeRSample", "SeparatedStrands")</code>. Autosomal chromosome reads are stored as a list of two matrices (forward and reverse) with rownames <code>"1F".."22F"</code> and <code>"1R".."22R"</code>.</p></li>
 <li>
@@ -129,7 +141,7 @@
 </ul></li>
 </ul></div>
 <div class="section level3">
-<h3 id="wisecondorx-cli-wrapper-fixes-development-version">WisecondorX CLI wrapper fixes<a class="anchor" aria-label="anchor" href="#wisecondorx-cli-wrapper-fixes-development-version"></a></h3>
+<h3 id="wisecondorx-cli-wrapper-fixes-0-0-0-9001">WisecondorX CLI wrapper fixes<a class="anchor" aria-label="anchor" href="#wisecondorx-cli-wrapper-fixes-0-0-0-9001"></a></h3>
 <ul><li><p><code><a href="../reference/wisecondorx_predict.html">wisecondorx_predict()</a></code>: removed hallucinated <code>ref_binsize</code> / <code>--binsize</code> parameter that does not exist in the upstream <code>predict</code> subcommand.</p></li>
 <li><p><code><a href="../reference/wisecondorx_newref.html">wisecondorx_newref()</a></code>: fixed <code>ref_binsize</code> default from <code>50000L</code> to <code>100000L</code> to match upstream default.</p></li>
 <li><p><code><a href="../reference/wisecondorx_predict.html">wisecondorx_predict()</a></code>: added <code>add_plot_title</code> parameter mapping to upstream <code>--add-plot-title</code>.</p></li>

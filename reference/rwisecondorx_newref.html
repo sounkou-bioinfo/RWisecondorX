@@ -13,7 +13,7 @@ rwisecondorx_predict()."></head><body>
 
     <a class="navbar-brand me-2" href="../index.html">RWisecondorX</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.0.0.9000</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.0.0.9001</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -48,13 +48,16 @@ via reticulate) and builds a PCA-based reference suitable for
     <div class="section level2">
     <h2 id="ref-usage">Usage<a class="anchor" aria-label="anchor" href="#ref-usage"></a></h2>
     <div class="sourceCode"><pre class="sourceCode r"><code><span><span class="fu">rwisecondorx_newref</span><span class="op">(</span></span>
-<span>  <span class="va">samples</span>,</span>
+<span>  samples <span class="op">=</span> <span class="cn">NULL</span>,</span>
 <span>  binsize <span class="op">=</span> <span class="fl">100000L</span>,</span>
 <span>  sample_binsizes <span class="op">=</span> <span class="cn">NULL</span>,</span>
 <span>  nipt <span class="op">=</span> <span class="cn">FALSE</span>,</span>
 <span>  refsize <span class="op">=</span> <span class="fl">300L</span>,</span>
 <span>  yfrac <span class="op">=</span> <span class="cn">NULL</span>,</span>
-<span>  cpus <span class="op">=</span> <span class="fl">1L</span></span>
+<span>  cpus <span class="op">=</span> <span class="fl">4L</span>,</span>
+<span>  bed_dir <span class="op">=</span> <span class="cn">NULL</span>,</span>
+<span>  bed_pattern <span class="op">=</span> <span class="st">"*.bed.gz"</span>,</span>
+<span>  con <span class="op">=</span> <span class="cn">NULL</span></span>
 <span><span class="op">)</span></span></code></pre></div>
     </div>
 
@@ -65,12 +68,13 @@ via reticulate) and builds a PCA-based reference suitable for
 <dl><dt id="arg-samples">samples<a class="anchor" aria-label="anchor" href="#arg-samples"></a></dt>
 <dd><p>List of sample objects, each a named list of integer vectors
 keyed by chromosome (<code>"1"</code>–<code>"24"</code>), as returned by <code><a href="bam_convert.html">bam_convert()</a></code>.
-At least 10 samples are required.</p></dd>
+At least 10 samples are required. Mutually exclusive with <code>bed_dir</code>.</p></dd>
 
 
 <dt id="arg-binsize">binsize<a class="anchor" aria-label="anchor" href="#arg-binsize"></a></dt>
 <dd><p>Integer; the target bin size in base pairs. All samples are
-rescaled to this size. Default <code>100000L</code>.</p></dd>
+rescaled to this size. Default <code>100000L</code>. Inferred from BED files when
+<code>bed_dir</code> is supplied and <code>sample_binsizes</code> is <code>NULL</code>.</p></dd>
 
 
 <dt id="arg-sample-binsizes">sample_binsizes<a class="anchor" aria-label="anchor" href="#arg-sample-binsizes"></a></dt>
@@ -95,7 +99,24 @@ classification. If <code>NULL</code> (default), the cutoff is derived from a GMM
 
 <dt id="arg-cpus">cpus<a class="anchor" aria-label="anchor" href="#arg-cpus"></a></dt>
 <dd><p>Integer; number of threads for reference bin finding.
-Default <code>1L</code>.</p></dd>
+Default <code>4L</code>.</p></dd>
+
+
+<dt id="arg-bed-dir">bed_dir<a class="anchor" aria-label="anchor" href="#arg-bed-dir"></a></dt>
+<dd><p>Optional character; path to a directory of 4-column bgzipped
+BED files (as written by <code><a href="bam_convert_bed.html">bam_convert_bed()</a></code>). All files matching
+<code>bed_pattern</code> are loaded in a single DuckDB pass via
+<code>rduckhts_tabix_multi()</code>. Mutually exclusive with <code>samples</code>.</p></dd>
+
+
+<dt id="arg-bed-pattern">bed_pattern<a class="anchor" aria-label="anchor" href="#arg-bed-pattern"></a></dt>
+<dd><p>Glob pattern for matching BED files inside <code>bed_dir</code>.
+Default <code>"*.bed.gz"</code>.</p></dd>
+
+
+<dt id="arg-con">con<a class="anchor" aria-label="anchor" href="#arg-con"></a></dt>
+<dd><p>Optional existing DuckDB connection. Used only when <code>bed_dir</code> is
+supplied. A temporary connection is created (and closed) if <code>NULL</code>.</p></dd>
 
 </dl></div>
     <div class="section level2">

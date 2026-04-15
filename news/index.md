@@ -1,6 +1,50 @@
 # Changelog
 
-## RWisecondorX (development version)
+## RWisecondorX 0.0.0.9001 (development version)
+
+### `bam_convert()` now delegates to native `bam_bin_counts(...)`
+
+- [`bam_convert()`](https://sounkou-bioinfo.github.io/RWisecondorX/reference/bam_convert.md)
+  and the downstream WisecondorX/NIPTeR binning layer now use the native
+  `bam_bin_counts(...)` kernel bundled in `Rduckhts` instead of the
+  previous SQL/window-function implementation over `read_bam()` and
+  `FILE_OFFSET`.
+
+- Public behavior is preserved: `rmdup = "streaming"` still matches the
+  upstream WisecondorX `larp` / `larp2` semantics, while
+  `rmdup = "flag"` and `rmdup = "none"` continue to expose
+  duplicate-flag and no-dedup modes.
+
+- This validates the new native counting primitive in real downstream
+  code and removes RWisecondorX’s direct dependency on the old
+  SQL/file-order dedup workaround.
+
+- [`bam_convert_npz()`](https://sounkou-bioinfo.github.io/RWisecondorX/reference/bam_convert_npz.md)
+  now accepts the same native filter knobs as
+  [`bam_convert()`](https://sounkou-bioinfo.github.io/RWisecondorX/reference/bam_convert.md)
+  and
+  [`bam_convert_bed()`](https://sounkou-bioinfo.github.io/RWisecondorX/reference/bam_convert_bed.md)
+  (`mapq`, `require_flags`, `exclude_flags`).
+  `inst/scripts/convert_sample.R` now forwards those filters in NPZ mode
+  instead of silently ignoring them.
+
+- [`nipter_bin_bam_bed()`](https://sounkou-bioinfo.github.io/RWisecondorX/reference/nipter_bin_bam_bed.md)
+  is now a strict bin-and-write convenience wrapper. GC-corrected BED
+  export goes through
+  [`nipter_sample_to_bed()`](https://sounkou-bioinfo.github.io/RWisecondorX/reference/nipter_sample_to_bed.md)
+  instead of an awkward `corrected =` side path. This removes the
+  double-binning trap from `inst/scripts/convert_sample.R` and
+  `inst/scripts/build_reference.R`.
+
+- The CLI scripts under `inst/scripts/` no longer depend on `%||%`
+  before the package namespace is loaded. `make_cohort.R` also uses a
+  simpler, more robust dev-tree fallback path.
+
+- The package now bundles a whole-genome
+  `nipter_conformance_fixture.bam` and installed-package NIPTeR
+  conformance tests use it by default. The `NIPTER_CONFORMANCE_BAM`
+  environment variable is now only an override for a custom pre-filtered
+  BAM, not a hard gate.
 
 ### SeparatedStrands BED expanded to 9 columns; BED readers switched to `read_tabix()`
 
@@ -126,10 +170,11 @@
 
 - `R/rwisecondorx_cbs.R` —
   [`.exec_cbs()`](https://sounkou-bioinfo.github.io/RWisecondorX/reference/dot-exec_cbs.md)
-  wrapper around DNAcopy’s `segment()` with the upstream WisecondorX
-  conventions (0→NA, 0 weights→1e-99, split segments at large NA gaps,
-  recalculate weighted means). Supports ParDNAcopy for parallel
-  segmentation.
+  wrapper around DNAcopy’s
+  [`segment()`](https://rdrr.io/pkg/DNAcopy/man/segment.html) with the
+  upstream WisecondorX conventions (0→NA, 0 weights→1e-99, split
+  segments at large NA gaps, recalculate weighted means). Supports
+  ParDNAcopy for parallel segmentation.
 
 ### Rcpp acceleration for KNN reference building
 

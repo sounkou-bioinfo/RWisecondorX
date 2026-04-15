@@ -15,7 +15,7 @@ files are read in one pass."></head><body>
 
     <a class="navbar-brand me-2" href="../index.html">RWisecondorX</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.0.0.9000</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.0.0.9001</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -91,6 +91,14 @@ files are read in one pass.</p>
     <div class="section level2">
     <h2 id="value">Value<a class="anchor" aria-label="anchor" href="#value"></a></h2>
     <p>A <code>NIPTeRControlGroup</code>.</p>
+    </div>
+    <div class="section level2">
+    <h2 id="details">Details<a class="anchor" aria-label="anchor" href="#details"></a></h2>
+    <p>The column count (5 or 9) is detected automatically from the first file:
+5-column BEDs produce a <code>CombinedStrands</code> control group;
+9-column BEDs (written by <code>nipter_bin_bam_bed(separate_strands = TRUE)</code>)
+produce a <code>SeparatedStrands</code> control group. All files in the directory
+must have the same column count.</p>
     </div>
     <div class="section level2">
     <h2 id="see-also">See also<a class="anchor" aria-label="anchor" href="#see-also"></a></h2>

@@ -17,13 +17,13 @@
 ## Citation
 
 Toure S (2026). *RWisecondorX: An 'R' Port of 'WisecondorX' for Copy
-Number Analysis using 'Duckhts'*. R package version 0.0.0.9000,
+Number Analysis using 'Duckhts'*. R package version 0.0.0.9001,
 <https://sounkou-bioinfo.github.io/RWisecondorX/>.
 
     @Manual{,
       title = {RWisecondorX: An 'R' Port of 'WisecondorX' for Copy Number Analysis using 'Duckhts'},
       author = {Sounkou Mahamane Toure},
       year = {2026},
-      note = {R package version 0.0.0.9000},
+      note = {R package version 0.0.0.9001},
       url = {https://sounkou-bioinfo.github.io/RWisecondorX/},
     }

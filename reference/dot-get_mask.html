@@ -11,7 +11,7 @@ are masked out. Mirrors newref_tools.get_mask() in upstream WisecondorX."></head
 
     <a class="navbar-brand me-2" href="../index.html">RWisecondorX</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.0.0.9000</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.0.0.9001</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -44,7 +44,7 @@ are masked out. Mirrors <code>newref_tools.get_mask()</code> in upstream Wisecon
 
     <div class="section level2">
     <h2 id="ref-usage">Usage<a class="anchor" aria-label="anchor" href="#ref-usage"></a></h2>
-    <div class="sourceCode"><pre class="sourceCode r"><code><span><span class="fu">.get_mask</span><span class="op">(</span><span class="va">samples</span><span class="op">)</span></span></code></pre></div>
+    <div class="sourceCode"><pre class="sourceCode r"><code><span><span class="fu">.get_mask</span><span class="op">(</span><span class="va">samples</span>, ref_bins_per_chr <span class="op">=</span> <span class="cn">NULL</span><span class="op">)</span></span></code></pre></div>
     </div>
 
     <div class="section level2">
@@ -54,6 +54,14 @@ are masked out. Mirrors <code>newref_tools.get_mask()</code> in upstream Wisecon
 <dl><dt id="arg-samples">samples<a class="anchor" aria-label="anchor" href="#arg-samples"></a></dt>
 <dd><p>List of sample objects (each a named list of integer vectors
 keyed by chromosome <code>"1"</code>–<code>"24"</code>).</p></dd>
+
+
+<dt id="arg-ref-bins-per-chr">ref_bins_per_chr<a class="anchor" aria-label="anchor" href="#arg-ref-bins-per-chr"></a></dt>
+<dd><p>Optional integer vector of length 24 giving the
+minimum number of bins per chromosome. When supplied (e.g. from the global
+mask), each chromosome is zero-padded to at least this many bins so that
+the returned mask has the same length as the global mask. This avoids
+length mismatches when combining gender-specific masks with <code>&amp;</code>.</p></dd>
 
 </dl></div>
     <div class="section level2">

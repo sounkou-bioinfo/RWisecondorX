@@ -13,7 +13,7 @@ univariate sex predictor used in clinical NIPT pipelines."></head><body>
 
     <a class="navbar-brand me-2" href="../index.html">RWisecondorX</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.0.0.9000</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.0.0.9001</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -50,8 +50,8 @@ univariate sex predictor used in clinical NIPT pipelines.</p>
     <div class="sourceCode"><pre class="sourceCode r"><code><span><span class="fu">nipter_y_unique_ratio</span><span class="op">(</span></span>
 <span>  <span class="va">bam</span>,</span>
 <span>  mapq <span class="op">=</span> <span class="fl">1L</span>,</span>
-<span>  exclude_flags <span class="op">=</span> <span class="fl">0L</span>,</span>
 <span>  require_flags <span class="op">=</span> <span class="fl">0L</span>,</span>
+<span>  exclude_flags <span class="op">=</span> <span class="fl">0L</span>,</span>
 <span>  regions_file <span class="op">=</span> <span class="cn">NULL</span>,</span>
 <span>  con <span class="op">=</span> <span class="cn">NULL</span>,</span>
 <span>  reference <span class="op">=</span> <span class="cn">NULL</span></span>
@@ -70,14 +70,14 @@ univariate sex predictor used in clinical NIPT pipelines.</p>
 <dd><p>Minimum mapping quality. Default <code>1L</code>.</p></dd>
 
 
-<dt id="arg-exclude-flags">exclude_flags<a class="anchor" aria-label="anchor" href="#arg-exclude-flags"></a></dt>
-<dd><p>Integer bitmask; reads with any of these flags set
-are dropped (samtools <code>-F</code>). Default <code>0L</code>.</p></dd>
-
-
 <dt id="arg-require-flags">require_flags<a class="anchor" aria-label="anchor" href="#arg-require-flags"></a></dt>
 <dd><p>Integer bitmask; only reads with all bits set are
 kept (samtools <code>-f</code>). Default <code>0L</code>.</p></dd>
+
+
+<dt id="arg-exclude-flags">exclude_flags<a class="anchor" aria-label="anchor" href="#arg-exclude-flags"></a></dt>
+<dd><p>Integer bitmask; reads with any of these flags set
+are dropped (samtools <code>-F</code>). Default <code>0L</code>.</p></dd>
 
 
 <dt id="arg-regions-file">regions_file<a class="anchor" aria-label="anchor" href="#arg-regions-file"></a></dt>

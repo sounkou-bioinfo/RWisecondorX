@@ -21,7 +21,7 @@
 - [`nipter_bin_bam()`](https://sounkou-bioinfo.github.io/RWisecondorX/reference/nipter_bin_bam.md)
   : Bin a BAM/CRAM file — NIPTeR style
 - [`nipter_bin_bam_bed()`](https://sounkou-bioinfo.github.io/RWisecondorX/reference/nipter_bin_bam_bed.md)
-  : Write NIPTeR-style bin counts to a bgzipped BED file
+  : Bin a BAM/CRAM and write NIPTeR-style counts to a bgzipped BED
 - [`nipter_chi_correct()`](https://sounkou-bioinfo.github.io/RWisecondorX/reference/nipter_chi_correct.md)
   : Chi-squared correction for overdispersed bins
 - [`nipter_control_group_from_beds()`](https://sounkou-bioinfo.github.io/RWisecondorX/reference/nipter_control_group_from_beds.md)
@@ -42,6 +42,8 @@
   : Predict fetal sex for a NIPTeR sample
 - [`nipter_regression()`](https://sounkou-bioinfo.github.io/RWisecondorX/reference/nipter_regression.md)
   : Regression-based Z-score for trisomy prediction
+- [`nipter_sample_to_bed()`](https://sounkou-bioinfo.github.io/RWisecondorX/reference/nipter_sample_to_bed.md)
+  : Write an in-memory NIPTeRSample to a bgzipped BED file
 - [`nipter_sex_model()`](https://sounkou-bioinfo.github.io/RWisecondorX/reference/nipter_sex_model.md)
   : Build a sex prediction model from a NIPTeR control group
 - [`nipter_sex_model_y_unique()`](https://sounkou-bioinfo.github.io/RWisecondorX/reference/nipter_sex_model_y_unique.md)

@@ -48,6 +48,14 @@ nipter_control_group_from_beds(
 
 A `NIPTeRControlGroup`.
 
+## Details
+
+The column count (5 or 9) is detected automatically from the first file:
+5-column BEDs produce a `CombinedStrands` control group; 9-column BEDs
+(written by `nipter_bin_bam_bed(separate_strands = TRUE)`) produce a
+`SeparatedStrands` control group. All files in the directory must have
+the same column count.
+
 ## See also
 
 [`nipter_bin_bam_bed()`](https://sounkou-bioinfo.github.io/RWisecondorX/reference/nipter_bin_bam_bed.md),

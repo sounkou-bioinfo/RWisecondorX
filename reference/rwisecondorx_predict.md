@@ -23,7 +23,7 @@ rwisecondorx_predict(
   gender = NULL,
   seed = NULL,
   parallel = TRUE,
-  cpus = 1L
+  cpus = 4L
 )
 ```
 
@@ -98,7 +98,7 @@ rwisecondorx_predict(
 - cpus:
 
   Integer; number of threads for parallel CBS (`parSegment`) and any
-  other OpenMP-accelerated steps. Default `1L`.
+  other OpenMP-accelerated steps. Default `4L`.
 
 ## Value
 

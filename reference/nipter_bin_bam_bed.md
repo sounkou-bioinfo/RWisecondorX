@@ -1,7 +1,10 @@
-# Write NIPTeR-style bin counts to a bgzipped BED file
+# Bin a BAM/CRAM and write NIPTeR-style counts to a bgzipped BED
 
-Bins a BAM/CRAM file with NIPTeR defaults and writes the result to a
-bgzipped, tabix-indexed BED file.
+Convenience wrapper that bins a BAM/CRAM with
+[`nipter_bin_bam()`](https://sounkou-bioinfo.github.io/RWisecondorX/reference/nipter_bin_bam.md)
+and immediately writes the result via
+[`nipter_sample_to_bed()`](https://sounkou-bioinfo.github.io/RWisecondorX/reference/nipter_sample_to_bed.md).
+The BAM is read exactly once.
 
 ## Usage
 
@@ -15,7 +18,6 @@ nipter_bin_bam_bed(
   exclude_flags = 0L,
   rmdup = c("none", "flag"),
   separate_strands = FALSE,
-  corrected = NULL,
   con = NULL,
   reference = NULL,
   index = TRUE
@@ -60,14 +62,7 @@ nipter_bin_bam_bed(
 - separate_strands:
 
   Logical; when `TRUE`, includes separate `count_fwd` and `count_rev`
-  columns for forward- and reverse-strand counts. Default `FALSE`.
-
-- corrected:
-
-  Optional `NIPTeRSample` already processed by
-  [`nipter_gc_correct()`](https://sounkou-bioinfo.github.io/RWisecondorX/reference/nipter_gc_correct.md).
-  When supplied, its corrected counts populate the `corrected_count`
-  column; otherwise the column is `NA`.
+  columns. Default `FALSE`.
 
 - con:
 
@@ -87,20 +82,26 @@ nipter_bin_bam_bed(
 
 ## Details
 
-When `separate_strands = FALSE` (default), the output has five columns:
-`chrom`, `start`, `end`, `count`, `corrected_count`.
+If you need to GC-correct the sample before writing, call
+[`nipter_bin_bam()`](https://sounkou-bioinfo.github.io/RWisecondorX/reference/nipter_bin_bam.md)
+and
+[`nipter_gc_correct()`](https://sounkou-bioinfo.github.io/RWisecondorX/reference/nipter_gc_correct.md)
+yourself, then pass both to
+[`nipter_sample_to_bed()`](https://sounkou-bioinfo.github.io/RWisecondorX/reference/nipter_sample_to_bed.md).
+That avoids reading the BAM a second time.
 
-When `separate_strands = TRUE`, the output has nine columns: `chrom`,
-`start`, `end`, `count`, `count_fwd`, `count_rev`, `corrected_count`,
-`corrected_fwd`, `corrected_rev`. `count` is the total (forward +
-reverse); `corrected_count` is the total of the per-strand corrected
-values.
+Column layout:
 
-`corrected_count` (and `corrected_fwd`/`corrected_rev`) is `NA` until a
-GC-corrected sample is supplied via the `corrected` parameter.
+- **CombinedStrands** (default): 5 columns — `chrom`, `start`, `end`,
+  `count`, `corrected_count`.
+
+- **SeparatedStrands** (`separate_strands = TRUE`): 9 columns — `chrom`,
+  `start`, `end`, `count`, `count_fwd`, `count_rev`, `corrected_count`,
+  `corrected_fwd`, `corrected_rev`.
 
 ## See also
 
+[`nipter_sample_to_bed()`](https://sounkou-bioinfo.github.io/RWisecondorX/reference/nipter_sample_to_bed.md),
 [`nipter_bin_bam()`](https://sounkou-bioinfo.github.io/RWisecondorX/reference/nipter_bin_bam.md),
 [`nipter_gc_correct()`](https://sounkou-bioinfo.github.io/RWisecondorX/reference/nipter_gc_correct.md),
 [`bam_convert_bed()`](https://sounkou-bioinfo.github.io/RWisecondorX/reference/bam_convert_bed.md)

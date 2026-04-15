@@ -11,13 +11,16 @@ suitable for
 
 ``` r
 rwisecondorx_newref(
-  samples,
+  samples = NULL,
   binsize = 100000L,
   sample_binsizes = NULL,
   nipt = FALSE,
   refsize = 300L,
   yfrac = NULL,
-  cpus = 1L
+  cpus = 4L,
+  bed_dir = NULL,
+  bed_pattern = "*.bed.gz",
+  con = NULL
 )
 ```
 
@@ -28,12 +31,13 @@ rwisecondorx_newref(
   List of sample objects, each a named list of integer vectors keyed by
   chromosome (`"1"`–`"24"`), as returned by
   [`bam_convert()`](https://sounkou-bioinfo.github.io/RWisecondorX/reference/bam_convert.md).
-  At least 10 samples are required.
+  At least 10 samples are required. Mutually exclusive with `bed_dir`.
 
 - binsize:
 
   Integer; the target bin size in base pairs. All samples are rescaled
-  to this size. Default `100000L`.
+  to this size. Default `100000L`. Inferred from BED files when
+  `bed_dir` is supplied and `sample_binsizes` is `NULL`.
 
 - sample_binsizes:
 
@@ -57,7 +61,25 @@ rwisecondorx_newref(
 
 - cpus:
 
-  Integer; number of threads for reference bin finding. Default `1L`.
+  Integer; number of threads for reference bin finding. Default `4L`.
+
+- bed_dir:
+
+  Optional character; path to a directory of 4-column bgzipped BED files
+  (as written by
+  [`bam_convert_bed()`](https://sounkou-bioinfo.github.io/RWisecondorX/reference/bam_convert_bed.md)).
+  All files matching `bed_pattern` are loaded in a single DuckDB pass
+  via `rduckhts_tabix_multi()`. Mutually exclusive with `samples`.
+
+- bed_pattern:
+
+  Glob pattern for matching BED files inside `bed_dir`. Default
+  `"*.bed.gz"`.
+
+- con:
+
+  Optional existing DuckDB connection. Used only when `bed_dir` is
+  supplied. A temporary connection is created (and closed) if `NULL`.
 
 ## Value
 

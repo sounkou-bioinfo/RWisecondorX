@@ -7,7 +7,7 @@
 
     <a class="navbar-brand me-2" href="index.html">RWisecondorX</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.0.0.9000</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.0.0.9001</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -58,7 +58,7 @@
 <p><strong>Shared binning engine — <code>R/convert.R</code></strong> - <code><a href="reference/bam_convert.html">bam_convert()</a></code>: DuckDB/SQL read-counting core. Supports <code>binsize</code>, <code>mapq</code>, <code>require_flags</code> (samtools <code>-f</code>), <code>exclude_flags</code> (samtools <code>-F</code>), <code>rmdup</code> (<code>"streaming"</code> / <code>"flag"</code> / <code>"none"</code>), <code>separate_strands</code> (returns list of forward/reverse data frames), CRAM via <code>reference</code>. Achieves exact bin-for-bin conformance with WisecondorX on HG00106.chrom11 (25,115 non-zero bins, 0 mismatches). - <code><a href="reference/bam_convert_bed.html">bam_convert_bed()</a></code>: bgzipped + tabix-indexed 4-column BED output (<code>chrom</code>, <code>start</code>, <code>end</code>, <code>count</code>). Uses <code><a href="https://rgenomicsetl.r-universe.dev/Rduckhts/reference/rduckhts_bgzip.html" class="external-link">Rduckhts::rduckhts_bgzip()</a></code> and <code>rduckhts_tabix_index()</code> — no external tools.</p>
 <p><strong>WisecondorX layer</strong> - <code>R/wisecondorx_cli.R</code>: <code><a href="reference/wisecondorx_convert.html">wisecondorx_convert()</a></code>, <code><a href="reference/wisecondorx_newref.html">wisecondorx_newref()</a></code>, <code><a href="reference/wisecondorx_predict.html">wisecondorx_predict()</a></code> — thin <code>condathis</code> wrappers delegating to the official bioconda package. - <code>R/npz.R</code>: <code><a href="reference/bam_convert_npz.html">bam_convert_npz()</a></code> — WisecondorX-compatible NPZ output via <code>reticulate</code>.</p>
 <p><strong>NIPTeR binning layer — <code>R/nipter_bin.R</code></strong> - <code><a href="reference/nipter_bin_bam.html">nipter_bin_bam()</a></code>: produces <code>NIPTeRSample</code> objects. With <code>separate_strands = FALSE</code> (default), class is <code>c("NIPTeRSample", "CombinedStrands")</code>; with <code>separate_strands = TRUE</code>, class is <code>c("NIPTeRSample", "SeparatedStrands")</code> with <code>autosomal_chromosome_reads</code> as a list of two matrices (forward/reverse, rownames <code>"1F".."22F"</code> / <code>"1R".."22R"</code>). Exposes <code>mapq</code>, <code>require_flags</code>, <code>exclude_flags</code>, <code>rmdup</code> for pre-filtering matching real-world NIPT pipelines (e.g. <code>mapq=40L, exclude_flags=1024L</code>). - <code><a href="reference/nipter_bin_bam_bed.html">nipter_bin_bam_bed()</a></code>: BED output with <code>separate_strands</code> support. When <code>FALSE</code> (default): 5-column BED (<code>chrom</code>, <code>start</code>, <code>end</code>, <code>count</code>, <code>corrected_count</code>). When <code>TRUE</code>: 9-column BED (<code>chrom</code>, <code>start</code>, <code>end</code>, <code>count</code>, <code>count_fwd</code>, <code>count_rev</code>, <code>corrected_count</code>, <code>corrected_fwd</code>, <code>corrected_rev</code>).</p>
-<p><strong>Tests</strong> - <code>inst/tinytest/test_fixtures.R</code> (41 assertions): synthetic BAM/CRAM fixtures, all three <code>rmdup</code> modes, CRAM reference round-trip. - <code>inst/tinytest/test_nipter.R</code> (47 assertions): <code>NIPTeRSample</code> structure, matrix dimensions and rownames, MAPQ filter, <code>exclude_flags=1024</code> dedup, BED.gz output shape, optional bin-for-bin conformance against <code><a href="https://rdrr.io/pkg/NIPTeR/man/bin_bam_sample.html" class="external-link">NIPTeR::bin_bam_sample()</a></code> via <code>NIPTER_CONFORMANCE_BAM</code> env var. - <code>inst/tinytest/test_cli_args.R</code>: CLI argument builder unit tests. - <code>inst/tinytest/test_npz.R</code>: NPZ round-trip tests. - <code>inst/tinytest/test_integration.R</code>: WisecondorX bin-for-bin conformance via condathis. - <code>inst/tinytest/test_sra_metadata.R</code>: SRA URL helpers.</p>
+<p><strong>Tests</strong> - <code>inst/tinytest/test_fixtures.R</code> (41 assertions): synthetic BAM/CRAM fixtures, all three <code>rmdup</code> modes, CRAM reference round-trip. - <code>inst/tinytest/test_nipter.R</code> (47 assertions): <code>NIPTeRSample</code> structure, matrix dimensions and rownames, MAPQ filter, <code>exclude_flags=1024</code> dedup, BED.gz output shape, and bin-for-bin conformance against <code><a href="https://rdrr.io/pkg/NIPTeR/man/bin_bam_sample.html" class="external-link">NIPTeR::bin_bam_sample()</a></code> using the bundled whole-genome fixture by default (<code>NIPTER_CONFORMANCE_BAM</code> remains an override). - <code>inst/tinytest/test_cli_args.R</code>: CLI argument builder unit tests. - <code>inst/tinytest/test_npz.R</code>: NPZ round-trip tests. - <code>inst/tinytest/test_integration.R</code>: WisecondorX bin-for-bin conformance via condathis. - <code>inst/tinytest/test_sra_metadata.R</code>: SRA URL helpers.</p>
 <p><strong>Infrastructure</strong> - <code>R/aaa.R</code>: SRA metadata helpers. - <code>scripts/make_fixtures.sh</code>: reproducible synthetic BAM/CRAM fixture generation. - <code>DESCRIPTION</code>: NIPTeR authors (Dirk de Weerd, Lennart Johansson) listed as <code>cph</code>. NIPTeR added to <code>Suggests</code>.</p>
 <p><strong>NIPTeR statistical layer</strong></p>
 <p>Each file is strictly separate; never mix NIPTeR and WisecondorX code. All statistical functions support both CombinedStrands and SeparatedStrands samples.</p>
@@ -124,7 +124,7 @@
 <li>
 <strong>Sex-stratified regression for X/Y</strong>: Forward stepwise <code><a href="https://rdrr.io/r/stats/lm.html" class="external-link">lm()</a></code> models for X and Y fractions, stratified by predicted sex. Not yet implemented.</li>
 <li>
-<strong>Multi-chromosome NIPTeR conformance fixture</strong>: <code>make fixtures</code> currently produces a chr11-only BAM. A multi-chromosome synthetic BAM (all 24 chroms, no unmapped reads, no same-position collisions) would allow <code>NIPTER_CONFORMANCE_BAM</code> to be populated automatically in CI without a real patient BAM.</li>
+<strong>Multi-chromosome NIPTeR conformance fixture</strong>: bundled as <code>inst/extdata/nipter_conformance_fixture.bam</code> and regenerated by <code>make fixtures</code> / <code>make nipter-fixture</code>. It contains all 24 chromosomes, no unmapped reads, and no same-position collisions, so installed-package conformance tests do not require an external BAM.</li>
 </ul><p><strong>Native WisecondorX layer — what remains</strong></p>
 <p>The pipeline (<code>newref</code> + <code>predict</code>) is functionally complete and all 76 unit tests + 31 cohort pipeline tests pass. The remaining work is validation and extension:</p>
 <ul><li>
@@ -132,7 +132,7 @@
 <li>
 <strong>WisecondorX reference as interoperable file</strong>: The <code>WisecondorXReference</code> object is currently serialized as an RDS file. The matrices (PCA components, mask, indexes, distances, null_ratios) are dense numeric arrays that don’t map naturally to a flat BED/TSV. A structured HDF5 or multiple-TSV.bgz serialization would allow Python tooling to read the reference. Not a priority unless the user has a Python consumer.</li>
 <li>
-<strong><code><a href="reference/rwisecondorx_newref.html">rwisecondorx_newref()</a></code> multi-file input via tabix_multi</strong>: Currently takes a list of in-memory sample lists. Could accept a bed_dir argument using <code>rduckhts_tabix_multi()</code> to load all WisecondorX 4-column BEDs at once, analogous to <code><a href="reference/nipter_control_group_from_beds.html">nipter_control_group_from_beds()</a></code>.</li>
+<strong><code><a href="reference/rwisecondorx_newref.html">rwisecondorx_newref()</a></code> multi-file input via tabix_multi</strong>: <del>Currently takes a list of in-memory sample lists. Could accept a bed_dir argument using <code>rduckhts_tabix_multi()</code> to load all WisecondorX 4-column BEDs at once, analogous to <code><a href="reference/nipter_control_group_from_beds.html">nipter_control_group_from_beds()</a></code>.</del> <strong>DONE</strong> — <code><a href="reference/rwisecondorx_newref.html">rwisecondorx_newref()</a></code> now accepts <code>bed_dir</code> and <code>bed_pattern</code> parameters.</li>
 <li>
 <strong>Threading budget propagation</strong>: <code><a href="reference/rwisecondorx_newref.html">rwisecondorx_newref()</a></code> accepts <code>cpus</code> for KNN finding. <code><a href="reference/rwisecondorx_predict.html">rwisecondorx_predict()</a></code> now accepts <code>cpus</code> and passes it to <code>parSegment()</code>. Both should be wired together coherently when called from a pipeline script — use the same <code>cpus</code> value throughout.</li>
 <li>
@@ -190,9 +190,15 @@
 <li>
 <code>inst/tinytest/</code> — unit tests (one file per feature family).</li>
 <li>
-<code>inst/extdata/</code> — synthetic BAM/CRAM fixtures and bundled reference data (<code>grch37_Y_UniqueRegions.txt</code>).</li>
+<code>inst/extdata/</code> — synthetic BAM/CRAM fixtures (including <code>nipter_conformance_fixture.bam</code>) and bundled reference data (<code>grch37_Y_UniqueRegions.txt</code>).</li>
 <li>
 <code>inst/scripts/make_cohort.R</code> — CLI wrapper for cohort generation.</li>
+<li>
+<code>inst/scripts/build_reference.R</code> — optparse CLI for building WisecondorX references or NIPTeR control groups from BAM/CRAM or BED.gz files. Supports <code>--mode wisecondorx|nipter</code>, <code>--bam-dir</code>/<code>--bam-list</code> (bins then builds), <code>--bed-dir</code>/<code>--bed-list</code> (builds from pre-binned BEDs), <code>--gc-table</code> or <code>--fasta</code> (NIPTeR GC correction during binning, mutually exclusive), <code>--bed-out-dir</code>, and all key parameters (binsize, mapq, rmdup, refsize, cpus, etc.).</li>
+<li>
+<code>inst/scripts/convert_sample.R</code> — optparse CLI for converting a single BAM/CRAM to a binned BED.gz or NPZ file. Supports <code>--mode wisecondorx|nipter</code>, <code>--npz</code> (WisecondorX NPZ output for Python interop), <code>--gc-table</code> or <code>--fasta</code> (NIPTeR GC correction, mutually exclusive), <code>--separate-strands</code>, and all binning parameters (binsize, mapq, rmdup, exclude-flags, require-flags, reference).</li>
+<li>
+<code>inst/scripts/precompute_gc.R</code> — optparse CLI for precomputing per-bin GC content from a reference FASTA. Wraps <code><a href="reference/nipter_gc_precompute.html">nipter_gc_precompute()</a></code>. Accepts <code>--fasta</code>, <code>--out</code>, <code>--binsize</code>. Output is a TSV.bgz+tbi that can be passed to <code>--gc-table</code> in the other scripts or to <code>nipter_gc_correct(gc_table = ...)</code>.</li>
 <li>The WisecondorX upstream algorithm reference is <code>.sync/WisecondorX/</code>.</li>
 <li>The NIPTeR upstream algorithm reference is <code>.sync/NIPTeR/</code>.</li>
 <li>The WisecondorX conformance script is <code>../../duckhts/scripts/wisecondorx_convert_conformance.py</code>.</li>
@@ -200,7 +206,7 @@
 </ul><hr></div>
 <div class="section level2">
 <h2 id="interoperable-file-formats">Interoperable File Formats<a class="anchor" aria-label="anchor" href="#interoperable-file-formats"></a></h2>
-<p>Our “BED.gz” files are <strong>BGZF-compressed, tabix-indexed TSV files</strong> that use BED coordinate conventions (0-based half-open intervals, no <code>chr</code> prefix). They are not strict BED files — they have more than 3 columns and the extra columns are not standard BED fields. Always read them with <code>read_tabix()</code> (DuckDB SQL) or <code>Rduckhts::rduckhts_tabix_multi()</code>, never with <code><a href="https://rdrr.io/r/utils/read.table.html" class="external-link">read.table()</a></code> or BED-aware parsers that assume 3-column BED semantics.</p>
+<p>Our “BED.gz” files are <strong>BGZF-compressed, tabix-indexed TSV files</strong> that use BED coordinate conventions (0-based half-open intervals, no <code>chr</code> prefix). They are not strict BED files — they have more than 3 columns and the extra columns are not standard BED fields. Always read them with <code>read_tabix()</code> (DuckDB SQL) or <code><a href="https://rgenomicsetl.r-universe.dev/Rduckhts/reference/rduckhts_tabix_multi.html" class="external-link">Rduckhts::rduckhts_tabix_multi()</a></code>, never with <code><a href="https://rdrr.io/r/utils/read.table.html" class="external-link">read.table()</a></code> or BED-aware parsers that assume 3-column BED semantics.</p>
 <ul><li>
 <strong>4-column WisecondorX TSV.bgz</strong>: <code>chrom</code>, <code>start</code>, <code>end</code>, <code>count</code> (written by <code><a href="reference/bam_convert_bed.html">bam_convert_bed()</a></code>).</li>
 <li>
@@ -313,11 +319,11 @@
 </ul></div>
 <div class="section level2">
 <h2 id="conformance-testing-rules">Conformance Testing Rules<a class="anchor" aria-label="anchor" href="#conformance-testing-rules"></a></h2>
-<ul><li>Conformance tests skip cleanly when <code>condathis</code>, <code>reticulate</code>, or required BAMs are unavailable.</li>
+<ul><li>Conformance tests skip cleanly when <code>condathis</code>, <code>reticulate</code>, or required external tools/packages are unavailable.</li>
 <li>
 <code>WISECONDORX_TEST_BAM</code> — a human BAM for WisecondorX integration tests.</li>
 <li>
-<code>NIPTER_CONFORMANCE_BAM</code> — a coordinate-sorted, pre-filtered (no unmapped reads, no same-position strand collisions) whole-genome BAM for NIPTeR conformance.</li>
+<code>NIPTER_CONFORMANCE_BAM</code> — optional override for the bundled coordinate-sorted, pre-filtered (no unmapped reads, no same-position strand collisions) whole-genome BAM used for NIPTeR conformance.</li>
 </ul></div>
 <div class="section level2">
 <h2 id="testing-rules">Testing Rules<a class="anchor" aria-label="anchor" href="#testing-rules"></a></h2>

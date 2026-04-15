@@ -63,7 +63,7 @@ nipter_gc_correct(
 ## Value
 
 A corrected copy of `object` with the same class. Correction status is
-updated from `"Uncorrected"` to `"GC corrected"`.
+updated from `"Uncorrected"` to `"GC Corrected"`.
 
 ## Details
 

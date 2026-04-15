@@ -6,7 +6,7 @@ and serialises the resulting bin-count list to a `.npz` file that is
 byte-compatible with the file written by `wisecondorx convert`. The NPZ
 must be created by numpy so that `wisecondorx newref` can load it; this
 function therefore requires `reticulate` and a Python environment with
-`numpy` installed (any version ≥ 1.16 works — the format is stable).
+`numpy` installed; any numpy version from 1.16 onward works.
 
 ## Usage
 
@@ -15,6 +15,9 @@ bam_convert_npz(
   bam,
   npz,
   binsize = 5000L,
+  mapq = 1L,
+  require_flags = 0L,
+  exclude_flags = 0L,
   rmdup = c("streaming", "none", "flag"),
   con = NULL,
   np = NULL,
@@ -35,6 +38,21 @@ bam_convert_npz(
 - binsize:
 
   Bin size in base pairs (default 5000).
+
+- mapq:
+
+  Minimum mapping quality passed to
+  [`bam_convert()`](https://sounkou-bioinfo.github.io/RWisecondorX/reference/bam_convert.md).
+
+- require_flags:
+
+  Integer bitmask of required SAM flags passed to
+  [`bam_convert()`](https://sounkou-bioinfo.github.io/RWisecondorX/reference/bam_convert.md).
+
+- exclude_flags:
+
+  Integer bitmask of excluded SAM flags passed to
+  [`bam_convert()`](https://sounkou-bioinfo.github.io/RWisecondorX/reference/bam_convert.md).
 
 - rmdup:
 
@@ -60,6 +78,29 @@ bam_convert_npz(
 ## Value
 
 `npz` (invisibly).
+
+## Details
+
+The resulting NPZ has three top-level keys:
+
+- `sample`:
+
+  0-d object array wrapping a dict mapping `"1"`..`"24"` to int32 arrays
+  (chromosome bin counts).
+
+- `binsize`:
+
+  Scalar int (bin size in bp).
+
+- `quality`:
+
+  0-d object array wrapping a dict of QC counters (populated with zeros
+  since the native binning kernel does not track per-read filter stats).
+
+When the writer's numpy is \>= 2.0 the internal pickle references
+`numpy._core`, which older numpy (\< 2.0) cannot unpickle. This function
+patches the pickle bytestream to use `numpy.core` so the NPZ is readable
+by both numpy 1.x and 2.x.
 
 ## See also
 

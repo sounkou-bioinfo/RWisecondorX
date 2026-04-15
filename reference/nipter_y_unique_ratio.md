@@ -11,8 +11,8 @@ predictor used in clinical NIPT pipelines.
 nipter_y_unique_ratio(
   bam,
   mapq = 1L,
-  exclude_flags = 0L,
   require_flags = 0L,
+  exclude_flags = 0L,
   regions_file = NULL,
   con = NULL,
   reference = NULL
@@ -29,15 +29,15 @@ nipter_y_unique_ratio(
 
   Minimum mapping quality. Default `1L`.
 
-- exclude_flags:
-
-  Integer bitmask; reads with any of these flags set are dropped
-  (samtools `-F`). Default `0L`.
-
 - require_flags:
 
   Integer bitmask; only reads with all bits set are kept (samtools
   `-f`). Default `0L`.
+
+- exclude_flags:
+
+  Integer bitmask; reads with any of these flags set are dropped
+  (samtools `-F`). Default `0L`.
 
 - regions_file:
 

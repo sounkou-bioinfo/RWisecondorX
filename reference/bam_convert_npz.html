@@ -3,13 +3,13 @@
 .npz file that is byte-compatible with the file written by
 wisecondorx convert.  The NPZ must be created by numpy so that
 wisecondorx newref can load it; this function therefore requires
-reticulate and a Python environment with numpy installed (any version
-≥ 1.16 works — the format is stable)."><meta property="og:description" content="Runs bam_convert() and serialises the resulting bin-count list to a
+reticulate and a Python environment with numpy installed; any numpy
+version from 1.16 onward works."><meta property="og:description" content="Runs bam_convert() and serialises the resulting bin-count list to a
 .npz file that is byte-compatible with the file written by
 wisecondorx convert.  The NPZ must be created by numpy so that
 wisecondorx newref can load it; this function therefore requires
-reticulate and a Python environment with numpy installed (any version
-≥ 1.16 works — the format is stable)."></head><body>
+reticulate and a Python environment with numpy installed; any numpy
+version from 1.16 onward works."></head><body>
     <a href="#main" class="visually-hidden-focusable">Skip to contents</a>
 
 
@@ -17,7 +17,7 @@ reticulate and a Python environment with numpy installed (any version
 
     <a class="navbar-brand me-2" href="../index.html">RWisecondorX</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.0.0.9000</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.0.0.9001</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -47,8 +47,8 @@ reticulate and a Python environment with numpy installed (any version
 <code>.npz</code> file that is byte-compatible with the file written by
 <code>wisecondorx convert</code>.  The NPZ must be created by numpy so that
 <code>wisecondorx newref</code> can load it; this function therefore requires
-<code>reticulate</code> and a Python environment with <code>numpy</code> installed (any version
-≥ 1.16 works — the format is stable).</p>
+<code>reticulate</code> and a Python environment with <code>numpy</code> installed; any numpy
+version from 1.16 onward works.</p>
     </div>
 
     <div class="section level2">
@@ -57,6 +57,9 @@ reticulate and a Python environment with numpy installed (any version
 <span>  <span class="va">bam</span>,</span>
 <span>  <span class="va">npz</span>,</span>
 <span>  binsize <span class="op">=</span> <span class="fl">5000L</span>,</span>
+<span>  mapq <span class="op">=</span> <span class="fl">1L</span>,</span>
+<span>  require_flags <span class="op">=</span> <span class="fl">0L</span>,</span>
+<span>  exclude_flags <span class="op">=</span> <span class="fl">0L</span>,</span>
 <span>  rmdup <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"streaming"</span>, <span class="st">"none"</span>, <span class="st">"flag"</span><span class="op">)</span>,</span>
 <span>  con <span class="op">=</span> <span class="cn">NULL</span>,</span>
 <span>  np <span class="op">=</span> <span class="cn">NULL</span>,</span>
@@ -78,6 +81,20 @@ reticulate and a Python environment with numpy installed (any version
 
 <dt id="arg-binsize">binsize<a class="anchor" aria-label="anchor" href="#arg-binsize"></a></dt>
 <dd><p>Bin size in base pairs (default 5000).</p></dd>
+
+
+<dt id="arg-mapq">mapq<a class="anchor" aria-label="anchor" href="#arg-mapq"></a></dt>
+<dd><p>Minimum mapping quality passed to <code><a href="bam_convert.html">bam_convert()</a></code>.</p></dd>
+
+
+<dt id="arg-require-flags">require_flags<a class="anchor" aria-label="anchor" href="#arg-require-flags"></a></dt>
+<dd><p>Integer bitmask of required SAM flags passed to
+<code><a href="bam_convert.html">bam_convert()</a></code>.</p></dd>
+
+
+<dt id="arg-exclude-flags">exclude_flags<a class="anchor" aria-label="anchor" href="#arg-exclude-flags"></a></dt>
+<dd><p>Integer bitmask of excluded SAM flags passed to
+<code><a href="bam_convert.html">bam_convert()</a></code>.</p></dd>
 
 
 <dt id="arg-rmdup">rmdup<a class="anchor" aria-label="anchor" href="#arg-rmdup"></a></dt>
@@ -102,6 +119,26 @@ If <code>NULL</code> (default) it is imported automatically.</p></dd>
     <div class="section level2">
     <h2 id="value">Value<a class="anchor" aria-label="anchor" href="#value"></a></h2>
     <p><code>npz</code> (invisibly).</p>
+    </div>
+    <div class="section level2">
+    <h2 id="details">Details<a class="anchor" aria-label="anchor" href="#details"></a></h2>
+    <p>The resulting NPZ has three top-level keys:</p><dl><dt><code>sample</code></dt>
+<dd><p>0-d object array wrapping a dict mapping <code>"1"</code>..<code>"24"</code>
+to int32 arrays (chromosome bin counts).</p></dd>
+
+<dt><code>binsize</code></dt>
+<dd><p>Scalar int (bin size in bp).</p></dd>
+
+<dt><code>quality</code></dt>
+<dd><p>0-d object array wrapping a dict of QC counters
+(populated with zeros since the native binning kernel does not track
+per-read filter stats).</p></dd>
+
+
+</dl><p>When the writer's numpy is &gt;= 2.0 the internal pickle references
+<code>numpy._core</code>, which older numpy (&lt; 2.0) cannot unpickle.  This function
+patches the pickle bytestream to use <code>numpy.core</code> so the NPZ is readable
+by both numpy 1.x and 2.x.</p>
     </div>
     <div class="section level2">
     <h2 id="see-also">See also<a class="anchor" aria-label="anchor" href="#see-also"></a></h2>

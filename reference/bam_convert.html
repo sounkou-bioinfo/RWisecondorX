@@ -13,7 +13,7 @@ for chromosomes 1-22 and the sex chromosomes (X mapped to key "23", Y to
 
     <a class="navbar-brand me-2" href="../index.html">RWisecondorX</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.0.0.9000</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.0.0.9001</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -139,7 +139,10 @@ machine and also enforces the WisecondorX improper-pair rule (paired reads
 that are not properly paired are excluded from both counting and the dedup
 state — this is intrinsic to the algorithm, not a flag option); <code>"flag"</code>
 additionally excludes reads with SAM flag <code>0x400</code> set (Picard / sambamba
-pre-marked duplicates); <code>"none"</code> applies no deduplication.</p>
+pre-marked duplicates); <code>"none"</code> applies no deduplication. The heavy lifting
+is delegated to the native <code>bam_bin_counts(...)</code> kernel bundled in
+<code>Rduckhts</code>; <code>RWisecondorX</code> reshapes that fixed-bin output into the
+chromosome-keyed objects expected by the WisecondorX and NIPTeR layers.</p>
     </div>
     <div class="section level2">
     <h2 id="see-also">See also<a class="anchor" aria-label="anchor" href="#see-also"></a></h2>

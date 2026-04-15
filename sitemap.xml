@@ -3,6 +3,7 @@
 <url><loc>https://sounkou-bioinfo.github.io/RWisecondorX/AGENTS.html</loc></url>
 <url><loc>https://sounkou-bioinfo.github.io/RWisecondorX/LICENSE.html</loc></url>
 <url><loc>https://sounkou-bioinfo.github.io/RWisecondorX/README.WisecondorX.html</loc></url>
+<url><loc>https://sounkou-bioinfo.github.io/RWisecondorX/VALIDATION.html</loc></url>
 <url><loc>https://sounkou-bioinfo.github.io/RWisecondorX/authors.html</loc></url>
 <url><loc>https://sounkou-bioinfo.github.io/RWisecondorX/index.html</loc></url>
 <url><loc>https://sounkou-bioinfo.github.io/RWisecondorX/news/index.html</loc></url>
@@ -13,6 +14,8 @@
 <url><loc>https://sounkou-bioinfo.github.io/RWisecondorX/reference/bed_to_nipter_sample.html</loc></url>
 <url><loc>https://sounkou-bioinfo.github.io/RWisecondorX/reference/bed_to_sample.html</loc></url>
 <url><loc>https://sounkou-bioinfo.github.io/RWisecondorX/reference/dot-apply_blacklist.html</loc></url>
+<url><loc>https://sounkou-bioinfo.github.io/RWisecondorX/reference/dot-bam_chr_lengths.html</loc></url>
+<url><loc>https://sounkou-bioinfo.github.io/RWisecondorX/reference/dot-bed_rows_to_wcx_sample.html</loc></url>
 <url><loc>https://sounkou-bioinfo.github.io/RWisecondorX/reference/dot-build_sub_reference.html</loc></url>
 <url><loc>https://sounkou-bioinfo.github.io/RWisecondorX/reference/dot-call_aberrations.html</loc></url>
 <url><loc>https://sounkou-bioinfo.github.io/RWisecondorX/reference/dot-compute_statistics.html</loc></url>
@@ -62,6 +65,7 @@
 <url><loc>https://sounkou-bioinfo.github.io/RWisecondorX/reference/nipter_ncv_score.html</loc></url>
 <url><loc>https://sounkou-bioinfo.github.io/RWisecondorX/reference/nipter_predict_sex.html</loc></url>
 <url><loc>https://sounkou-bioinfo.github.io/RWisecondorX/reference/nipter_regression.html</loc></url>
+<url><loc>https://sounkou-bioinfo.github.io/RWisecondorX/reference/nipter_sample_to_bed.html</loc></url>
 <url><loc>https://sounkou-bioinfo.github.io/RWisecondorX/reference/nipter_sex_model.html</loc></url>
 <url><loc>https://sounkou-bioinfo.github.io/RWisecondorX/reference/nipter_sex_model_y_unique.html</loc></url>
 <url><loc>https://sounkou-bioinfo.github.io/RWisecondorX/reference/nipter_y_unique_ratio.html</loc></url>

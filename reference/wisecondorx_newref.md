@@ -19,7 +19,7 @@ wisecondorx_newref(
   refsize = 300L,
   yfrac = NULL,
   plotyfrac = NULL,
-  cpus = 1L,
+  cpus = 4L,
   env_name = "wisecondorx",
   extra_args = character(0)
 )
@@ -66,7 +66,7 @@ wisecondorx_newref(
 
 - cpus:
 
-  Number of CPUs to pass to `wisecondorx newref` (default 1).
+  Number of CPUs to pass to `wisecondorx newref` (default 4).
 
 - env_name:
 
@@ -107,7 +107,7 @@ wisecondorx_newref(
   nipt = TRUE,
   refsize = 300L,
   yfrac = 0.05,
-  cpus = 1L
+  cpus = 4L
 )
 } # }
 ```

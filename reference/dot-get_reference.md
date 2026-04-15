@@ -41,7 +41,7 @@ computes null ratios for between-sample Z-scoring.
 
 - cpus:
 
-  Number of threads for parallel computation. Default `1L`.
+  Number of threads for parallel computation.
 
 ## Value
 

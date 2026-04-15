@@ -620,9 +620,11 @@ This is not equivalent to `-F 1024`.
 **Consequence for conformance testing.** Exact bin-for-bin match against
 [`NIPTeR::bin_bam_sample()`](https://rdrr.io/pkg/NIPTeR/man/bin_bam_sample.html)
 requires a BAM with no unmapped reads and no two reads sharing a start
-position per strand. The `NIPTER_CONFORMANCE_BAM` env var must point to
-such a BAM. Our `rmdup = "none"` is the closest mode but counts each
-read independently rather than unique positions.
+position per strand. The package now bundles such a fixture as
+`inst/extdata/nipter_conformance_fixture.bam`; `NIPTER_CONFORMANCE_BAM`
+is only an override for a custom fixture with the same constraints. Our
+`rmdup = "none"` is the closest mode but counts each read independently
+rather than unique positions.
 
 ------------------------------------------------------------------------
 

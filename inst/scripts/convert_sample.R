@@ -136,13 +136,13 @@ if (opts$`separate-strands` && mode != "nipter") {
 # ---------------------------------------------------------------------------
 
 if (mode == "wisecondorx") {
-  binsize <- opts$binsize %||% 5000L
-  mapq    <- opts$mapq    %||% 1L
-  rmdup   <- opts$rmdup   %||% "streaming"
+  binsize <- if (is.null(opts$binsize)) 5000L else opts$binsize
+  mapq    <- if (is.null(opts$mapq)) 1L else opts$mapq
+  rmdup   <- if (is.null(opts$rmdup)) "streaming" else opts$rmdup
 } else {
-  binsize <- opts$binsize %||% 50000L
-  mapq    <- opts$mapq    %||% 0L
-  rmdup   <- opts$rmdup   %||% "none"
+  binsize <- if (is.null(opts$binsize)) 50000L else opts$binsize
+  mapq    <- if (is.null(opts$mapq)) 0L else opts$mapq
+  rmdup   <- if (is.null(opts$rmdup)) "none" else opts$rmdup
 }
 
 library(RWisecondorX)
@@ -162,6 +162,9 @@ if (mode == "wisecondorx") {
       bam       = bam,
       npz       = out,
       binsize   = binsize,
+      mapq      = mapq,
+      require_flags = opts$`require-flags`,
+      exclude_flags = opts$`exclude-flags`,
       rmdup     = rmdup,
       reference = opts$reference
     )
@@ -183,11 +186,17 @@ if (mode == "wisecondorx") {
   # NIPTeR mode
   gc_table <- opts$`gc-table`
   gc_fasta <- opts$fasta
-  corrected_sample <- NULL
+  cat(sprintf("Converting %s → %s (NIPTeR BED%s, binsize=%d, mapq=%d, rmdup=%s)\n",
+              basename(bam), basename(out),
+              if (opts$`separate-strands`) " 9-col" else " 5-col",
+              binsize, mapq, rmdup))
 
   if (!is.null(gc_table) || !is.null(gc_fasta)) {
-    cat(sprintf("Binning %s (NIPTeR, binsize=%d, mapq=%d, rmdup=%s) ...\n",
-                basename(bam), binsize, mapq, rmdup))
+    drv <- duckdb::duckdb(config = list(allow_unsigned_extensions = "true"))
+    con <- DBI::dbConnect(drv)
+    Rduckhts::rduckhts_load(con)
+    on.exit(DBI::dbDisconnect(con, shutdown = TRUE), add = TRUE)
+
     raw_sample <- nipter_bin_bam(
       bam              = bam,
       binsize          = binsize,
@@ -196,34 +205,37 @@ if (mode == "wisecondorx") {
       exclude_flags    = opts$`exclude-flags`,
       rmdup            = rmdup,
       separate_strands = opts$`separate-strands`,
+      con              = con,
       reference        = opts$reference
     )
+
     cat("Applying GC correction ...\n")
-    if (!is.null(gc_table)) {
-      corrected_sample <- nipter_gc_correct(raw_sample, gc_table = gc_table)
+    corrected_sample <- if (!is.null(gc_table)) {
+      nipter_gc_correct(raw_sample, gc_table = gc_table, con = con)
     } else {
-      corrected_sample <- nipter_gc_correct(raw_sample, fasta = gc_fasta,
-                                            binsize = binsize)
+      nipter_gc_correct(raw_sample, fasta = gc_fasta, binsize = binsize, con = con)
     }
+
+    nipter_sample_to_bed(
+      sample    = raw_sample,
+      bed       = out,
+      binsize   = binsize,
+      corrected = corrected_sample,
+      con       = con
+    )
+  } else {
+    nipter_bin_bam_bed(
+      bam              = bam,
+      bed              = out,
+      binsize          = binsize,
+      mapq             = mapq,
+      require_flags    = opts$`require-flags`,
+      exclude_flags    = opts$`exclude-flags`,
+      rmdup            = rmdup,
+      separate_strands = opts$`separate-strands`,
+      reference        = opts$reference
+    )
   }
-
-  cat(sprintf("Converting %s → %s (NIPTeR BED%s, binsize=%d, mapq=%d, rmdup=%s)\n",
-              basename(bam), basename(out),
-              if (opts$`separate-strands`) " 9-col" else " 5-col",
-              binsize, mapq, rmdup))
-
-  nipter_bin_bam_bed(
-    bam              = bam,
-    bed              = out,
-    binsize          = binsize,
-    mapq             = mapq,
-    require_flags    = opts$`require-flags`,
-    exclude_flags    = opts$`exclude-flags`,
-    rmdup            = rmdup,
-    separate_strands = opts$`separate-strands`,
-    corrected        = corrected_sample,
-    reference        = opts$reference
-  )
 }
 
 cat("Done.\n")

@@ -139,3 +139,48 @@ if (!is.null(test_cram) && !is.null(test_ref)) {
 
   expect_true(file.exists(npz_cram), info = "bam_convert_npz supports CRAM inputs with reference")
 }
+
+# ---------------------------------------------------------------------------
+# bam_convert_npz forwards native filter arguments to bam_convert()
+# ---------------------------------------------------------------------------
+
+filter_bam <- .fixture_path("fixture_mixed.bam")
+if (!is.null(filter_bam)) {
+  npz_filtered <- tempfile(fileext = ".npz")
+  on.exit(unlink(npz_filtered), add = TRUE)
+
+  bam_convert_npz(
+    bam = filter_bam,
+    npz = npz_filtered,
+    binsize = 50L,
+    mapq = 0L,
+    require_flags = 2L,
+    exclude_flags = 1024L,
+    rmdup = "none",
+    np = np
+  )
+
+  filtered_bins <- bam_convert(
+    filter_bam,
+    binsize = 50L,
+    mapq = 0L,
+    require_flags = 2L,
+    exclude_flags = 1024L,
+    rmdup = "none"
+  )
+
+  filtered_npz <- np$load(npz_filtered, allow_pickle = TRUE)
+  filtered_sample <- reticulate::py_to_r(filtered_npz["sample"]$item())
+
+  for (k in names(filtered_sample)) {
+    r_vals <- filtered_bins[[k]]
+    np_vals <- filtered_sample[[k]]
+    if (is.null(r_vals) && is.null(np_vals)) next
+    if (is.null(r_vals)) r_vals <- integer(length(np_vals))
+    if (is.null(np_vals)) np_vals <- integer(length(r_vals))
+    n <- min(length(r_vals), length(np_vals))
+    expect_identical(as.integer(r_vals[seq_len(n)]), as.integer(np_vals[seq_len(n)]),
+                     info = paste("filtered NPZ round-trip identical for chr", k))
+  }
+  filtered_npz$close()
+}

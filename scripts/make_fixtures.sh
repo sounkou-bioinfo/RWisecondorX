@@ -68,3 +68,5 @@ samtools view -C -T "${out_dir}/fixture_ref.fa" \
   -o "${out_dir}/fixture_mixed.cram" \
   "${tmp_dir}/fixture_mixed.sam"
 samtools index "${out_dir}/fixture_mixed.cram"
+
+Rscript "${repo_root}/inst/scripts/make_nipter_fixture.R"

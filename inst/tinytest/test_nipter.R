@@ -116,8 +116,9 @@ expect_identical(lengths(strsplit(lines, "\t")), rep(5L, 5L),
 #   - Have no two reads sharing the same start position per strand  (avoids
 #     the unique() discrepancy when using rmdup = "none")
 #
-# The bundled chr11-only fixture fails on both counts.
-# Set NIPTER_CONFORMANCE_BAM to a suitably pre-filtered whole-genome BAM.
+# The package ships a bundled whole-genome conformance fixture satisfying
+# those constraints. Set NIPTER_CONFORMANCE_BAM only to override it with a
+# custom pre-filtered BAM.
 # ---------------------------------------------------------------------------
 
 if (!requireNamespace("NIPTeR", quietly = TRUE)) {
@@ -126,10 +127,10 @@ if (!requireNamespace("NIPTeR", quietly = TRUE)) {
 
 conf_bam <- Sys.getenv("NIPTER_CONFORMANCE_BAM", unset = NA_character_)
 if (is.na(conf_bam) || !nzchar(conf_bam) || !file.exists(conf_bam)) {
-  exit_file(paste(
-    "NIPTER_CONFORMANCE_BAM not set or file not found;",
-    "set it to a whole-genome BAM to run NIPTeR conformance"
-  ))
+  conf_bam <- .fixture_path("nipter_conformance_fixture.bam")
+}
+if (is.null(conf_bam) || !file.exists(conf_bam)) {
+  exit_file("NIPTeR conformance fixture not available; run `make fixtures`")
 }
 
 our_sample <- nipter_bin_bam(conf_bam, binsize = 50000L,

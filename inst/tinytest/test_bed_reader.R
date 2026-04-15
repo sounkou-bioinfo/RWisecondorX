@@ -198,8 +198,8 @@ nipter_corr$correction_status_autosomal <- "GC Corrected"
 nipter_corr$correction_status_sex       <- "GC Corrected"
 
 corr_bed <- tempfile(fileext = ".bed.gz")
-nipter_bin_bam_bed(mixed_bam, corr_bed, binsize = 5000L, rmdup = "none",
-                   corrected = nipter_corr)
+nipter_sample_to_bed(nipter_orig, corr_bed, binsize = 5000L,
+                     corrected = nipter_corr)
 
 corr_rt <- bed_to_nipter_sample(corr_bed)
 
@@ -241,8 +241,8 @@ nipter_ss_corr$correction_status_sex       <- "GC Corrected"
 class(nipter_ss_corr) <- c("NIPTeRSample", "SeparatedStrands")
 
 corr_ss_bed <- tempfile(fileext = ".bed.gz")
-nipter_bin_bam_bed(mixed_bam, corr_ss_bed, binsize = 5000L, rmdup = "none",
-                   separate_strands = TRUE, corrected = nipter_ss_corr)
+nipter_sample_to_bed(nipter_ss_orig, corr_ss_bed, binsize = 5000L,
+                     corrected = nipter_ss_corr)
 
 corr_ss_rt <- bed_to_nipter_sample(corr_ss_bed)
 

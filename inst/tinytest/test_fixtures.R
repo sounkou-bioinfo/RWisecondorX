@@ -11,8 +11,10 @@ single_bam <- .fixture_path("fixture_single.bam")
 mixed_bam <- .fixture_path("fixture_mixed.bam")
 mixed_cram <- .fixture_path("fixture_mixed.cram")
 fixture_ref <- .fixture_path("fixture_ref.fa")
+nipter_conformance_bam <- .fixture_path("nipter_conformance_fixture.bam")
 
-if (any(vapply(list(paired_bam, single_bam, mixed_bam, mixed_cram, fixture_ref), is.null, logical(1)))) {
+if (any(vapply(list(paired_bam, single_bam, mixed_bam, mixed_cram, fixture_ref,
+                   nipter_conformance_bam), is.null, logical(1)))) {
   exit_file("Synthetic BAM/CRAM fixtures not available; run `make fixtures`")
 }
 
@@ -56,3 +58,10 @@ mixed_cram_streaming <- bam_convert(
 
 expect_identical(mixed_cram_streaming[["11"]], mixed_streaming[["11"]],
                  info = "CRAM fixture matches BAM fixture when reference is supplied")
+
+nipter_conf_bins <- bam_convert(nipter_conformance_bam, binsize = 50000L, rmdup = "none")
+
+expect_true(length(Filter(Negate(is.null), nipter_conf_bins)) == 24L,
+            info = "NIPTeR conformance fixture has all 24 chromosomes")
+expect_true(sum(unlist(lapply(nipter_conf_bins, function(x) if (is.null(x)) 0L else sum(x)))) > 0L,
+            info = "NIPTeR conformance fixture contains reads")

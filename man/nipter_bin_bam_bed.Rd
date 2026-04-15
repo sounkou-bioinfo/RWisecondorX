@@ -13,7 +13,6 @@ nipter_bin_bam_bed(
   exclude_flags = 0L,
   rmdup = c("none", "flag"),
   separate_strands = FALSE,
-  corrected = NULL,
   con = NULL,
   reference = NULL,
   index = TRUE
@@ -41,11 +40,6 @@ reads (\verb{samtools view -F 1024}).}
 
 \item{separate_strands}{Logical; when \code{TRUE}, includes separate
 \code{count_fwd} and \code{count_rev} columns. Default \code{FALSE}.}
-
-\item{corrected}{Optional \code{NIPTeRSample} from \code{\link[=nipter_gc_correct]{nipter_gc_correct()}}.
-Embeds corrected counts without re-reading the BAM only when the sample
-was already binned externally; pass \code{NULL} (default) for the common
-no-correction case.}
 
 \item{con}{Optional open DBI connection with duckhts already loaded.}
 

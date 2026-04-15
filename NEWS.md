@@ -15,6 +15,25 @@
   removes RWisecondorX's direct dependency on the old SQL/file-order dedup
   workaround.
 
+* `bam_convert_npz()` now accepts the same native filter knobs as
+  `bam_convert()` and `bam_convert_bed()` (`mapq`, `require_flags`,
+  `exclude_flags`). `inst/scripts/convert_sample.R` now forwards those filters
+  in NPZ mode instead of silently ignoring them.
+
+* `nipter_bin_bam_bed()` is now a strict bin-and-write convenience wrapper.
+  GC-corrected BED export goes through `nipter_sample_to_bed()` instead of an
+  awkward `corrected =` side path. This removes the double-binning trap from
+  `inst/scripts/convert_sample.R` and `inst/scripts/build_reference.R`.
+
+* The CLI scripts under `inst/scripts/` no longer depend on `%||%` before the
+  package namespace is loaded. `make_cohort.R` also uses a simpler, more
+  robust dev-tree fallback path.
+
+* The package now bundles a whole-genome `nipter_conformance_fixture.bam` and
+  installed-package NIPTeR conformance tests use it by default. The
+  `NIPTER_CONFORMANCE_BAM` environment variable is now only an override for a
+  custom pre-filtered BAM, not a hard gate.
+
 ## SeparatedStrands BED expanded to 9 columns; BED readers switched to `read_tabix()`
 
 * `nipter_bin_bam_bed(separate_strands = TRUE)` now writes **9-column** BED

@@ -224,13 +224,13 @@ if (has_bed_dir) {
 # ---------------------------------------------------------------------------
 
 if (mode == "wisecondorx") {
-  binsize <- opts$binsize %||% 5000L
-  mapq    <- opts$mapq    %||% 1L
-  rmdup   <- opts$rmdup   %||% "streaming"
+  binsize <- if (is.null(opts$binsize)) 5000L else opts$binsize
+  mapq    <- if (is.null(opts$mapq)) 1L else opts$mapq
+  rmdup   <- if (is.null(opts$rmdup)) "streaming" else opts$rmdup
 } else {
-  binsize <- opts$binsize %||% 50000L
-  mapq    <- opts$mapq    %||% 0L
-  rmdup   <- opts$rmdup   %||% "none"
+  binsize <- if (is.null(opts$binsize)) 50000L else opts$binsize
+  mapq    <- if (is.null(opts$mapq)) 0L else opts$mapq
+  rmdup   <- if (is.null(opts$rmdup)) "none" else opts$rmdup
 }
 
 ref_binsize <- opts$`ref-binsize`
@@ -285,9 +285,12 @@ if (!is.null(bam_files)) {
         reference     = opts$reference
       )
     } else {
-      # NIPTeR binning: optionally GC-correct and embed corrected counts
-      corrected_sample <- NULL
       if (!is.null(gc_table) || !is.null(gc_fasta)) {
+        drv <- duckdb::duckdb(config = list(allow_unsigned_extensions = "true"))
+        con <- DBI::dbConnect(drv)
+        Rduckhts::rduckhts_load(con)
+        on.exit(DBI::dbDisconnect(con, shutdown = TRUE), add = TRUE)
+
         raw_sample <- nipter_bin_bam(
           bam              = bam,
           binsize          = binsize,
@@ -296,28 +299,35 @@ if (!is.null(bam_files)) {
           exclude_flags    = opts$`exclude-flags`,
           rmdup            = rmdup,
           separate_strands = opts$`separate-strands`,
+          con              = con,
           reference        = opts$reference
         )
-        if (!is.null(gc_table)) {
-          corrected_sample <- nipter_gc_correct(raw_sample, gc_table = gc_table)
+        corrected_sample <- if (!is.null(gc_table)) {
+          nipter_gc_correct(raw_sample, gc_table = gc_table, con = con)
         } else {
-          corrected_sample <- nipter_gc_correct(raw_sample, fasta = gc_fasta,
-                                                binsize = binsize)
+          nipter_gc_correct(raw_sample, fasta = gc_fasta, binsize = binsize, con = con)
         }
-      }
 
-      nipter_bin_bam_bed(
-        bam              = bam,
-        bed              = bed_path,
-        binsize          = binsize,
-        mapq             = mapq,
-        require_flags    = opts$`require-flags`,
-        exclude_flags    = opts$`exclude-flags`,
-        rmdup            = rmdup,
-        separate_strands = opts$`separate-strands`,
-        corrected        = corrected_sample,
-        reference        = opts$reference
-      )
+        nipter_sample_to_bed(
+          sample    = raw_sample,
+          bed       = bed_path,
+          binsize   = binsize,
+          corrected = corrected_sample,
+          con       = con
+        )
+      } else {
+        nipter_bin_bam_bed(
+          bam              = bam,
+          bed              = bed_path,
+          binsize          = binsize,
+          mapq             = mapq,
+          require_flags    = opts$`require-flags`,
+          exclude_flags    = opts$`exclude-flags`,
+          rmdup            = rmdup,
+          separate_strands = opts$`separate-strands`,
+          reference        = opts$reference
+        )
+      }
     }
   }
 
@@ -337,7 +347,7 @@ if (mode == "wisecondorx") {
 
   ref <- rwisecondorx_newref(
     samples     = samples,
-    binsize     = ref_binsize %||% binsize,
+    binsize     = if (is.null(ref_binsize)) binsize else ref_binsize,
     nipt        = opts$nipt,
     refsize     = opts$refsize,
     cpus        = opts$cpus

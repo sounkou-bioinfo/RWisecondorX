@@ -27,6 +27,11 @@
 #'   [bam_convert()].
 #' @param npz Path for the output `.npz` file (created or overwritten).
 #' @param binsize Bin size in base pairs (default 5000).
+#' @param mapq Minimum mapping quality passed to [bam_convert()].
+#' @param require_flags Integer bitmask of required SAM flags passed to
+#'   [bam_convert()].
+#' @param exclude_flags Integer bitmask of excluded SAM flags passed to
+#'   [bam_convert()].
 #' @param rmdup Duplicate-removal strategy passed to [bam_convert()].
 #' @param con Optional open DBI connection with duckhts already loaded.
 #'   Passed through to [bam_convert()].
@@ -46,12 +51,23 @@
 bam_convert_npz <- function(bam,
                             npz,
                             binsize = 5000L,
+                            mapq = 1L,
+                            require_flags = 0L,
+                            exclude_flags = 0L,
                             rmdup   = c("streaming", "none", "flag"),
                             con     = NULL,
                             np      = NULL,
                             reference = NULL) {
   rmdup <- match.arg(rmdup)
   stopifnot(is.character(npz), length(npz) == 1L, nzchar(npz))
+  stopifnot(is.numeric(binsize), length(binsize) == 1L, binsize >= 1L)
+  stopifnot(is.numeric(mapq), length(mapq) == 1L, mapq >= 0L)
+  stopifnot(is.numeric(require_flags), length(require_flags) == 1L, require_flags >= 0L)
+  stopifnot(is.numeric(exclude_flags), length(exclude_flags) == 1L, exclude_flags >= 0L)
+  binsize <- as.integer(binsize)
+  mapq <- as.integer(mapq)
+  require_flags <- as.integer(require_flags)
+  exclude_flags <- as.integer(exclude_flags)
 
   if (!requireNamespace("reticulate", quietly = TRUE)) {
     stop("reticulate is required to write NPZ files. Install it with: install.packages('reticulate')",
@@ -84,6 +100,9 @@ bam_convert_npz <- function(bam,
     bam = bam,
     reference = reference,
     binsize = binsize,
+    mapq = mapq,
+    require_flags = require_flags,
+    exclude_flags = exclude_flags,
     rmdup = rmdup,
     con = con
   )

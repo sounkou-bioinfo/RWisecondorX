@@ -8,6 +8,9 @@ bam_convert_npz(
   bam,
   npz,
   binsize = 5000L,
+  mapq = 1L,
+  require_flags = 0L,
+  exclude_flags = 0L,
   rmdup = c("streaming", "none", "flag"),
   con = NULL,
   np = NULL,
@@ -20,6 +23,14 @@ bam_convert_npz(
 \item{npz}{Path for the output \code{.npz} file (created or overwritten).}
 
 \item{binsize}{Bin size in base pairs (default 5000).}
+
+\item{mapq}{Minimum mapping quality passed to \code{\link[=bam_convert]{bam_convert()}}.}
+
+\item{require_flags}{Integer bitmask of required SAM flags passed to
+\code{\link[=bam_convert]{bam_convert()}}.}
+
+\item{exclude_flags}{Integer bitmask of excluded SAM flags passed to
+\code{\link[=bam_convert]{bam_convert()}}.}
 
 \item{rmdup}{Duplicate-removal strategy passed to \code{\link[=bam_convert]{bam_convert()}}.}
 

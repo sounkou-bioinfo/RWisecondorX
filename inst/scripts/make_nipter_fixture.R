@@ -25,10 +25,14 @@
 
 stopifnot(nchar(Sys.which("samtools")) > 0L)
 
-pkg_root <- here::here()
+script_arg <- grep("^--file=", commandArgs(FALSE), value = TRUE)
+pkg_root <- if (length(script_arg) == 1L) {
+  normalizePath(file.path(dirname(sub("^--file=", "", script_arg)), "..", ".."))
+} else {
+  normalizePath(getwd())
+}
 if (!file.exists(file.path(pkg_root, "DESCRIPTION"))) {
-  # Fall back: assume we're called from the package root
-  pkg_root <- getwd()
+  stop("Could not locate package root from script path or working directory.", call. = FALSE)
 }
 out_bam  <- file.path(pkg_root, "inst", "extdata",
                        "nipter_conformance_fixture.bam")
@@ -79,11 +83,12 @@ for (chr in CHR_NAMES) {
   max_pos <- chr_len - READ_LEN
   positions <- pmin(positions, max_pos)
   positions <- positions + 1L  # convert to 1-based SAM coordinates
+  flags <- ifelse(seq_len(n_bins) %% 2L == 0L, 16L, 0L)
 
   read_idx_start <- read_idx + 1L
-  recs <- sprintf("r%d\t0\t%s\t%d\t60\t%s\tRG:Z:fixture\t*\t0\t0\t%s\t%s",
+  recs <- sprintf("r%d\t%d\t%s\t%d\t60\t%s\t*\t0\t0\t%s\t%s\tRG:Z:fixture",
                   read_idx_start + seq_len(n_bins) - 1L,
-                  chr, positions,
+                  flags, chr, positions,
                   READ_CIGAR, READ_SEQ, READ_QUAL)
   records <- c(records, recs)
   read_idx <- read_idx + n_bins
@@ -112,5 +117,5 @@ stats_out <- system2("samtools", c("flagstat", out_bam), stdout = TRUE)
 message("BAM flagstat:\n", paste(stats_out, collapse = "\n"))
 
 message("\nNIPTeR conformance fixture written to:\n  ", out_bam)
-message("\nTo run NIPTeR Arm B tests:")
-message("  NIPTER_CONFORMANCE_BAM=", out_bam, " make test")
+message("\nInstalled-package tests now use this bundled fixture by default.")
+message("Set NIPTER_CONFORMANCE_BAM only to override it with a custom BAM.")

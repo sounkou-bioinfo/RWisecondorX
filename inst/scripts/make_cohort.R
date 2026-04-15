@@ -16,7 +16,8 @@ out_dir <- if (length(args) >= 1L) args[1] else tempdir()
 if (requireNamespace("RWisecondorX", quietly = TRUE)) {
   RWisecondorX::generate_cohort(out_dir)
 } else {
-  # Fall back to sourcing directly (e.g. from a dev tree)
-  source(file.path(dirname(sys.frame(1)$ofile %||% "."), "..", "..", "R", "cohort.R"))
+  script_arg <- grep("^--file=", commandArgs(FALSE), value = TRUE)
+  script_path <- if (length(script_arg) == 1L) sub("^--file=", "", script_arg) else "."
+  source(file.path(dirname(script_path), "..", "..", "R", "cohort.R"))
   generate_cohort(out_dir)
 }

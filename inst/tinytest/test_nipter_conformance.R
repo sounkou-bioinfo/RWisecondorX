@@ -5,11 +5,12 @@
 # source code. No external dependencies required.
 #
 # Arm B (conditional): cross-checks against the NIPTeR R package itself on
-# a real BAM. Requires:
+# a whole-genome BAM. Requires:
 #   - NIPTeR package installed
-#   - NIPTER_CONFORMANCE_BAM env var pointing to a pre-filtered whole-genome
-#     BAM (no unmapped reads, no same-position collisions per strand; see
-#     AGENTS.md for the exact constraints and the known NIPTeR bugs that
+#   - the bundled `nipter_conformance_fixture.bam` (used by default), or
+#     `NIPTER_CONFORMANCE_BAM` pointing to a custom pre-filtered whole-genome
+#     BAM override (no unmapped reads, no same-position collisions per strand;
+#     see AGENTS.md for the exact constraints and the known NIPTeR bugs that
 #     impose them)
 #
 # Known divergence: nipter_gc_correct() uses rduckhts_fasta_nuc() computed
@@ -418,11 +419,11 @@ if (!requireNamespace("NIPTeR", quietly = TRUE)) {
 
 conf_bam <- Sys.getenv("NIPTER_CONFORMANCE_BAM", unset = NA_character_)
 if (is.na(conf_bam) || !nzchar(conf_bam) || !file.exists(conf_bam)) {
-  exit_file(paste(
-    "NIPTER_CONFORMANCE_BAM not set or file not found.",
-    "Set it to a pre-filtered whole-genome BAM (no unmapped reads,",
-    "no same-position reads per strand) to run NIPTeR package conformance."
-  ))
+  conf_bam <- system.file("extdata", "nipter_conformance_fixture.bam",
+                          package = "RWisecondorX")
+}
+if (!nzchar(conf_bam) || !file.exists(conf_bam)) {
+  exit_file("NIPTeR conformance fixture not available; run `make fixtures`")
 }
 
 # --- B1. Binning (NIPTeR::bin_bam_sample vs nipter_bin_bam) ------------------

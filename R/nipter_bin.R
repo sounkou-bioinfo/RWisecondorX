@@ -170,7 +170,18 @@ nipter_sample_to_bed <- function(sample,
   stopifnot(is.character(bed), length(bed) == 1L, nzchar(bed))
   stopifnot(is.numeric(binsize), length(binsize) == 1L, binsize >= 1L)
   stopifnot(is.logical(index), length(index) == 1L)
-  if (!is.null(corrected)) stopifnot(inherits(corrected, "NIPTeRSample"))
+  if (!is.null(corrected)) {
+    stopifnot(inherits(corrected, "NIPTeRSample"))
+    if (inherits(sample, "SeparatedStrands") != inherits(corrected, "SeparatedStrands")) {
+      stop("`sample` and `corrected` must use the same strand layout.", call. = FALSE)
+    }
+    if (!identical(lapply(sample$autosomal_chromosome_reads, dim),
+                   lapply(corrected$autosomal_chromosome_reads, dim)) ||
+        !identical(lapply(sample$sex_chromosome_reads, dim),
+                   lapply(corrected$sex_chromosome_reads, dim))) {
+      stop("`sample` and `corrected` must have matching matrix dimensions.", call. = FALSE)
+    }
+  }
   binsize <- as.integer(binsize)
 
   own_con <- is.null(con)
@@ -237,10 +248,6 @@ nipter_sample_to_bed <- function(sample,
 #' @param rmdup Duplicate removal strategy: `"none"` (default) or `"flag"`.
 #' @param separate_strands Logical; when `TRUE`, includes separate
 #'   `count_fwd` and `count_rev` columns. Default `FALSE`.
-#' @param corrected Optional `NIPTeRSample` from [nipter_gc_correct()].
-#'   Embeds corrected counts without re-reading the BAM only when the sample
-#'   was already binned externally; pass `NULL` (default) for the common
-#'   no-correction case.
 #' @param con Optional open DBI connection with duckhts already loaded.
 #' @param reference Optional FASTA reference path for CRAM inputs.
 #' @param index Logical; create a tabix index (default `TRUE`).
@@ -272,7 +279,6 @@ nipter_bin_bam_bed <- function(bam,
                                exclude_flags    = 0L,
                                rmdup            = c("none", "flag"),
                                separate_strands = FALSE,
-                               corrected        = NULL,
                                con              = NULL,
                                reference        = NULL,
                                index            = TRUE) {
@@ -298,7 +304,6 @@ nipter_bin_bam_bed <- function(bam,
 
   nipter_sample_to_bed(sample, bed,
                         binsize   = binsize,
-                        corrected = corrected,
                         con       = con,
                         index     = index)
 }

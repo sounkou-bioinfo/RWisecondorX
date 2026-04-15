@@ -116,7 +116,7 @@ nipter_gc_precompute <- function(fasta, binsize = 50000L, out, con = NULL) {
 #'   a temporary connection is created.
 #'
 #' @return A corrected copy of \code{object} with the same class. Correction
-#'   status is updated from \code{"Uncorrected"} to \code{"GC corrected"}.
+#'   status is updated from \code{"Uncorrected"} to \code{"GC Corrected"}.
 #'
 #' @details
 #' **LOESS method** (default): Fits a LOESS curve of read counts vs GC

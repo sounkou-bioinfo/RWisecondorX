@@ -44,7 +44,7 @@ a temporary connection is created.}
 }
 \value{
 A corrected copy of \code{object} with the same class. Correction
-status is updated from \code{"Uncorrected"} to \code{"GC corrected"}.
+status is updated from \code{"Uncorrected"} to \code{"GC Corrected"}.
 }
 \description{
 Adjusts bin counts for GC-content bias using either LOESS regression or

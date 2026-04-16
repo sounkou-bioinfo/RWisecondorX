@@ -46,8 +46,7 @@ nipter_build_reference <- function(control_group,
                                    sex_methods = c("y_fraction", "xy_fraction"),
                                    y_unique_ratios = NULL,
                                    build_params = list()) {
-  stopifnot(inherits(control_group, "NIPTeRControlGroup") ||
-              S7::S7_inherits(control_group, NIPTControlGroup))
+  stopifnot(.is_nipt_control_group_object(control_group))
   stopifnot(is.list(build_params))
 
   sex_methods <- unique(as.character(sex_methods))

@@ -1,3 +1,5 @@
+# simulate_trisomy_cohort.R — cohort-level donor BAM trisomy simulation
+
 .alignment_stem <- function(path) {
   sub("\\.(bam|cram)$", "", basename(path), ignore.case = TRUE)
 }

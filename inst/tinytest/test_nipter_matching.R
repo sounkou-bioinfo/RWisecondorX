@@ -18,19 +18,19 @@ if (nzchar(.helper_nipter)) {
 }
 
 .is_nipter_sample <- function(x) {
-  inherits(x, "NIPTeRSample") || S7::S7_inherits(x, NIPTSample)
+  RWisecondorX:::.is_nipt_sample_object(x)
 }
 
 .is_nipter_control_group <- function(x) {
-  inherits(x, "NIPTeRControlGroup") || S7::S7_inherits(x, NIPTControlGroup)
+  RWisecondorX:::.is_nipt_control_group_object(x)
 }
 
 .is_combined_sample <- function(x) {
-  inherits(x, "CombinedStrands") || S7::S7_inherits(x, CombinedStrandsSample)
+  inherits(x, "CombinedStrands") || RWisecondorX:::.is_s7_combined_sample(x)
 }
 
 .is_separated_sample <- function(x) {
-  inherits(x, "SeparatedStrands") || S7::S7_inherits(x, SeparatedStrandsSample)
+  inherits(x, "SeparatedStrands") || RWisecondorX:::.is_s7_separated_sample(x)
 }
 
 .sample_name_of <- function(x) x$sample_name

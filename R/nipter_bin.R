@@ -166,12 +166,12 @@ nipter_sample_to_bed <- function(sample,
                                  corrected = NULL,
                                  con       = NULL,
                                  index     = TRUE) {
-  stopifnot(inherits(sample, "NIPTeRSample") || S7::S7_inherits(sample, NIPTSample))
+  stopifnot(.is_nipt_sample_object(sample))
   stopifnot(is.character(bed), length(bed) == 1L, nzchar(bed))
   stopifnot(is.numeric(binsize), length(binsize) == 1L, binsize >= 1L)
   stopifnot(is.logical(index), length(index) == 1L)
   if (!is.null(corrected)) {
-    stopifnot(inherits(corrected, "NIPTeRSample") || S7::S7_inherits(corrected, NIPTSample))
+    stopifnot(.is_nipt_sample_object(corrected))
     if (!identical(.strand_type_of(sample), .strand_type_of(corrected))) {
       stop("`sample` and `corrected` must use the same strand layout.", call. = FALSE)
     }
@@ -410,13 +410,8 @@ nipter_bin_bam_bed <- function(bam,
 # chrom, start, end, count, corrected_count
 # Works with both S7 CombinedStrandsSample and legacy S3 NIPTeRSample objects.
 .nipter_bed_combined_strands <- function(sample, binsize, corrected = NULL) {
-  if (S7::S7_inherits(sample, CombinedStrandsSample)) {
-    raw_auto <- sample@auto_matrix
-    raw_sex  <- sample@sex_matrix_
-  } else {
-    raw_auto <- sample$autosomal_chromosome_reads[[1L]]
-    raw_sex  <- sample$sex_chromosome_reads[[1L]]
-  }
+  raw_auto <- .sample_autosomal_reads(sample)[[1L]]
+  raw_sex  <- .sample_sex_reads(sample)[[1L]]
   combined <- rbind(raw_auto, raw_sex)   # 24 rows, n_bins columns
 
   chr_names <- c(as.character(1:22), "X", "Y")
@@ -433,13 +428,8 @@ nipter_bin_bam_bed <- function(bam,
   )
 
   if (!is.null(corrected)) {
-    if (S7::S7_inherits(corrected, CombinedStrandsSample)) {
-      corr_auto <- corrected@auto_matrix
-      corr_sex  <- corrected@sex_matrix_
-    } else {
-      corr_auto <- corrected$autosomal_chromosome_reads[[1L]]
-      corr_sex  <- corrected$sex_chromosome_reads[[1L]]
-    }
+    corr_auto <- .sample_autosomal_reads(corrected)[[1L]]
+    corr_sex  <- .sample_sex_reads(corrected)[[1L]]
     df$corrected_count <- as.numeric(t(rbind(corr_auto, corr_sex)))
   }
 
@@ -452,17 +442,12 @@ nipter_bin_bam_bed <- function(bam,
 # corrected_count, corrected_fwd, corrected_rev
 # Works with both S7 SeparatedStrandsSample and legacy S3 NIPTeRSample objects.
 .nipter_bed_separated_strands <- function(sample, binsize, corrected = NULL) {
-  if (S7::S7_inherits(sample, SeparatedStrandsSample)) {
-    fwd_auto <- sample@auto_fwd
-    rev_auto <- sample@auto_rev
-    fwd_sex  <- sample@sex_fwd
-    rev_sex  <- sample@sex_rev
-  } else {
-    fwd_auto <- sample$autosomal_chromosome_reads[[1L]]
-    rev_auto <- sample$autosomal_chromosome_reads[[2L]]
-    fwd_sex  <- sample$sex_chromosome_reads[[1L]]
-    rev_sex  <- sample$sex_chromosome_reads[[2L]]
-  }
+  auto_list <- .sample_autosomal_reads(sample)
+  sex_list  <- .sample_sex_reads(sample)
+  fwd_auto <- auto_list[[1L]]
+  rev_auto <- auto_list[[2L]]
+  fwd_sex  <- sex_list[[1L]]
+  rev_sex  <- sex_list[[2L]]
 
   fwd_combined <- rbind(fwd_auto, fwd_sex)   # 24 rows
   rev_combined <- rbind(rev_auto, rev_sex)    # 24 rows
@@ -487,27 +472,13 @@ nipter_bin_bam_bed <- function(bam,
 
   # Corrected counts from a GC-corrected SeparatedStrands sample
   if (!is.null(corrected) && .strand_type_of(corrected) == "separated") {
-    if (S7::S7_inherits(corrected, SeparatedStrandsSample)) {
-      corr_fwd <- rbind(corrected@auto_fwd, corrected@sex_fwd)
-      corr_rev <- rbind(corrected@auto_rev, corrected@sex_rev)
-    } else {
-      corr_fwd <- rbind(corrected$autosomal_chromosome_reads[[1L]],
-                        corrected$sex_chromosome_reads[[1L]])
-      corr_rev <- rbind(corrected$autosomal_chromosome_reads[[2L]],
-                        corrected$sex_chromosome_reads[[2L]])
-    }
+    corrected_auto <- .sample_autosomal_reads(corrected)
+    corrected_sex  <- .sample_sex_reads(corrected)
+    corr_fwd <- rbind(corrected_auto[[1L]], corrected_sex[[1L]])
+    corr_rev <- rbind(corrected_auto[[2L]], corrected_sex[[2L]])
     df$corrected_count <- as.numeric(t(corr_fwd + corr_rev))
     df$corrected_fwd   <- as.numeric(t(corr_fwd))
     df$corrected_rev   <- as.numeric(t(corr_rev))
-  } else if (!is.null(corrected)) {
-    if (S7::S7_inherits(corrected, CombinedStrandsSample)) {
-      corr_auto <- corrected@auto_matrix
-      corr_sex  <- corrected@sex_matrix_
-    } else {
-      corr_auto <- corrected$autosomal_chromosome_reads[[1L]]
-      corr_sex  <- corrected$sex_chromosome_reads[[1L]]
-    }
-    df$corrected_count <- as.numeric(t(rbind(corr_auto, corr_sex)))
   }
 
   df

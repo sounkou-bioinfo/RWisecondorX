@@ -1,4 +1,4 @@
-# cohort.R — Synthetic BAM cohort generator for WisecondorX / NIPTeR smoke tests
+# synthetic_cohort.R — Synthetic BAM cohort generator for WisecondorX / NIPTeR smoke tests
 #
 # Generates coordinate-sorted, indexed BAM files using "compressed" chromosome
 # lengths: each 100kb genomic bin maps to 100bp, so bin COUNT structure is
@@ -174,7 +174,7 @@ READS_PER_BIN_DEFAULT <- 3.0
 #' Generate a per-bin GC landscape for the compressed genome.
 #'
 #' Returns a named list of numeric vectors (one per chromosome), each of
-#' length `BINS_PER_CHR[chr]`, with values in [0.3, 0.7] representing
+#' length `BINS_PER_CHR[chr]`, with values between 0.3 and 0.7 representing
 #' pseudo-GC content. The landscape is deterministic (fixed seed = 1337).
 #'
 #' Uses a smooth random walk per chromosome to create spatial correlation

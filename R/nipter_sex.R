@@ -67,8 +67,7 @@
 nipter_sex_model <- function(control_group,
                              method = c("y_fraction", "xy_fraction")) {
   method <- match.arg(method)
-  stopifnot(inherits(control_group, "NIPTeRControlGroup") ||
-              S7::S7_inherits(control_group, NIPTControlGroup))
+  stopifnot(.is_nipt_control_group_object(control_group))
 
   n_samples <- length(control_group$samples)
   if (n_samples < 4L) {
@@ -106,8 +105,7 @@ nipter_sex_model <- function(control_group,
   male_cluster <- if (median_1 > median_2) 1L else 2L
 
   # Build labels
-  sample_names <- vapply(control_group$samples,
-                         function(s) s$sample_name, character(1L))
+  sample_names <- vapply(control_group$samples, .sample_name, character(1L))
   labels <- ifelse(gmm$classification == male_cluster, "male", "female")
   names(labels) <- sample_names
 
@@ -181,8 +179,7 @@ nipter_sex_model <- function(control_group,
 #'
 #' @export
 nipter_predict_sex <- function(sample, ..., y_unique_ratio = NULL) {
-  stopifnot(inherits(sample, "NIPTeRSample") ||
-              S7::S7_inherits(sample, NIPTSample))
+  stopifnot(.is_nipt_sample_object(sample))
 
   models <- list(...)
   # Allow a single list of models
@@ -242,10 +239,22 @@ nipter_predict_sex <- function(sample, ..., y_unique_ratio = NULL) {
 
   # Drop NAs from skipped models before voting
   valid_preds <- model_preds[!is.na(model_preds)]
+  if (!length(valid_preds)) {
+    stop("No usable sex-model predictions remain after filtering.", call. = FALSE)
+  }
 
   # Consensus: majority vote (tie goes to "female" — conservative for NIPT)
   n_male   <- sum(valid_preds == "male")
   n_female <- sum(valid_preds == "female")
+  if (n_male == n_female) {
+    warning(
+      sprintf(
+        "Sex-model vote tied for sample '%s' (%d male vs %d female); returning 'female' conservatively.",
+        .sample_name(sample), n_male, n_female
+      ),
+      call. = FALSE
+    )
+  }
   consensus <- if (n_male > n_female) "male" else "female"
 
   .as_nipter_sex_prediction(list(
@@ -515,8 +524,7 @@ nipter_y_unique_ratio <- function(bam,
     mat[i, ] <- .sample_sex_fractions(control_group$samples[[i]])
   }
 
-  rownames(mat) <- vapply(control_group$samples,
-                          function(s) s$sample_name, character(1L))
+  rownames(mat) <- vapply(control_group$samples, .sample_name, character(1L))
   mat
 }
 
@@ -526,7 +534,7 @@ nipter_y_unique_ratio <- function(bam,
 # Fractions are relative to total autosomal reads (sum of all autosomal bins).
 .sample_sex_fractions <- function(sample) {
   # Autosomal total
-  auto <- sample$autosomal_chromosome_reads
+  auto <- .sample_autosomal_reads(sample)
   if (.strand_type_of(sample) == "separated") {
     auto_total <- sum(Reduce("+", auto))
   } else {
@@ -538,14 +546,17 @@ nipter_y_unique_ratio <- function(bam,
   }
 
   # Sex chromosome totals
-  sex <- sample$sex_chromosome_reads
+  sex <- .sample_sex_reads(sample)
   if (.strand_type_of(sample) == "separated") {
-    sex_summed <- Reduce("+", sex)
-    # rownames: "XF"+"XR" → sum to get X, "YF"+"YR" → sum to get Y
-    # After Reduce, rownames come from the first matrix ("XF", "YF"),
-    # but values are summed. Rows: row 1 = X total, row 2 = Y total.
-    x_total <- sum(sex_summed[1L, ])
-    y_total <- sum(sex_summed[2L, ])
+    sex_totals <- c(X = 0, Y = 0)
+    for (mat in sex) {
+      rs <- rowSums(mat)
+      key <- sub("[FR]$", "", names(rs))
+      agg <- tapply(rs, key, sum)
+      sex_totals[names(agg)] <- sex_totals[names(agg)] + agg
+    }
+    x_total <- sex_totals[["X"]]
+    y_total <- sex_totals[["Y"]]
   } else {
     x_total <- sum(sex[[1L]]["X", ])
     y_total <- sum(sex[[1L]]["Y", ])

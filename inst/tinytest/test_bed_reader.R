@@ -8,6 +8,12 @@
 library(tinytest)
 library(RWisecondorX)
 
+expect_identical(
+  RWisecondorX:::.normalize_chr_name(c("chrx", "chry"), xy_to_numeric = FALSE),
+  c("X", "Y"),
+  info = "chromosome normalization uppercases x/y in NIPTeR-mode imports"
+)
+
 
 # ---------- Fixture setup -------------------------------------------------
 
@@ -106,6 +112,13 @@ expect_identical(as.integer(auto_rt), as.integer(auto_orig),
 expect_identical(as.integer(sex_rt), as.integer(sex_orig),
                  info = "sex bin counts round-trip exactly")
 
+# bed_to_sample() should stay strand-agnostic and just use the first 4 columns
+nipter_bins_rt <- bed_to_sample(nipter_bed)
+expect_identical(nipter_bins_rt[["11"]], as.integer(auto_orig["11", ]),
+                 info = "bed_to_sample() reads CombinedStrands BED via total-count column")
+expect_identical(nipter_bins_rt[["23"]], as.integer(sex_orig["X", ]),
+                 info = "bed_to_sample() preserves X counts from a CombinedStrands BED")
+
 # Correction status
 expect_identical(nipter_rt$correction_status_autosomal, "Uncorrected",
                  info = "correction status is Uncorrected for raw BED")
@@ -176,26 +189,36 @@ expect_identical(rownames(rev_sex_rt), c("XR", "YR"),
 expect_identical(as.integer(rev_sex_rt), as.integer(rev_sex_orig),
                  info = "SeparatedStrands rev sex counts round-trip")
 
+ss_bins_rt <- bed_to_sample(ss_bed)
+ss_auto_total <- fwd_auto_orig + rev_auto_orig
+ss_sex_total  <- fwd_sex_orig + rev_sex_orig
+expect_identical(ss_bins_rt[["11"]], as.integer(ss_auto_total[11L, ]),
+                 info = "bed_to_sample() reads SeparatedStrands BED via total-count column")
+expect_identical(ss_bins_rt[["23"]], as.integer(ss_sex_total[1L, ]),
+                 info = "bed_to_sample() preserves X counts from a SeparatedStrands BED")
+
 
 # ==========================================================================
 # bed_to_nipter_sample() round-trip — corrected CombinedStrands (5-column)
 # ==========================================================================
 
-# Simulate GC correction by manually setting corrected counts on the sample.
+# Simulate GC correction by building a corrected S7 sample directly.
 # The corrected values are doubles (not integers), which is why read_tabix()
 # is needed instead of read_bed().
-nipter_corr <- nipter_orig   # copy the raw sample
-auto_raw <- nipter_corr$autosomal_chromosome_reads[[1L]]
-sex_raw  <- nipter_corr$sex_chromosome_reads[[1L]]
+auto_raw <- nipter_orig$autosomal_chromosome_reads[[1L]]
+sex_raw  <- nipter_orig$sex_chromosome_reads[[1L]]
 
 # Multiply raw counts by 1.1 to create synthetic corrected values (doubles)
 corr_auto <- auto_raw * 1.1
 corr_sex  <- sex_raw * 1.1
 
-nipter_corr$autosomal_chromosome_reads <- list(corr_auto)
-nipter_corr$sex_chromosome_reads       <- list(corr_sex)
-nipter_corr$correction_status_autosomal <- "GC Corrected"
-nipter_corr$correction_status_sex       <- "GC Corrected"
+nipter_corr <- CombinedStrandsSample(
+  sample_name = nipter_orig@sample_name,
+  binsize     = nipter_orig@binsize,
+  auto_matrix = corr_auto,
+  sex_matrix_ = corr_sex,
+  correction  = RWisecondorX:::.nipt_gc_both_correction_record()
+)
 
 corr_bed <- tempfile(fileext = ".bed.gz")
 nipter_sample_to_bed(nipter_orig, corr_bed, binsize = 5000L,
@@ -218,15 +241,33 @@ expect_equal(as.numeric(corr_sex_rt), as.numeric(corr_sex), tolerance = 1e-6,
 
 
 # ==========================================================================
+# NIPTeR BED row constructors should reject partially populated corrected columns
+# ==========================================================================
+
+bad_df <- data.frame(
+  chrom = c("11", "11"),
+  start_pos = c(0L, 5000L),
+  end_pos   = c(5000L, 10000L),
+  count = c(10L, 12L),
+  corrected_count = c(11.5, NA_real_),
+  stringsAsFactors = FALSE
+)
+expect_error(
+  RWisecondorX:::.rows_to_nipter_combined(bad_df, "bad_sample", binsize = 5000L),
+  pattern = "mix corrected and missing values",
+  info = "partially populated corrected_count is rejected by the shared row constructor"
+)
+
+
+# ==========================================================================
 # bed_to_nipter_sample() round-trip — corrected SeparatedStrands (9-column)
 # ==========================================================================
 
 # Simulate per-strand GC correction on the SeparatedStrands sample
-nipter_ss_corr <- nipter_ss_orig
-fwd_auto_raw <- nipter_ss_corr$autosomal_chromosome_reads[[1L]]
-rev_auto_raw <- nipter_ss_corr$autosomal_chromosome_reads[[2L]]
-fwd_sex_raw  <- nipter_ss_corr$sex_chromosome_reads[[1L]]
-rev_sex_raw  <- nipter_ss_corr$sex_chromosome_reads[[2L]]
+fwd_auto_raw <- nipter_ss_orig$autosomal_chromosome_reads[[1L]]
+rev_auto_raw <- nipter_ss_orig$autosomal_chromosome_reads[[2L]]
+fwd_sex_raw  <- nipter_ss_orig$sex_chromosome_reads[[1L]]
+rev_sex_raw  <- nipter_ss_orig$sex_chromosome_reads[[2L]]
 
 # Apply different multipliers per strand to verify they are independent
 corr_fwd_auto <- fwd_auto_raw * 1.15
@@ -234,10 +275,15 @@ corr_rev_auto <- rev_auto_raw * 0.95
 corr_fwd_sex  <- fwd_sex_raw * 1.15
 corr_rev_sex  <- rev_sex_raw * 0.95
 
-nipter_ss_corr$autosomal_chromosome_reads <- list(corr_fwd_auto, corr_rev_auto)
-nipter_ss_corr$sex_chromosome_reads       <- list(corr_fwd_sex, corr_rev_sex)
-nipter_ss_corr$correction_status_autosomal <- "GC Corrected"
-nipter_ss_corr$correction_status_sex       <- "GC Corrected"
+nipter_ss_corr <- SeparatedStrandsSample(
+  sample_name = nipter_ss_orig@sample_name,
+  binsize     = nipter_ss_orig@binsize,
+  auto_fwd    = corr_fwd_auto,
+  auto_rev    = corr_rev_auto,
+  sex_fwd     = corr_fwd_sex,
+  sex_rev     = corr_rev_sex,
+  correction  = RWisecondorX:::.nipt_gc_both_correction_record()
+)
 
 corr_ss_bed <- tempfile(fileext = ".bed.gz")
 nipter_sample_to_bed(nipter_ss_orig, corr_ss_bed, binsize = 5000L,

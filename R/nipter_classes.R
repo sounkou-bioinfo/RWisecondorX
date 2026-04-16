@@ -16,9 +16,9 @@
 #   fractions_auto(cg)          -> 22 x N fraction matrix (cached)
 #   fractions_for_regression(cg)-> 22 or 44 x N matrix
 #
-# Correction state is tracked as an ordered character vector in
-# NIPTCorrectionRecord.  Each correction function appends to the record
-# and scoring functions can assert that corrections have been applied.
+# Correction state is tracked as typed correction-step objects inside
+# NIPTCorrectionRecord. Human-readable labels are only produced at the
+# compatibility/reporting boundary.
 
 .numeric_matrix_property <- function(n_rows, label) {
   S7::new_property(
@@ -41,6 +41,142 @@
   constructor = function(.data) .data
 )
 
+.nipt_correction_codes <- c("raw", "gc", "chi")
+.nipt_correction_labels <- c(
+  raw = "Uncorrected",
+  gc = "GC Corrected",
+  chi = "Chi square corrected"
+)
+
+.validate_correction_code <- function(value) {
+  if (length(value) != 1L || !value %in% .nipt_correction_codes) {
+    sprintf("code must be one of: %s",
+            paste(.nipt_correction_codes, collapse = ", "))
+  }
+}
+
+
+# ---- Correction steps --------------------------------------------------------
+
+#' Typed correction step in a NIPTeR correction path
+#'
+#' @param code Correction step code. One of \code{"raw"}, \code{"gc"}, or
+#'   \code{"chi"}.
+#'
+#' @export
+NIPTCorrectionStep <- S7::new_class(
+  "NIPTCorrectionStep",
+  properties = list(
+    code = S7::new_property(S7::class_character, validator = .validate_correction_code)
+  )
+)
+
+.is_nipt_correction_step <- function(x) {
+  tryCatch(S7::S7_inherits(x, NIPTCorrectionStep), error = function(e) FALSE)
+}
+
+.as_nipt_correction_step <- function(x) {
+  if (.is_nipt_correction_step(x)) return(x)
+  if (is.character(x) && length(x) == 1L) {
+    if (x %in% names(.nipt_correction_labels)) {
+      return(NIPTCorrectionStep(code = x))
+    }
+    label_match <- names(.nipt_correction_labels)[match(x, .nipt_correction_labels)]
+    if (!is.na(label_match)) {
+      return(NIPTCorrectionStep(code = unname(label_match)))
+    }
+  }
+  stop("Cannot coerce value to NIPTCorrectionStep.", call. = FALSE)
+}
+
+.nipt_raw_correction_step <- function() NIPTCorrectionStep(code = "raw")
+.nipt_gc_correction_step <- function() NIPTCorrectionStep(code = "gc")
+.nipt_chi_correction_step <- function() NIPTCorrectionStep(code = "chi")
+
+.nipt_raw_correction_path <- function() {
+  NIPTCorrectionPath(steps = list(.nipt_raw_correction_step()))
+}
+
+.nipt_gc_correction_path <- function() {
+  NIPTCorrectionPath(steps = list(.nipt_gc_correction_step()))
+}
+
+.nipt_gc_both_correction_record <- function() {
+  NIPTCorrectionRecord(
+    autosomal = .nipt_gc_correction_path(),
+    sex = .nipt_gc_correction_path()
+  )
+}
+
+
+#' Ordered correction path for autosomal or sex-chromosome processing
+#'
+#' @param steps List of \code{NIPTCorrectionStep} objects. Defaults to a single
+#'   \code{"raw"} step.
+#'
+#' @export
+NIPTCorrectionPath <- S7::new_class(
+  "NIPTCorrectionPath",
+  properties = list(
+    steps = S7::class_list
+  ),
+  validator = function(self) {
+    if (!length(self@steps)) {
+      return("steps must contain at least one correction step")
+    }
+    if (!all(vapply(self@steps, .is_nipt_correction_step, logical(1L)))) {
+      return("all steps must be NIPTCorrectionStep objects")
+    }
+    NULL
+  }
+)
+
+.is_nipt_correction_path <- function(x) {
+  tryCatch(S7::S7_inherits(x, NIPTCorrectionPath), error = function(e) FALSE)
+}
+
+.as_nipt_correction_path <- function(x) {
+  if (.is_nipt_correction_path(x)) return(x)
+  if (is.null(x)) return(.nipt_raw_correction_path())
+  if (.is_nipt_correction_step(x)) return(NIPTCorrectionPath(steps = list(x)))
+  if (is.character(x)) {
+    steps <- lapply(as.list(x), .as_nipt_correction_step)
+    return(NIPTCorrectionPath(steps = steps))
+  }
+  if (is.list(x)) {
+    steps <- lapply(x, .as_nipt_correction_step)
+    return(NIPTCorrectionPath(steps = steps))
+  }
+  stop("Cannot coerce value to NIPTCorrectionPath.", call. = FALSE)
+}
+
+.correction_path_codes <- function(path) {
+  vapply(path@steps, function(step) step@code, character(1L))
+}
+
+.correction_path_labels <- function(path) {
+  codes <- .correction_path_codes(path)
+  if (length(codes) > 1L) {
+    codes <- codes[codes != "raw"]
+  }
+  unname(.nipt_correction_labels[codes])
+}
+
+.append_correction_step <- function(path, step) {
+  path <- .as_nipt_correction_path(path)
+  step <- .as_nipt_correction_step(step)
+  existing <- .correction_path_codes(path)
+  if (step@code %in% existing) {
+    return(path)
+  }
+  steps <- path@steps
+  if (step@code != "raw") {
+    keep <- vapply(steps, function(x) x@code != "raw", logical(1L))
+    steps <- steps[keep]
+  }
+  NIPTCorrectionPath(steps = c(steps, list(step)))
+}
+
 
 # ---- Correction record -------------------------------------------------------
 
@@ -49,19 +185,23 @@
 #' Tracks the sequence of corrections applied to the autosomal and sex
 #' chromosome matrices of a \code{NIPTSample} object.
 #'
-#' @param autosomal Character vector describing the autosomal correction
-#'   history. Defaults to \code{"Uncorrected"}.
-#' @param sex Character vector describing the sex-chromosome correction
-#'   history. Defaults to \code{"Uncorrected"}.
+#' @param autosomal A \code{NIPTCorrectionPath} describing the autosomal
+#'   correction history. Defaults to a single \code{"raw"} step.
+#' @param sex A \code{NIPTCorrectionPath} describing the sex-chromosome
+#'   correction history. Defaults to a single \code{"raw"} step.
 #'
 #' @export
 NIPTCorrectionRecord <- S7::new_class(
   "NIPTCorrectionRecord",
   properties = list(
-    autosomal = S7::new_property(S7::class_character,
-                                 default = "Uncorrected"),
-    sex       = S7::new_property(S7::class_character,
-                                 default = "Uncorrected")
+    autosomal = S7::new_property(
+      NIPTCorrectionPath,
+      default = quote(.nipt_raw_correction_path())
+    ),
+    sex = S7::new_property(
+      NIPTCorrectionPath,
+      default = quote(.nipt_raw_correction_path())
+    )
   )
 )
 
@@ -196,11 +336,17 @@ SeparatedStrandsSample <- S7::new_class(
   )
 )
 
-S7::method(autosomal_matrix, SeparatedStrandsSample) <-
-  function(x) x@auto_fwd + x@auto_rev
+S7::method(autosomal_matrix, SeparatedStrandsSample) <- function(x) {
+  m <- x@auto_fwd + x@auto_rev
+  rownames(m) <- as.character(1:22)
+  m
+}
 
-S7::method(sex_matrix, SeparatedStrandsSample) <-
-  function(x) x@sex_fwd + x@sex_rev
+S7::method(sex_matrix, SeparatedStrandsSample) <- function(x) {
+  m <- x@sex_fwd + x@sex_rev
+  rownames(m) <- c("X", "Y")
+  m
+}
 
 S7::method(strand_type, SeparatedStrandsSample) <- function(x) "separated"
 
@@ -219,48 +365,89 @@ S7::method(strand_type, SeparatedStrandsSample) <- function(x) "separated"
   y
 }
 
+.is_s7_nipt_sample <- function(x) {
+  tryCatch(S7::S7_inherits(x, NIPTSample), error = function(e) FALSE)
+}
+
+.is_s7_combined_sample <- function(x) {
+  tryCatch(S7::S7_inherits(x, CombinedStrandsSample), error = function(e) FALSE)
+}
+
+.is_s7_separated_sample <- function(x) {
+  tryCatch(S7::S7_inherits(x, SeparatedStrandsSample), error = function(e) FALSE)
+}
+
+.is_s7_nipt_control_group <- function(x) {
+  tryCatch(S7::S7_inherits(x, NIPTControlGroup), error = function(e) FALSE)
+}
+
+.is_s7_separated_control_group <- function(x) {
+  tryCatch(S7::S7_inherits(x, SeparatedControlGroup), error = function(e) FALSE)
+}
+
+.is_nipt_sample_object <- function(x) {
+  inherits(x, "NIPTSample") || inherits(x, "NIPTeRSample") || .is_s7_nipt_sample(x)
+}
+
+.is_nipt_control_group_object <- function(x) {
+  inherits(x, "NIPTControlGroup") ||
+    inherits(x, "NIPTeRControlGroup") ||
+    .is_s7_nipt_control_group(x)
+}
+
 .sample_autosomal_reads <- function(x) {
-  if (S7::S7_inherits(x, CombinedStrandsSample)) {
+  if (.is_s7_combined_sample(x)) {
     return(list(x@auto_matrix))
   }
-  if (S7::S7_inherits(x, SeparatedStrandsSample)) {
+  if (.is_s7_separated_sample(x)) {
     return(list(x@auto_fwd, x@auto_rev))
   }
   .legacy_field(x, "autosomal_chromosome_reads")
 }
 
 .sample_sex_reads <- function(x) {
-  if (S7::S7_inherits(x, CombinedStrandsSample)) {
+  if (.is_s7_combined_sample(x)) {
     return(list(x@sex_matrix_))
   }
-  if (S7::S7_inherits(x, SeparatedStrandsSample)) {
+  if (.is_s7_separated_sample(x)) {
     return(list(x@sex_fwd, x@sex_rev))
   }
   .legacy_field(x, "sex_chromosome_reads")
 }
 
 .sample_name <- function(x) {
-  if (S7::S7_inherits(x, NIPTSample)) x@sample_name
+  if (.is_s7_nipt_sample(x)) x@sample_name
   else .legacy_field(x, "sample_name")
 }
 
 .sample_binsize <- function(x) {
-  if (S7::S7_inherits(x, NIPTSample)) x@binsize else NA_integer_
+  if (.is_s7_nipt_sample(x)) x@binsize else NA_integer_
 }
 
 .sample_correction_status <- function(x,
                                       scope = c("autosomal", "sex")) {
   scope <- match.arg(scope)
-  if (S7::S7_inherits(x, NIPTSample)) {
-    if (scope == "autosomal") x@correction@autosomal else x@correction@sex
+  if (.is_s7_nipt_sample(x)) {
+    path <- if (scope == "autosomal") x@correction@autosomal else x@correction@sex
+    .correction_path_labels(path)
   } else {
     if (scope == "autosomal") .legacy_field(x, "correction_status_autosomal")
     else .legacy_field(x, "correction_status_sex")
   }
 }
 
+.sample_correction_path <- function(x,
+                                    scope = c("autosomal", "sex")) {
+  scope <- match.arg(scope)
+  if (.is_s7_nipt_sample(x)) {
+    if (scope == "autosomal") x@correction@autosomal else x@correction@sex
+  } else {
+    .as_nipt_correction_path(.sample_correction_status(x, scope))
+  }
+}
+
 .sample_with_reads <- function(x, autosomal = NULL, sex = NULL) {
-  if (!S7::S7_inherits(x, NIPTSample)) {
+  if (!.is_s7_nipt_sample(x)) {
     if (!is.null(autosomal)) {
       x <- .legacy_set_field(x, "autosomal_chromosome_reads", autosomal)
     }
@@ -271,7 +458,7 @@ S7::method(strand_type, SeparatedStrandsSample) <- function(x) "separated"
   }
 
   if (!is.null(autosomal)) {
-    if (S7::S7_inherits(x, CombinedStrandsSample)) {
+    if (.is_s7_combined_sample(x)) {
       x@auto_matrix <- autosomal[[1L]]
     } else {
       x@auto_fwd <- autosomal[[1L]]
@@ -279,7 +466,7 @@ S7::method(strand_type, SeparatedStrandsSample) <- function(x) "separated"
     }
   }
   if (!is.null(sex)) {
-    if (S7::S7_inherits(x, CombinedStrandsSample)) {
+    if (.is_s7_combined_sample(x)) {
       x@sex_matrix_ <- sex[[1L]]
     } else {
       x@sex_fwd <- sex[[1L]]
@@ -292,21 +479,51 @@ S7::method(strand_type, SeparatedStrandsSample) <- function(x) "separated"
 .sample_with_correction_status <- function(x,
                                            autosomal = NULL,
                                            sex = NULL) {
-  if (!S7::S7_inherits(x, NIPTSample)) {
+  if (!.is_s7_nipt_sample(x)) {
     if (!is.null(autosomal)) {
-      x <- .legacy_set_field(x, "correction_status_autosomal", autosomal)
+      x <- .legacy_set_field(
+        x, "correction_status_autosomal",
+        .correction_path_labels(.as_nipt_correction_path(autosomal))
+      )
     }
     if (!is.null(sex)) {
-      x <- .legacy_set_field(x, "correction_status_sex", sex)
+      x <- .legacy_set_field(
+        x, "correction_status_sex",
+        .correction_path_labels(.as_nipt_correction_path(sex))
+      )
     }
     return(x)
   }
 
   correction <- x@correction
-  if (!is.null(autosomal)) correction@autosomal <- autosomal
-  if (!is.null(sex)) correction@sex <- sex
+  if (!is.null(autosomal)) correction@autosomal <- .as_nipt_correction_path(autosomal)
+  if (!is.null(sex)) correction@sex <- .as_nipt_correction_path(sex)
   x@correction <- correction
   x
+}
+
+.sample_append_correction_step <- function(x,
+                                           scope = c("autosomal", "sex"),
+                                           step) {
+  scope <- match.arg(scope)
+  current <- .sample_correction_path(x, scope)
+  updated <- .append_correction_step(current, step)
+  if (scope == "autosomal") {
+    .sample_with_correction_status(x, autosomal = updated)
+  } else {
+    .sample_with_correction_status(x, sex = updated)
+  }
+}
+
+.control_group_correction_status <- function(cg,
+                                             scope = c("autosomal", "sex")) {
+  scope <- match.arg(scope)
+  labels <- unlist(lapply(
+    cg@samples,
+    .sample_correction_status,
+    scope = scope
+  ), use.names = FALSE)
+  unique(labels)
 }
 
 .nipt_sample_dollar <- function(x, name) {
@@ -341,19 +558,27 @@ S7::method(strand_type, SeparatedStrandsSample) <- function(x) "separated"
       x
     },
     correction_status_autosomal = {
-      x <- .sample_with_correction_status(x, autosomal = value)
+      x <- .sample_with_correction_status(x, autosomal = .as_nipt_correction_path(value))
       x
     },
     correction_status_sex = {
-      x <- .sample_with_correction_status(x, sex = value)
+      x <- .sample_with_correction_status(x, sex = .as_nipt_correction_path(value))
       x
     },
     sample_name = {
-      x@sample_name <- value
+      if (.is_s7_nipt_sample(x)) {
+        x@sample_name <- value
+      } else {
+        x <- .legacy_set_field(x, "sample_name", value)
+      }
       x
     },
     binsize = {
-      x@binsize <- value
+      if (.is_s7_nipt_sample(x)) {
+        x@binsize <- value
+      } else {
+        x <- .legacy_set_field(x, "binsize", value)
+      }
       x
     },
     stop("Unknown field '", name, "' for NIPTSample.", call. = FALSE)
@@ -484,9 +709,7 @@ NIPTControlGroup <- S7::new_class(
       return("need at least 2 samples")
     }
 
-    ok <- vapply(self@samples, function(s) {
-      inherits(s, "NIPTeRSample") || S7::S7_inherits(s, NIPTSample)
-    }, logical(1L))
+    ok <- vapply(self@samples, .is_nipt_sample_object, logical(1L))
     if (!all(ok)) {
       return("all elements of 'samples' must be NIPTeRSample or NIPTSample objects")
     }
@@ -536,7 +759,7 @@ NIPTControlGroup <- S7::new_class(
 S7::method(n_controls, NIPTControlGroup) <- function(cg) length(cg@samples)
 S7::method(control_names, NIPTControlGroup) <- function(cg)
   vapply(cg@samples, function(s) {
-    if (S7::S7_inherits(s, NIPTSample)) s@sample_name else .legacy_field(s, "sample_name")
+    if (.is_s7_nipt_sample(s)) s@sample_name else .legacy_field(s, "sample_name")
   }, character(1L))
 
 
@@ -595,11 +818,11 @@ S7::method(fractions_for_regression, SeparatedControlGroup) <- function(cg) {
     return(cg@.cache$fractions_regression)
   }
   mats_fwd <- lapply(cg@samples, function(s) {
-    if (S7::S7_inherits(s, SeparatedStrandsSample)) s@auto_fwd
+    if (.is_s7_separated_sample(s)) s@auto_fwd
     else s$autosomal_chromosome_reads[[1L]]
   })
   mats_rev <- lapply(cg@samples, function(s) {
-    if (S7::S7_inherits(s, SeparatedStrandsSample)) s@auto_rev
+    if (.is_s7_separated_sample(s)) s@auto_rev
     else s$autosomal_chromosome_reads[[2L]]
   })
   totals <- vapply(cg@samples, function(s) sum(autosomal_matrix(s)), numeric(1L))
@@ -666,20 +889,28 @@ S7::method(fractions_for_regression, .s3_NIPTeRControlGroup) <- function(cg) {
 }
 
 .control_sample_sex <- function(cg) {
-  if (S7::S7_inherits(cg, NIPTControlGroup)) cg@sample_sex else NULL
+  if (.is_s7_nipt_control_group(cg)) cg@sample_sex else NULL
 }
 
 .control_sex_source <- function(cg) {
-  if (S7::S7_inherits(cg, NIPTControlGroup)) cg@sex_source else NULL
+  if (.is_s7_nipt_control_group(cg)) cg@sex_source else NULL
 }
 
 .control_with_sample_sex <- function(cg, sample_sex = NULL, sex_source = NULL) {
-  if (!S7::S7_inherits(cg, NIPTControlGroup)) {
+  if (!.is_s7_nipt_control_group(cg)) {
     return(cg)
   }
   cg@sample_sex <- .normalize_sample_sex(sample_sex, cg@samples)
   if (!is.null(sex_source)) cg@sex_source <- sex_source
   cg
+}
+
+.control_group_with_samples <- function(cg, samples) {
+  if (!.is_s7_nipt_control_group(cg)) {
+    cg$samples <- samples
+    return(cg)
+  }
+  .nipt_control_group_dollar_assign(cg, "samples", samples)
 }
 
 .nipt_control_group_dollar <- function(x, name) {
@@ -690,12 +921,12 @@ S7::method(fractions_for_regression, .s3_NIPTeRControlGroup) <- function(cg) {
     description = x@description,
     sample_sex = x@sample_sex,
     sex_source = x@sex_source,
-    correction_status_autosomal = unique(vapply(
-      x@samples, .sample_correction_status, character(1L), scope = "autosomal"
-    )),
-    correction_status_sex = unique(vapply(
-      x@samples, .sample_correction_status, character(1L), scope = "sex"
-    )),
+    correction_status_autosomal = .control_group_correction_status(
+      x, "autosomal"
+    ),
+    correction_status_sex = .control_group_correction_status(
+      x, "sex"
+    ),
     NULL
   )
 }
@@ -782,51 +1013,51 @@ NCVTemplate <- S7::new_class(
 .nipt_reference_frac_cols <- paste0("FrChrReads_", .nipt_reference_chroms)
 
 .is_nipter_sex_model <- function(x) {
-  inherits(x, "NIPTeRSexModel") || S7::S7_inherits(x, NIPTeRSexModel)
+  tryCatch(S7::S7_inherits(x, NIPTeRSexModel), error = function(e) FALSE)
 }
 
 .is_nipter_sex_prediction <- function(x) {
-  inherits(x, "NIPTeRSexPrediction") || S7::S7_inherits(x, NIPTeRSexPrediction)
+  tryCatch(S7::S7_inherits(x, NIPTeRSexPrediction), error = function(e) FALSE)
 }
 
 .is_nipt_reference_frame <- function(x) {
-  inherits(x, "NIPTReferenceFrame") || S7::S7_inherits(x, NIPTReferenceFrame)
+  tryCatch(S7::S7_inherits(x, NIPTReferenceFrame), error = function(e) FALSE)
 }
 
 .is_nipt_reference_model <- function(x) {
-  inherits(x, "NIPTReferenceModel") || S7::S7_inherits(x, NIPTReferenceModel)
+  tryCatch(S7::S7_inherits(x, NIPTReferenceModel), error = function(e) FALSE)
 }
 
 .is_nipt_sex_score <- function(x) {
-  inherits(x, "NIPTSexScore") || S7::S7_inherits(x, NIPTSexScore)
+  tryCatch(S7::S7_inherits(x, NIPTSexScore), error = function(e) FALSE)
 }
 
 .is_nipt_sex_ncv_model <- function(x) {
-  inherits(x, "NIPTSexNCVModel") || S7::S7_inherits(x, NIPTSexNCVModel)
+  tryCatch(S7::S7_inherits(x, NIPTSexNCVModel), error = function(e) FALSE)
 }
 
 .is_nipt_sex_regression_model <- function(x) {
-  inherits(x, "NIPTSexRegressionModel") ||
-    S7::S7_inherits(x, NIPTSexRegressionModel)
+  tryCatch(S7::S7_inherits(x, NIPTSexRegressionModel), error = function(e) FALSE)
 }
 
 .is_nipt_sex_ncv_score <- function(x) {
-  inherits(x, "NIPTSexNCVScore") || S7::S7_inherits(x, NIPTSexNCVScore)
+  tryCatch(S7::S7_inherits(x, NIPTSexNCVScore), error = function(e) FALSE)
 }
 
 .is_nipt_sex_regression_score <- function(x) {
-  inherits(x, "NIPTSexRegressionScore") ||
-    S7::S7_inherits(x, NIPTSexRegressionScore)
+  tryCatch(S7::S7_inherits(x, NIPTSexRegressionScore), error = function(e) FALSE)
 }
 
 .is_nipt_gaunosome_score <- function(x) {
-  inherits(x, "NIPTGaunosomeScore") ||
-    S7::S7_inherits(x, NIPTGaunosomeScore)
+  tryCatch(S7::S7_inherits(x, NIPTGaunosomeScore), error = function(e) FALSE)
 }
 
 .is_nipt_gaunosome_report <- function(x) {
-  inherits(x, "NIPTGaunosomeReport") ||
-    S7::S7_inherits(x, NIPTGaunosomeReport)
+  tryCatch(S7::S7_inherits(x, NIPTGaunosomeReport), error = function(e) FALSE)
+}
+
+.is_nipt_control_group_qc <- function(x) {
+  tryCatch(S7::S7_inherits(x, NIPTControlGroupQC), error = function(e) FALSE)
 }
 
 .validate_reference_model_map <- function(x, predicate, label,
@@ -1048,8 +1279,7 @@ NIPTReferenceModel <- S7::new_class(
       return(sprintf("NIPTReferenceModel is missing required fields: %s",
                      paste(missing, collapse = ", ")))
     }
-    if (!(inherits(self$control_group, "NIPTeRControlGroup") ||
-          S7::S7_inherits(self$control_group, NIPTControlGroup))) {
+    if (!.is_nipt_control_group_object(self$control_group)) {
       return("NIPTReferenceModel$control_group must be a NIPTControlGroup.")
     }
     if (!.is_nipt_reference_frame(self$reference_frame)) {
@@ -1482,6 +1712,106 @@ NIPTGaunosomeReport <- S7::new_class(
   }
 )
 
+.validate_qc_summary_df <- function(x, required_cols, label) {
+  if (!is.data.frame(x)) {
+    return(sprintf("%s must be a data.frame.", label))
+  }
+  missing_cols <- setdiff(required_cols, names(x))
+  if (length(missing_cols)) {
+    return(sprintf(
+      "%s is missing required columns: %s",
+      label,
+      paste(missing_cols, collapse = ", ")
+    ))
+  }
+  NULL
+}
+
+#' Control-group QC report
+#'
+#' Typed QC object bundling chromosome-level, sample-level, sex-stratified,
+#' and optional chi/bin-level summaries for a \code{NIPTControlGroup}.
+#'
+#' @param .data Named list payload for the typed constructor.
+#'
+#' @export
+NIPTControlGroupQC <- S7::new_class(
+  "NIPTControlGroupQC",
+  parent = .nipt_model_list_class,
+  validator = function(self) {
+    required <- c("sample_names", "chromosome_summary", "sample_summary",
+                  "sex_summary", "bin_summary", "settings")
+    missing <- setdiff(required, names(self))
+    if (length(missing)) {
+      return(sprintf("NIPTControlGroupQC is missing required fields: %s",
+                     paste(missing, collapse = ", ")))
+    }
+    if (!is.character(self$sample_names) || !length(self$sample_names)) {
+      return("NIPTControlGroupQC$sample_names must be a non-empty character vector.")
+    }
+
+    msg <- .validate_qc_summary_df(
+      self$chromosome_summary,
+      c("chromosome", "mean_fraction", "sd_fraction",
+        "cv_fraction", "shapiro_p_value"),
+      "NIPTControlGroupQC$chromosome_summary"
+    )
+    if (!is.null(msg)) return(msg)
+
+    msg <- .validate_qc_summary_df(
+      self$sample_summary,
+      c("sample_name", "mean_ssd", "max_abs_z", "is_matching_outlier"),
+      "NIPTControlGroupQC$sample_summary"
+    )
+    if (!is.null(msg)) return(msg)
+
+    if (!identical(as.character(self$sample_summary$sample_name), self$sample_names)) {
+      return("NIPTControlGroupQC$sample_summary$sample_name must align with sample_names.")
+    }
+    if (!is.logical(self$sample_summary$is_matching_outlier) ||
+        anyNA(self$sample_summary$is_matching_outlier)) {
+      return("NIPTControlGroupQC$sample_summary$is_matching_outlier must be logical without NA values.")
+    }
+
+    if (!is.null(self$sex_summary)) {
+      msg <- .validate_qc_summary_df(
+        self$sex_summary,
+        c("sex_group", "n_samples",
+          "rr_x_mean", "rr_x_sd", "rr_x_cv",
+          "rr_y_mean", "rr_y_sd", "rr_y_cv",
+          "rr_x_outliers", "rr_y_outliers",
+          "can_build_ncv", "can_build_regression"),
+        "NIPTControlGroupQC$sex_summary"
+      )
+      if (!is.null(msg)) return(msg)
+      if (!is.logical(self$sex_summary$can_build_ncv) ||
+          !is.logical(self$sex_summary$can_build_regression)) {
+        return("NIPTControlGroupQC$sex_summary build flags must be logical.")
+      }
+    }
+
+    if (!is.null(self$bin_summary)) {
+      msg <- .validate_qc_summary_df(
+        self$bin_summary,
+        c("chromosome", "bin", "mean_scaled", "sd_scaled", "cv_scaled",
+          "expected_count", "chi_square", "chi_z",
+          "overdispersed", "correction_factor"),
+        "NIPTControlGroupQC$bin_summary"
+      )
+      if (!is.null(msg)) return(msg)
+      if (!is.logical(self$bin_summary$overdispersed) ||
+          anyNA(self$bin_summary$overdispersed)) {
+        return("NIPTControlGroupQC$bin_summary$overdispersed must be logical without NA values.")
+      }
+    }
+
+    if (!is.list(self$settings)) {
+      return("NIPTControlGroupQC$settings must be a list.")
+    }
+    NULL
+  }
+)
+
 .as_nipt_reference_frame <- function(x) {
   if (.is_nipt_reference_frame(x)) x else NIPTReferenceFrame(x)
 }
@@ -1526,110 +1856,17 @@ NIPTGaunosomeReport <- S7::new_class(
   if (.is_nipt_gaunosome_report(x)) x else NIPTGaunosomeReport(x)
 }
 
-
-# ---- S7 <-> S3 conversion helpers -------------------------------------------
-
-# Convert S7 NIPTSample to legacy S3 NIPTeRSample list (for internal function compat)
-.s7_to_s3_sample <- function(s) {
-  if (S7::S7_inherits(s, CombinedStrandsSample)) {
-    structure(
-      list(
-        autosomal_chromosome_reads  = list(s@auto_matrix),
-        sex_chromosome_reads        = list(s@sex_matrix_),
-        correction_status_autosomal = s@correction@autosomal,
-        correction_status_sex       = s@correction@sex,
-        sample_name                 = s@sample_name
-      ),
-      class = c("NIPTeRSample", "CombinedStrands")
-    )
-  } else {
-    structure(
-      list(
-        autosomal_chromosome_reads  = list(s@auto_fwd, s@auto_rev),
-        sex_chromosome_reads        = list(s@sex_fwd, s@sex_rev),
-        correction_status_autosomal = s@correction@autosomal,
-        correction_status_sex       = s@correction@sex,
-        sample_name                 = s@sample_name
-      ),
-      class = c("NIPTeRSample", "SeparatedStrands")
-    )
-  }
+.as_nipt_control_group_qc <- function(x) {
+  if (.is_nipt_control_group_qc(x)) x else NIPTControlGroupQC(x)
 }
-
-# Convert legacy S3 NIPTeRSample list back to S7 NIPTSample
-# `original_s7` is the original S7 object (used to know binsize)
-.s3_to_s7_sample <- function(s3, original_s7) {
-  .d <- function(m) m
-  if (inherits(s3, "SeparatedStrands")) {
-    SeparatedStrandsSample(
-      sample_name = s3$sample_name,
-      binsize     = original_s7@binsize,
-      auto_fwd    = .d(s3$autosomal_chromosome_reads[[1L]]),
-      auto_rev    = .d(s3$autosomal_chromosome_reads[[2L]]),
-      sex_fwd     = .d(s3$sex_chromosome_reads[[1L]]),
-      sex_rev     = .d(s3$sex_chromosome_reads[[2L]]),
-      correction  = NIPTCorrectionRecord(
-        autosomal = s3$correction_status_autosomal,
-        sex       = s3$correction_status_sex
-      )
-    )
-  } else {
-    CombinedStrandsSample(
-      sample_name = s3$sample_name,
-      binsize     = original_s7@binsize,
-      auto_matrix = .d(s3$autosomal_chromosome_reads[[1L]]),
-      sex_matrix_ = .d(s3$sex_chromosome_reads[[1L]]),
-      correction  = NIPTCorrectionRecord(
-        autosomal = s3$correction_status_autosomal,
-        sex       = s3$correction_status_sex
-      )
-    )
-  }
-}
-
-# Convert S7 NIPTControlGroup to legacy S3 NIPTeRControlGroup list
-.s7_cg_to_s3 <- function(cg) {
-  s3_samples <- lapply(cg@samples, function(s) {
-    if (S7::S7_inherits(s, NIPTSample)) .s7_to_s3_sample(s) else s
-  })
-  structure(
-    list(
-      samples = s3_samples,
-      correction_status_autosomal_chromosomes = "Uncorrected",
-      correction_status_sex_chromosomes = "Uncorrected",
-      Description = cg@description
-    ),
-    class = c("NIPTeRControlGroup",
-              if (S7::S7_inherits(cg, SeparatedControlGroup)) "SeparatedStrands" else "CombinedStrands")
-  )
-}
-
-# Convert legacy S3 NIPTeRControlGroup back to S7 NIPTControlGroup
-.s3_cg_to_s7 <- function(s3_cg, original_s7_cg) {
-  s7_samples <- lapply(seq_along(s3_cg$samples), function(i) {
-    orig <- if (i <= length(original_s7_cg@samples)) original_s7_cg@samples[[i]] else NULL
-    s3s <- s3_cg$samples[[i]]
-    if (!is.null(orig) && S7::S7_inherits(orig, NIPTSample)) {
-      .s3_to_s7_sample(s3s, orig)
-    } else {
-      s3s
-    }
-  })
-  if (S7::S7_inherits(original_s7_cg, SeparatedControlGroup)) {
-    SeparatedControlGroup(samples = s7_samples, description = original_s7_cg@description)
-  } else {
-    CombinedControlGroup(samples = s7_samples, description = original_s7_cg@description)
-  }
-}
-
 
 # ---- Strand-type helper used by guards in scoring functions -----------------
 
 # Returns "separated" or "combined" for S7 NIPTSample/NIPTControlGroup or
 # S3 NIPTeRSample/NIPTeRControlGroup objects.
 .strand_type_of <- function(x) {
-  if (S7::S7_inherits(x, NIPTSample)) return(strand_type(x))
-  if (S7::S7_inherits(x, SeparatedControlGroup)) return("separated")
-  if (S7::S7_inherits(x, NIPTControlGroup)) return("combined")
+  if (.is_s7_nipt_sample(x)) return(strand_type(x))
+  if (.is_s7_separated_control_group(x)) return("separated")
+  if (.is_s7_nipt_control_group(x)) return("combined")
   if (inherits(x, "SeparatedStrands")) "separated" else "combined"
 }

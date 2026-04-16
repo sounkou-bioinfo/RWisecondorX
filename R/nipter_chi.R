@@ -50,9 +50,8 @@ nipter_chi_correct <- function(sample,
                                control_group,
                                chi_cutoff  = 3.5,
                                include_sex = FALSE) {
-  stopifnot(inherits(sample, "NIPTeRSample") || S7::S7_inherits(sample, NIPTSample))
-  stopifnot(inherits(control_group, "NIPTeRControlGroup") ||
-              S7::S7_inherits(control_group, NIPTControlGroup))
+  stopifnot(.is_nipt_sample_object(sample))
+  stopifnot(.is_nipt_control_group_object(control_group))
   stopifnot(is.numeric(chi_cutoff), length(chi_cutoff) == 1L)
   stopifnot(is.logical(include_sex), length(include_sex) == 1L)
 
@@ -75,58 +74,19 @@ nipter_chi_correct <- function(sample,
     )
   }
 
-  n_controls <- length(control_group$samples)
-  df         <- n_controls - 1L
-  n_bins     <- ncol(autosomal_matrix(sample))
-
-  # Flatten each control sample's autosomal reads into a single vector.
-  # autosomal_matrix() handles both S7 and S3 objects and sums strands for
-  # SeparatedStrands, matching upstream NIPTeR's chi_correct behaviour.
-  ctrl_flat <- lapply(control_group$samples, function(s) {
-    as.numeric(t(autosomal_matrix(s)))
-  })
-
-  total_bins <- 22L * n_bins
-
-  # Overall mean of total reads across control samples
-  ctrl_totals <- vapply(ctrl_flat, sum, numeric(1L))
-  overall_mean <- mean(ctrl_totals)
-
-  # Scale each control to equalise totals
-  scaled <- lapply(seq_len(n_controls), function(i) {
-    ctrl_flat[[i]] * (overall_mean / ctrl_totals[i])
-  })
-
-  # Expected per bin: mean of scaled values
-  expected <- Reduce(`+`, scaled) / n_controls
-
-  # Chi-squared per bin: sum over controls of (expected - scaled_i)^2 / expected
-  chi_sum <- numeric(total_bins)
-  for (i in seq_len(n_controls)) {
-    chi_sum <- chi_sum + (expected - scaled[[i]])^2 / pmax(expected, .Machine$double.eps)
-  }
-
-  # Normalise chi scores to approximate standard normal
-  chi_norm <- (chi_sum - df) / sqrt(2 * df)
-
-  # Identify overdispersed bins
-  overdispersed <- chi_norm > chi_cutoff
-  correction_factor <- rep(1.0, total_bins)
-  correction_factor[overdispersed] <- chi_sum[overdispersed] / df
+  profile <- .chi_profile(control_group, chi_cutoff = chi_cutoff)
 
   # Apply correction to the test sample
-  sample <- .chi_correct_sample(sample, correction_factor, n_bins)
+  sample <- .chi_correct_sample(sample, profile$correction_factor, profile$n_bins)
 
   # Apply correction to all control samples
-  control_group$samples <- lapply(control_group$samples,
-                                  .chi_correct_sample,
-                                  correction_factor = correction_factor,
-                                  n_bins = n_bins)
-
-  # Update control group correction statuses
-  control_group$correction_status_autosomal <- unique(unlist(lapply(
-    control_group$samples, `[[`, "correction_status_autosomal"
-  )))
+  control_group <- .control_group_with_samples(
+    control_group,
+    lapply(control_group$samples,
+           .chi_correct_sample,
+           correction_factor = profile$correction_factor,
+           n_bins = profile$n_bins)
+  )
 
   list(sample = sample, control_group = control_group)
 }
@@ -136,12 +96,73 @@ nipter_chi_correct <- function(sample,
 # Internal helpers
 # ---------------------------------------------------------------------------
 
+.chi_profile <- function(control_group,
+                         chi_cutoff = 3.5,
+                         include_bin_stats = FALSE) {
+  n_controls <- length(control_group$samples)
+  n_bins <- ncol(autosomal_matrix(control_group$samples[[1L]]))
+
+  # Flatten each control sample's autosomal reads into a single vector.
+  # autosomal_matrix() handles both S7 and S3 objects and sums strands for
+  # SeparatedStrands, matching upstream NIPTeR's chi_correct behaviour.
+  ctrl_flat <- lapply(control_group$samples, function(s) {
+    as.numeric(t(autosomal_matrix(s)))
+  })
+
+  total_bins <- 22L * n_bins
+  df <- n_controls - 1L
+  ctrl_totals <- vapply(ctrl_flat, sum, numeric(1L))
+  overall_mean <- mean(ctrl_totals)
+  scaling <- overall_mean / ctrl_totals
+
+  scaled <- lapply(seq_len(n_controls), function(i) {
+    ctrl_flat[[i]] * scaling[[i]]
+  })
+
+  expected <- Reduce(`+`, scaled) / n_controls
+  chi_sum <- numeric(total_bins)
+  for (i in seq_len(n_controls)) {
+    chi_sum <- chi_sum + (expected - scaled[[i]])^2 / pmax(expected, .Machine$double.eps)
+  }
+
+  chi_norm <- (chi_sum - df) / sqrt(2 * df)
+  overdispersed <- chi_norm > chi_cutoff
+  correction_factor <- rep(1.0, total_bins)
+  correction_factor[overdispersed] <- chi_sum[overdispersed] / df
+
+  out <- list(
+    n_controls = n_controls,
+    n_bins = n_bins,
+    df = df,
+    chi_cutoff = chi_cutoff,
+    expected = expected,
+    chi_square = chi_sum,
+    chi_z = chi_norm,
+    overdispersed = overdispersed,
+    correction_factor = correction_factor
+  )
+
+  if (isTRUE(include_bin_stats)) {
+    scaled_mat <- do.call(cbind, scaled)
+    sd_scaled <- apply(scaled_mat, 1L, stats::sd)
+    mean_scaled <- expected
+    cv_scaled <- rep(NA_real_, length(mean_scaled))
+    ok <- is.finite(mean_scaled) & abs(mean_scaled) > .Machine$double.eps
+    cv_scaled[ok] <- 100 * sd_scaled[ok] / mean_scaled[ok]
+    out$scaled_mean <- mean_scaled
+    out$scaled_sd <- sd_scaled
+    out$scaled_cv <- cv_scaled
+  }
+
+  out
+}
+
 # Apply chi-squared correction factors to a single NIPTeRSample.
 # For SeparatedStrands, applies the same correction factors (derived from
 # summed F+R) independently to each strand matrix via lapply, matching
 # upstream NIPTeR's correctsamples pattern.
 .chi_correct_sample <- function(sample, correction_factor, n_bins) {
-  auto_list <- sample$autosomal_chromosome_reads
+  auto_list <- .sample_autosomal_reads(sample)
 
   corrected_auto <- lapply(auto_list, function(mat) {
     corrected <- mat
@@ -153,9 +174,11 @@ nipter_chi_correct <- function(sample,
     corrected
   })
 
-  sample$autosomal_chromosome_reads <- corrected_auto
-  sample$correction_status_autosomal <- .update_correction_status(
-    sample$correction_status_autosomal, "Chi square corrected"
+  sample <- .sample_with_reads(sample, autosomal = corrected_auto)
+  sample <- .sample_append_correction_step(
+    sample,
+    "autosomal",
+    .nipt_chi_correction_step()
   )
 
   sample

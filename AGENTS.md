@@ -28,7 +28,7 @@ Design priorities:
 
 **WisecondorX layer**
 - `R/wisecondorx_cli.R`: `wisecondorx_convert()`, `wisecondorx_newref()`, `wisecondorx_predict()` — thin `condathis` wrappers delegating to the official bioconda package.
-- `R/npz.R`: `bam_convert_npz()` — WisecondorX-compatible NPZ output via `reticulate`.
+- `R/wisecondorx_npz.R`: `bam_convert_npz()` — WisecondorX-compatible NPZ output via `reticulate`.
 
 **NIPTeR binning layer — `R/nipter_bin.R`**
 - `nipter_bin_bam()`: produces `NIPTeRSample` objects. With `separate_strands = FALSE` (default), class is `c("NIPTeRSample", "CombinedStrands")`; with `separate_strands = TRUE`, class is `c("NIPTeRSample", "SeparatedStrands")` with `autosomal_chromosome_reads` as a list of two matrices (forward/reverse, rownames `"1F".."22F"` / `"1R".."22R"`). Exposes `mapq`, `require_flags`, `exclude_flags`, `rmdup` for pre-filtering matching real-world NIPT pipelines (e.g. `mapq=40L, exclude_flags=1024L`).
@@ -77,7 +77,7 @@ Pure R/Rcpp port of the WisecondorX `newref` and `predict` pipelines, with perfo
 
 **Synthetic cohort generator**
 
-- `R/cohort.R` — `generate_cohort()`: creates synthetic BAMs with "compressed" chromosome lengths (100bp per bin) for testing. Produces ~435KB BAMs per sample. Trisomy simulation uses the Nguyen et al. 2023 fetal fraction model (doi:10.1101/2023.11.24.568620): reads are stochastically removed from non-target chromosomes with probability `p = k*f/(1+k*f)` to simulate relative enrichment of the trisomy chromosome, where `k = 0.5` (non-mosaic) or `k = 0.25` (mosaic). Default fetal fraction is 10%. Exports `COMPRESSED_BINSIZE` constant (100L).
+- `R/synthetic_cohort.R` — `generate_cohort()`: creates synthetic BAMs with "compressed" chromosome lengths (100bp per bin) for testing. Produces ~435KB BAMs per sample. Trisomy simulation uses the Nguyen et al. 2023 fetal fraction model (doi:10.1101/2023.11.24.568620): reads are stochastically removed from non-target chromosomes with probability `p = k*f/(1+k*f)` to simulate relative enrichment of the trisomy chromosome, where `k = 0.5` (non-mosaic) or `k = 0.25` (mosaic). Default fetal fraction is 10%. Exports `COMPRESSED_BINSIZE` constant (100L).
 - `inst/scripts/make_cohort.R` — CLI wrapper for batch cohort generation.
 
 **Tests — native WisecondorX and pipeline**
@@ -126,9 +126,10 @@ The pipeline (`newref` + `predict`) is functionally complete and all 76 unit tes
 - `R/rwisecondorx_cbs.R` — CBS segmentation wrapper (DNAcopy/ParDNAcopy).
 - `R/rwisecondorx_output.R` — BED/statistics output generation.
 - `R/bed_reader.R` — BED.gz reader functions (`bed_to_sample()`, `bed_to_nipter_sample()`) for round-tripping from stored BED files.
-- `R/cohort.R` — synthetic cohort generator for testing.
+- `R/synthetic_cohort.R` — synthetic cohort generator for testing.
+- `R/simulate_trisomy_cohort.R` — donor BAM/CRAM cohort simulator for trisomy positives.
 - `R/wisecondorx_cli.R` — CLI wrappers (condathis-based conformance tools).
-- `R/npz.R` — NPZ output.
+- `R/wisecondorx_npz.R` — WisecondorX NPZ output.
 - `R/aaa.R` — SRA metadata helpers.
 - `R/RcppExports.R` — auto-generated Rcpp R wrappers.
 - `R/zzz_rcpp.R` — roxygen directives for useDynLib + importFrom Rcpp.

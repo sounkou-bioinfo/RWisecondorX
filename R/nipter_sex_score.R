@@ -101,8 +101,7 @@ nipter_sex_score <- function(sample,
                              reference,
                              y_unique_ratio = NULL,
                              min_controls = 2L) {
-  stopifnot(inherits(sample, "NIPTeRSample") ||
-              S7::S7_inherits(sample, NIPTSample))
+  stopifnot(.is_nipt_sample_object(sample))
   if (!.is_nipt_reference_model(reference)) {
     stop("'reference' must be a NIPTReferenceModel.", call. = FALSE)
   }

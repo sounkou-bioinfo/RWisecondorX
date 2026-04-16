@@ -69,12 +69,13 @@ expect_identical(nrow(diag$statistics), 22L,
 expect_true(all(is.finite(diag$statistics[, c("mean", "SD")])),
             info = "diagnose returns finite per-chromosome mean/SD values")
 
-# With well-behaved synthetic data, no aberrant scores
-# (the noise is small relative to the signal)
-# This can be NULL or a data.frame — just check it doesn't error
-expect_true(is.null(diag$aberrant_scores) ||
-            is.data.frame(diag$aberrant_scores),
-            info = "aberrant_scores is NULL or data.frame")
+# Aberrant-score output is either empty or only contains |Z| > 3 events.
+if (is.null(diag$aberrant_scores)) {
+  expect_true(TRUE, info = "aberrant_scores can be NULL for stable synthetic controls")
+} else {
+  expect_true(all(abs(diag$aberrant_scores$z_score) > 3),
+              info = "aberrant_scores only contains true |Z| > 3 events")
+}
 
 # --- nipter_match_control_group ---
 
@@ -112,9 +113,9 @@ expect_identical(length(z21$control_z_scores), 10L,
 expect_identical(z21$sample_name, "test_subject",
                  info = "sample_name preserved")
 
-# A normal sample should have Z ~ 0 (within reason for small control group)
-expect_true(abs(z21$sample_z_score) < 5,
-            info = "normal sample has moderate Z-score")
+# A normal sample should stay reasonably close to the control centre.
+expect_true(abs(z21$sample_z_score) < 3,
+            info = "normal sample stays within 3 SD of the control centre")
 
 # Test with a trisomy sample — should have elevated Z
 trisomy_sample <- .sim_nipter_sample(
@@ -176,11 +177,26 @@ corrected_auto <- chi_result$sample$autosomal_chromosome_reads[[1L]]
 expect_true(all(corrected_auto >= 0),
             info = "chi-corrected autosomal counts are non-negative")
 
-# Total reads should be similar (correction redistributes, not removes)
+# Total reads should stay close (correction reweights noisy bins, not halve coverage)
 orig_total <- sum(test_sample$autosomal_chromosome_reads[[1L]])
 corr_total <- sum(corrected_auto)
-expect_true(abs(corr_total - orig_total) / orig_total < 0.5,
-            info = "chi correction doesn't drastically change total reads")
+expect_true(abs(corr_total - orig_total) / orig_total < 0.05,
+            info = "chi correction keeps total autosomal reads within 5%")
+
+mixed_ctrl <- ctrl_samples[1:2]
+mixed_ctrl[[1]] <- RWisecondorX:::.sample_append_correction_step(
+  mixed_ctrl[[1]], "autosomal", RWisecondorX:::.nipt_gc_correction_step()
+)
+mixed_ctrl[[2]] <- RWisecondorX:::.sample_append_correction_step(
+  mixed_ctrl[[2]], "autosomal", RWisecondorX:::.nipt_gc_correction_step()
+)
+mixed_ctrl[[2]] <- RWisecondorX:::.sample_append_correction_step(
+  mixed_ctrl[[2]], "autosomal", RWisecondorX:::.nipt_chi_correction_step()
+)
+mixed_cg <- nipter_as_control_group(mixed_ctrl)
+expect_true(all(c("GC Corrected", "Chi square corrected") %in%
+                  mixed_cg$correction_status_autosomal),
+            info = "control-group correction status returns the union of typed correction steps")
 
 
 # ===================================================================

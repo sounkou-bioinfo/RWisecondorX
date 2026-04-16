@@ -45,7 +45,7 @@ out_bam  <- file.path(pkg_root, "inst", "extdata",
 out_sam  <- tempfile(fileext = ".sam")
 
 # ---- GRCh37 chromosome sizes (bp) from BINS_PER_CHR * 100000 ---------------
-# (Matches the BINS_PER_CHR internal constant in R/cohort.R)
+# (Matches the BINS_PER_CHR internal constant in R/synthetic_cohort.R)
 BINS_PER_CHR <- c(
   "1"  = 2493L, "2"  = 2432L, "3"  = 1981L, "4"  = 1912L,
   "5"  = 1810L, "6"  = 1712L, "7"  = 1592L, "8"  = 1464L,

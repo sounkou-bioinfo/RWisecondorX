@@ -25,6 +25,9 @@ library(DNAcopy)
 }
 
 test_ref_cpus <- .test_threads()
+test_fetal_fraction <- 0.30
+test_reads_per_bin <- 10
+test_gc_bias_strength <- 1.0
 
 # ---------------------------------------------------------------------------
 # Section 1: Aberration calls on synthetic trisomy samples
@@ -34,9 +37,17 @@ test_ref_cpus <- .test_threads()
 # ---------------------------------------------------------------------------
 
 cohort_dir <- file.path(tempdir(), "e2e_wcx")
+unlink(cohort_dir, recursive = TRUE, force = TRUE)
+on.exit(unlink(cohort_dir, recursive = TRUE), add = TRUE)
 message("Generating synthetic cohort for E2E test ...")
 manifest <- suppressMessages(
-  generate_cohort(cohort_dir, verbose = FALSE)
+  generate_cohort(
+    cohort_dir,
+    verbose = FALSE,
+    fetal_fraction = test_fetal_fraction,
+    reads_per_bin = test_reads_per_bin,
+    gc_bias_strength = test_gc_bias_strength
+  )
 )
 
 all_samples <- vector("list", nrow(manifest))
@@ -122,15 +133,22 @@ message("Section 1 complete: aberration-level assertions passed.")
 # ---------------------------------------------------------------------------
 
 bed_dir <- file.path(tempdir(), "e2e_wcx_beds")
-dir.create(bed_dir)
+unlink(bed_dir, recursive = TRUE, force = TRUE)
+dir.create(bed_dir, recursive = TRUE)
+on.exit(unlink(bed_dir, recursive = TRUE), add = TRUE)
 message("Writing BED.gz files for ", nrow(manifest), " samples ...")
 
 for (i in seq_len(nrow(manifest))) {
   bed_path <- file.path(bed_dir, paste0(manifest$sample_id[i], ".bed.gz"))
+  tmp_bed <- tempfile(pattern = paste0(manifest$sample_id[i], "_"),
+                      fileext = ".bed.gz")
   suppressMessages(
-    bam_convert_bed(file.path(cohort_dir, manifest$bam_file[i]), bed_path,
+    bam_convert_bed(file.path(cohort_dir, manifest$bam_file[i]), tmp_bed,
                     binsize = COMPRESSED_BINSIZE, mapq = 0L, rmdup = "none")
   )
+  file.copy(tmp_bed, bed_path, overwrite = TRUE)
+  file.copy(paste0(tmp_bed, ".tbi"), paste0(bed_path, ".tbi"), overwrite = TRUE)
+  unlink(c(tmp_bed, paste0(tmp_bed, ".tbi")))
 }
 
 expect_true(length(Sys.glob(file.path(bed_dir, "*.bed.gz"))) == nrow(manifest),
@@ -179,7 +197,9 @@ message("Section 3: running Python WisecondorX conformance ...")
 
 # Convert all samples to NPZ
 npz_dir <- file.path(tempdir(), "e2e_wcx_npz")
-dir.create(npz_dir)
+unlink(npz_dir, recursive = TRUE, force = TRUE)
+dir.create(npz_dir, recursive = TRUE)
+on.exit(unlink(npz_dir, recursive = TRUE), add = TRUE)
 
 for (i in seq_len(nrow(manifest))) {
   npz_path <- file.path(npz_dir, paste0(manifest$sample_id[i], ".npz"))
@@ -207,6 +227,7 @@ suppressMessages(
       binsize     = COMPRESSED_BINSIZE,
       ref_binsize = COMPRESSED_BINSIZE,
       nipt        = TRUE,
+      refsize     = 10L,
       cpus        = test_ref_cpus
     ),
     error = function(e) {
@@ -227,6 +248,8 @@ suppressMessages(
       npz           = t21_npz,
       ref           = py_ref,
       output_prefix = py_t21_out,
+      minrefbins    = 5L,
+      zscore        = 3,
       bed           = TRUE,
       seed          = 1L
     ),
@@ -260,34 +283,21 @@ r_chrs <- unique(as.character(pred_t21$aberrations$chr))
 expect_true("21" %in% r_chrs,
             info = "Native R calls chr21 gain on T21 sample")
 
-# Python conformance on synthetic data is informational — compressed 100bp
-# bins are far from real WGS, so Python WisecondorX may not detect trisomy
-# on this artificial cohort. Log but don't hard-fail.
 message(sprintf("Python WisecondorX called aberrations on chrs: %s",
                 paste(py_chrs, collapse = ", ")))
 message(sprintf("Native R called aberrations on chrs: %s",
                 paste(r_chrs, collapse = ", ")))
 
-if ("21" %in% py_chrs) {
-  message("Python WisecondorX also called chr21 — checking Jaccard agreement.")
-  jaccard <- length(intersect(r_chrs, py_chrs)) / length(union(r_chrs, py_chrs))
-  message(sprintf("Aberration Jaccard (R vs Python) on T21: %.2f", jaccard))
-  expect_true(jaccard >= 0.3,
-              info = "Aberration Jaccard between R and Python >= 0.3 on T21")
-} else {
-  message("Python WisecondorX did not call chr21 on synthetic data — expected ",
-          "for compressed bins. Real-data conformance is tested separately.")
-}
+expect_true("21" %in% py_chrs,
+            info = paste(
+              "Python WisecondorX calls chr21 on the T21 sample when",
+              "reference-build and predict thresholds match the native test"
+            ))
+expect_true(length(intersect(r_chrs, py_chrs)) >= 1L,
+            info = "native and Python WisecondorX share at least one called chromosome on T21")
 
 message("Section 3 complete: Python WisecondorX conformance checked.")
-
-
-# ---------------------------------------------------------------------------
-# Cleanup
-# ---------------------------------------------------------------------------
-
-unlink(cohort_dir, recursive = TRUE)
-unlink(bed_dir,   recursive = TRUE)
-unlink(npz_dir, recursive = TRUE)
-if (exists("py_ref")) unlink(py_ref)
-if (exists("py_t21_out")) unlink(paste0(py_t21_out, "_aberrations.bed"))
+if (exists("py_ref")) on.exit(unlink(py_ref), add = TRUE)
+if (exists("py_t21_out")) {
+  on.exit(unlink(paste0(py_t21_out, "_aberrations.bed")), add = TRUE)
+}

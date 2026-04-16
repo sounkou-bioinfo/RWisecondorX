@@ -21,6 +21,10 @@ expect_true(S7::S7_inherits(sample, NIPTSample),
             info = "result inherits the NIPTSample S7 base class")
 expect_true(S7::S7_inherits(sample, CombinedStrandsSample),
             info = "result inherits the CombinedStrandsSample S7 subclass")
+expect_true(S7::S7_inherits(sample@correction, NIPTCorrectionRecord),
+            info = "sample stores typed correction record metadata")
+expect_true(S7::S7_inherits(sample@correction@autosomal, RWisecondorX:::NIPTCorrectionPath),
+            info = "autosomal correction history is a typed correction path")
 
 expect_true(is.list(sample$autosomal_chromosome_reads), info = "autosomal_chromosome_reads is a list")
 expect_true(is.list(sample$sex_chromosome_reads),       info = "sex_chromosome_reads is a list")

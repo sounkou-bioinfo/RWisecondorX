@@ -21,15 +21,16 @@ A named list with one integer vector per chromosome key
 are \code{NULL}. This is the same format returned by \code{\link[=bam_convert]{bam_convert()}}.
 }
 \description{
-Reads a 4-column bgzipped BED file (as written by \code{\link[=bam_convert_bed]{bam_convert_bed()}}) and
-returns a named list of integer vectors suitable for \code{\link[=rwisecondorx_newref]{rwisecondorx_newref()}},
-\code{\link[=rwisecondorx_predict]{rwisecondorx_predict()}}, \code{\link[=scale_sample]{scale_sample()}}, or \code{\link[=bam_convert_npz]{bam_convert_npz()}}.
+Reads a bgzipped BED file and returns a named list of integer vectors
+suitable for \code{\link[=rwisecondorx_newref]{rwisecondorx_newref()}}, \code{\link[=rwisecondorx_predict]{rwisecondorx_predict()}},
+\code{\link[=scale_sample]{scale_sample()}}, or \code{\link[=bam_convert_npz]{bam_convert_npz()}}.
 }
 \details{
-The BED file must have 4 tab-delimited columns: \code{chrom}, \code{start}, \code{end},
-\code{count} (no header). Coordinates are 0-based half-open intervals. The bin
-size is inferred from the first row (\code{end - start}) unless explicitly
-provided.
+Only the first 4 tab-delimited columns are used: \code{chrom}, \code{start}, \code{end},
+\code{count} (no header). Any trailing columns are ignored, so this reader stays
+strand-agnostic and can also consume NIPTeR BEDs by taking their total-count
+column. Coordinates are 0-based half-open intervals. The bin size is
+inferred from the first row (\code{end - start}) unless explicitly provided.
 }
 \examples{
 \dontrun{

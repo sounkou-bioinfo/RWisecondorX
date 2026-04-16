@@ -111,7 +111,7 @@ nipter_gaunosome_score <- function(sample,
                                    min_controls = 2L,
                                    sample_predictors = NULL,
                                    focus_chromosomes = c("X", "Y")) {
-  stopifnot(inherits(sample, "NIPTeRSample") || S7::S7_inherits(sample, NIPTSample))
+  stopifnot(.is_nipt_sample_object(sample))
   if (!.is_nipt_reference_model(reference)) {
     stop("'reference' must be a NIPTReferenceModel.", call. = FALSE)
   }

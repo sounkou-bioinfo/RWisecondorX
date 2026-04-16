@@ -76,13 +76,11 @@
   sex_mat <- matrix(0L, nrow = 2L, ncol = n_bins,
                     dimnames = list(c("X", "Y"), col_names))
 
-  structure(
-    list(autosomal_chromosome_reads  = list(auto_mat),
-         sex_chromosome_reads        = list(sex_mat),
-         correction_status_autosomal = "Uncorrected",
-         correction_status_sex       = "Uncorrected",
-         sample_name                 = name),
-    class = c("NIPTeRSample", "CombinedStrands")
+  CombinedStrandsSample(
+    sample_name = name,
+    binsize = as.integer(50000L),
+    auto_matrix = auto_mat,
+    sex_matrix_ = sex_mat
   )
 }
 
@@ -134,13 +132,13 @@
   rev_sex <- matrix(0L, nrow = 2L, ncol = n_bins,
                     dimnames = list(c("XR", "YR"), col_names))
 
-  structure(
-    list(autosomal_chromosome_reads  = list(fwd_auto, rev_auto),
-         sex_chromosome_reads        = list(fwd_sex, rev_sex),
-         correction_status_autosomal = "Uncorrected",
-         correction_status_sex       = "Uncorrected",
-         sample_name                 = name),
-    class = c("NIPTeRSample", "SeparatedStrands")
+  SeparatedStrandsSample(
+    sample_name = name,
+    binsize = as.integer(50000L),
+    auto_fwd = fwd_auto,
+    auto_rev = rev_auto,
+    sex_fwd = fwd_sex,
+    sex_rev = rev_sex
   )
 }
 

@@ -31,9 +31,11 @@ if (getRversion() < "4.4.0") {
 #' @noRd
 .normalize_chr_name <- function(x, xy_to_numeric = TRUE) {
   x <- sub("^[Cc][Hh][Rr]", "", x)
+  x[x == "x"] <- "X"
+  x[x == "y"] <- "Y"
   if (xy_to_numeric) {
-    x[x == "X" | x == "x"] <- "23"
-    x[x == "Y" | x == "y"] <- "24"
+    x[x == "X"] <- "23"
+    x[x == "Y"] <- "24"
   }
   x
 }

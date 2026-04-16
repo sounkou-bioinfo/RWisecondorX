@@ -7,7 +7,7 @@
 # Usage:
 #   Rscript inst/scripts/make_cohort.R [output_dir]
 #
-# The real implementation lives in R/cohort.R so that it is available as
+# The real implementation lives in R/synthetic_cohort.R so that it is available as
 # RWisecondorX::generate_cohort() when the package is installed.
 
 args <- commandArgs(trailingOnly = TRUE)
@@ -18,6 +18,6 @@ if (requireNamespace("RWisecondorX", quietly = TRUE)) {
 } else {
   script_arg <- grep("^--file=", commandArgs(FALSE), value = TRUE)
   script_path <- if (length(script_arg) == 1L) sub("^--file=", "", script_arg) else "."
-  source(file.path(dirname(script_path), "..", "..", "R", "cohort.R"))
+  source(file.path(dirname(script_path), "..", "..", "R", "synthetic_cohort.R"))
   generate_cohort(out_dir)
 }

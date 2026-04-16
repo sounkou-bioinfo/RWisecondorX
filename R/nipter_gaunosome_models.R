@@ -38,6 +38,20 @@
   )
 }
 
+.validate_reference_sex_groups <- function(groups, caller, min_n) {
+  for (sex in names(groups)) {
+    if (nrow(groups[[sex]]) < min_n) {
+      stop(
+        sprintf(
+          "%s: %s non-outlier subset has only %d sample(s); need >= %d.",
+          caller, sex, nrow(groups[[sex]]), min_n
+        ),
+        call. = FALSE
+      )
+    }
+  }
+}
+
 .candidate_ratio_columns <- function(candidate_chromosomes, focus_chromosome,
                                      extra_predictors, frame) {
   focus_chromosome <- match.arg(focus_chromosome, c("X", "Y"))
@@ -94,7 +108,15 @@
                                      candidate_chromosomes,
                                      min_elements,
                                      max_elements) {
-  stopifnot(nrow(reference_frame) >= 2L)
+  if (nrow(reference_frame) < 2L) {
+    stop(
+      sprintf(
+        "%s %s NCV model requires at least 2 reference samples; found %d.",
+        reference_sex, focus_chromosome, nrow(reference_frame)
+      ),
+      call. = FALSE
+    )
+  }
   focus_col <- paste0("NChrReads_", focus_chromosome)
   cand_cols <- paste0("NChrReads_", as.character(candidate_chromosomes))
   cand_cols <- cand_cols[cand_cols %in% names(reference_frame)]
@@ -147,6 +169,16 @@
     }
   }
 
+  if (is.null(best_stats) || is.null(best_denoms)) {
+    stop(
+      sprintf(
+        "NCV model build failed for %s %s: no finite CV found across all denominator sets. Check that the focus-chromosome and denominator read counts are non-zero across the reference cohort.",
+        reference_sex, focus_chromosome
+      ),
+      call. = FALSE
+    )
+  }
+
   .as_nipt_sex_ncv_model(list(
     focus_chromosome = focus_chromosome,
     reference_sex = reference_sex,
@@ -187,6 +219,11 @@ nipter_build_sex_ncv_models <- function(reference,
   }
   focus_chromosomes <- unique(match.arg(focus_chromosomes, c("X", "Y"), several.ok = TRUE))
   groups <- .reference_sex_groups(reference, "nipter_build_sex_ncv_models()")
+  .validate_reference_sex_groups(
+    groups,
+    caller = "nipter_build_sex_ncv_models()",
+    min_n = 2L
+  )
 
   models <- list(female = list(), male = list())
   for (sex in names(models)) {
@@ -225,7 +262,7 @@ nipter_ncv_sex_score <- function(sample,
                                  reference,
                                  focus_chromosome = c("X", "Y"),
                                  y_unique_ratio = NULL) {
-  stopifnot(inherits(sample, "NIPTeRSample") || S7::S7_inherits(sample, NIPTSample))
+  stopifnot(.is_nipt_sample_object(sample))
   if (!.is_nipt_reference_model(reference)) {
     stop("'reference' must be a NIPTReferenceModel.", call. = FALSE)
   }
@@ -243,6 +280,17 @@ nipter_ncv_sex_score <- function(sample,
 
   for (sex in c("female", "male")) {
     mdl <- reference$sex_ncv_models[[sex]][[focus_chromosome]]
+    missing_cols <- setdiff(c(paste0("NChrReads_", focus_chromosome), mdl$denominators),
+                            names(sample_row))
+    if (length(missing_cols)) {
+      stop(
+        sprintf(
+          "Sample row is missing NCV denominator columns: %s",
+          paste(missing_cols, collapse = ", ")
+        ),
+        call. = FALSE
+      )
+    }
     sample_ratio <- as.numeric(sample_row[[paste0("NChrReads_", focus_chromosome)]][[1L]]) /
       sum(vapply(mdl$denominators, function(col) {
         as.numeric(sample_row[[col]][[1L]])
@@ -277,7 +325,15 @@ nipter_ncv_sex_score <- function(sample,
                                              n_models,
                                              n_predictors,
                                              extra_predictors = "GCPCTAfterFiltering") {
-  stopifnot(nrow(reference_frame) >= 4L)
+  if (nrow(reference_frame) < 4L) {
+    stop(
+      sprintf(
+        "%s %s regression models require at least 4 reference samples; found %d.",
+        reference_sex, focus_chromosome, nrow(reference_frame)
+      ),
+      call. = FALSE
+    )
+  }
   frame <- .reference_ratio_frame(reference_frame)
   response_col <- paste0("RR_", focus_chromosome)
   predictor_cols <- .candidate_ratio_columns(
@@ -381,6 +437,11 @@ nipter_build_sex_regression_models <- function(reference,
   }
   focus_chromosomes <- unique(match.arg(focus_chromosomes, c("X", "Y"), several.ok = TRUE))
   groups <- .reference_sex_groups(reference, "nipter_build_sex_regression_models()")
+  .validate_reference_sex_groups(
+    groups,
+    caller = "nipter_build_sex_regression_models()",
+    min_n = 4L
+  )
 
   models <- list(female = list(), male = list())
   for (sex in names(models)) {
@@ -426,7 +487,7 @@ nipter_regression_sex_score <- function(sample,
                                         focus_chromosome = c("X", "Y"),
                                         y_unique_ratio = NULL,
                                         sample_predictors = NULL) {
-  stopifnot(inherits(sample, "NIPTeRSample") || S7::S7_inherits(sample, NIPTSample))
+  stopifnot(.is_nipt_sample_object(sample))
   if (!.is_nipt_reference_model(reference)) {
     stop("'reference' must be a NIPTReferenceModel.", call. = FALSE)
   }
@@ -468,7 +529,8 @@ nipter_regression_sex_score <- function(sample,
     ratios[[sex]] <- scores[[sex]]
     scores[[sex]] <- vapply(seq_along(mdl_set), function(i) {
       mdl <- mdl_set[[i]]
-      (ratios[[sex]][[i]] - 1) / mdl$control_statistics[["sd_ratio"]]
+      (ratios[[sex]][[i]] - mdl$control_statistics[["mean_ratio"]]) /
+        mdl$control_statistics[["sd_ratio"]]
     }, numeric(1L))
     names(scores[[sex]]) <- paste0("model_", seq_along(mdl_set))
     names(ratios[[sex]]) <- names(scores[[sex]])

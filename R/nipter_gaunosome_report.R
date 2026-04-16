@@ -36,16 +36,14 @@
 }
 
 .as_gaunosome_sample_list <- function(samples) {
-  if (inherits(samples, "NIPTeRControlGroup") || S7::S7_inherits(samples, NIPTControlGroup)) {
+  if (.is_nipt_control_group_object(samples)) {
     samples <- samples$samples
   }
   if (!is.list(samples) || !length(samples)) {
     stop("'samples' must be a non-empty list of NIPTeRSample/NIPTSample objects.",
          call. = FALSE)
   }
-  ok <- vapply(samples, function(sample) {
-    inherits(sample, "NIPTeRSample") || S7::S7_inherits(sample, NIPTSample)
-  }, logical(1L))
+  ok <- vapply(samples, .is_nipt_sample_object, logical(1L))
   if (!all(ok)) {
     stop("'samples' must contain only NIPTeRSample/NIPTSample objects.",
          call. = FALSE)

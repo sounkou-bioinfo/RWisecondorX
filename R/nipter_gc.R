@@ -168,28 +168,21 @@ nipter_gc_correct <- function(object,
               nzchar(fasta), file.exists(fasta))
   }
 
-  if (inherits(object, "NIPTeRControlGroup") ||
-      S7::S7_inherits(object, NIPTControlGroup)) {
+  if (.is_nipt_control_group_object(object)) {
     # Resolve gc_table once for all samples; convert path → list so we only
     # hit disk / run rduckhts_fasta_nuc once.
     resolved_gc <- .resolve_gc_table(gc_table, fasta, binsize, con)
-    object$samples <- lapply(object$samples, nipter_gc_correct,
-                             method = method, span = span,
-                             include_sex = include_sex, binsize = binsize,
-                             gc_table = resolved_gc, con = con)
-    object$correction_status_autosomal <- unique(unlist(lapply(
-      object$samples, `[[`, "correction_status_autosomal"
-    )))
-    if (include_sex) {
-      object$correction_status_sex <- unique(unlist(lapply(
-        object$samples, `[[`, "correction_status_sex"
-      )))
-    }
+    object <- .control_group_with_samples(
+      object,
+      lapply(object$samples, nipter_gc_correct,
+             method = method, span = span,
+             include_sex = include_sex, binsize = binsize,
+             gc_table = resolved_gc, con = con)
+    )
     return(object)
   }
 
-  stopifnot(inherits(object, "NIPTeRSample") ||
-              S7::S7_inherits(object, NIPTSample))
+  stopifnot(.is_nipt_sample_object(object))
 
   gc_tbl <- .resolve_gc_table(gc_table, fasta, binsize, con)
 
@@ -311,8 +304,7 @@ nipter_gc_correct <- function(object,
 
 # LOESS GC correction for a single NIPTeRSample.
 .gc_correct_loess <- function(sample, gc_table, span, include_sex) {
-  auto_list <- sample$autosomal_chromosome_reads
-  is_ss     <- inherits(sample, "SeparatedStrands")
+  auto_list <- .sample_autosomal_reads(sample)
 
   # For fitting: always use the summed (F+R) matrix via autosomal_matrix().
   summed_auto <- autosomal_matrix(sample)
@@ -332,8 +324,10 @@ nipter_gc_correct <- function(object,
   # Flatten summed autosomal reads row by row (chr1 bins, chr2 bins, ...)
   reads_flat <- as.numeric(t(summed_auto))  # 22*n_bins vector
 
-  # Valid bins: known GC and non-zero reads
-  valid <- !is.na(gc_auto) & reads_flat > 0
+  # Match upstream NIPTeR LOESS semantics: only strictly positive GC bins
+  # with non-zero reads contribute to the fit. Our GC table uses NA for
+  # all-N/empty bins, but true 0.0 GC bins should still be excluded here.
+  valid <- !is.na(gc_auto) & gc_auto > 0 & reads_flat > 0
   if (sum(valid) < 10L) {
     warning("Too few valid bins for LOESS GC correction; returning uncorrected.",
             call. = FALSE)
@@ -362,14 +356,12 @@ nipter_gc_correct <- function(object,
     corrected
   })
 
-  sample$autosomal_chromosome_reads <- corrected_auto
-  sample$correction_status_autosomal <- .update_correction_status(
-    sample$correction_status_autosomal, "GC Corrected"
-  )
+  sample <- .sample_with_reads(sample, autosomal = corrected_auto)
+  sample <- .sample_append_correction_step(sample, "autosomal", .nipt_gc_correction_step())
 
   # Sex chromosome correction (nearest-neighbour lookup, vectorized per chromosome)
   if (include_sex) {
-    sex_list <- sample$sex_chromosome_reads
+    sex_list <- .sample_sex_reads(sample)
 
     # Pre-sort the autosomal GC/fitted-values for binary-search nearest-neighbour.
     gc_fitted_vals <- gc_auto[valid]
@@ -394,7 +386,7 @@ nipter_gc_correct <- function(object,
         # Vectorised nearest-neighbour: binary search via findInterval, then
         # check adjacent positions.  Replaces the O(n_bins * n_valid) loop.
         cf_vec <- vapply(gc_sex, function(g) {
-          if (is.na(g)) return(1.0)
+          if (is.na(g) || g <= 0) return(1.0)
           pos <- findInterval(g, gc_sorted)
           candidates <- c(pos, pos + 1L)
           candidates <- candidates[candidates >= 1L & candidates <= length(gc_sorted)]
@@ -408,10 +400,8 @@ nipter_gc_correct <- function(object,
       corrected
     })
 
-    sample$sex_chromosome_reads <- corrected_sex
-    sample$correction_status_sex <- .update_correction_status(
-      sample$correction_status_sex, "GC Corrected"
-    )
+    sample <- .sample_with_reads(sample, sex = corrected_sex)
+    sample <- .sample_append_correction_step(sample, "sex", .nipt_gc_correction_step())
   }
 
   sample
@@ -420,8 +410,7 @@ nipter_gc_correct <- function(object,
 
 # Bin-weight GC correction for a single NIPTeRSample.
 .gc_correct_bin <- function(sample, gc_table, include_sex) {
-  auto_list <- sample$autosomal_chromosome_reads
-  is_ss     <- inherits(sample, "SeparatedStrands")
+  auto_list <- .sample_autosomal_reads(sample)
 
   # Sum F+R via autosomal_matrix() for both S3 and S7 objects
   summed_auto <- autosomal_matrix(sample)
@@ -488,14 +477,12 @@ nipter_gc_correct <- function(object,
     corrected
   })
 
-  sample$autosomal_chromosome_reads <- corrected_auto
-  sample$correction_status_autosomal <- .update_correction_status(
-    sample$correction_status_autosomal, "GC Corrected"
-  )
+  sample <- .sample_with_reads(sample, autosomal = corrected_auto)
+  sample <- .sample_append_correction_step(sample, "autosomal", .nipt_gc_correction_step())
 
   # Sex chromosome correction (vectorised per chromosome)
   if (include_sex) {
-    corrected_sex <- lapply(sample$sex_chromosome_reads, function(sex_mat) {
+    corrected_sex <- lapply(.sample_sex_reads(sample), function(sex_mat) {
       corrected <- sex_mat
       for (chr_label in c("X", "Y")) {
         gc_sex <- gc_table[[chr_label]]
@@ -518,19 +505,9 @@ nipter_gc_correct <- function(object,
       corrected
     })
 
-    sample$sex_chromosome_reads <- corrected_sex
-    sample$correction_status_sex <- .update_correction_status(
-      sample$correction_status_sex, "GC Corrected"
-    )
+    sample <- .sample_with_reads(sample, sex = corrected_sex)
+    sample <- .sample_append_correction_step(sample, "sex", .nipt_gc_correction_step())
   }
 
   sample
-}
-
-
-# Update correction status vector: add new status, remove "Uncorrected".
-.update_correction_status <- function(current, new_status) {
-  updated <- unique(c(current, new_status))
-  updated <- updated[updated != "Uncorrected"]
-  updated
 }

@@ -1,5 +1,25 @@
 # RWisecondorX 0.0.0.9001 (development version)
 
+* New `nipter_control_group_qc()` returns a typed `NIPTControlGroupQC`
+  object for control-cohort diagnostics. It exposes per-chromosome
+  mean/SD/CV/Shapiro summaries, per-sample matching/outlier summaries,
+  sex-stratified X/Y readiness metrics, and optional bin-level chi-profile
+  summaries including expected counts, scaled mean/SD/CV, chi scores, and
+  correction factors.
+
+* The chi-correction implementation now reuses an explicit internal
+  chi-profile builder instead of recomputing and discarding bin-level
+  statistics. This keeps the correction path and the new QC/report path on
+  the same calculation.
+
+* Gaunosome model building and scoring now fail explicitly on invalid
+  reference subsets and missing inputs. Sex-specific NCV/regression builders
+  error when the filtered female or male subset is too small, NCV scoring now
+  checks that the requested numerator and denominator chromosome columns are
+  actually present, regression sex scores are centred on the learned
+  `mean_ratio`, and tied sex-model votes now warn instead of silently picking
+  a class.
+
 * The NIPTeR S7 layer has been tightened up around the control-group
   abstraction. `NIPTControlGroup` objects now carry optional explicit
   `sample_sex` annotations plus a `sex_source`, and the public

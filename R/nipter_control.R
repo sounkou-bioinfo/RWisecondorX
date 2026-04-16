@@ -40,9 +40,7 @@ nipter_as_control_group <- function(samples,
             nzchar(description))
 
   # Validate that all entries are NIPTeRSample (S3) or NIPTSample (S7)
-  ok <- vapply(samples, function(s) {
-    inherits(s, "NIPTeRSample") || S7::S7_inherits(s, NIPTSample)
-  }, logical(1L))
+  ok <- vapply(samples, .is_nipt_sample_object, logical(1L))
   if (!all(ok)) {
     stop("All elements of 'samples' must be NIPTeRSample or NIPTSample objects.",
          call. = FALSE)
@@ -60,9 +58,7 @@ nipter_as_control_group <- function(samples,
   strand_type_val <- strand_types[1L]   # "combined" or "separated"
 
   # Remove duplicate sample names (keep first occurrence)
-  names_vec <- vapply(samples, function(s) {
-    if (S7::S7_inherits(s, NIPTSample)) s@sample_name else s$sample_name
-  }, character(1L))
+  names_vec <- vapply(samples, .sample_name, character(1L))
   dups <- duplicated(names_vec)
   if (any(dups)) {
     message("Removing ", sum(dups), " duplicate sample(s) by name.")
@@ -126,8 +122,7 @@ nipter_as_control_group <- function(samples,
 #'
 #' @export
 nipter_diagnose_control_group <- function(control_group) {
-  stopifnot(inherits(control_group, "NIPTeRControlGroup") ||
-              S7::S7_inherits(control_group, NIPTControlGroup))
+  stopifnot(.is_nipt_control_group_object(control_group))
 
   fracs <- .control_group_fractions_collapsed(control_group)
   # fracs: 22 x n_samples matrix
@@ -208,9 +203,8 @@ nipter_match_control_group <- function(sample,
                                        include_chromosomes = NULL,
                                        cpus = 1L) {
   mode <- match.arg(mode)
-  stopifnot(inherits(sample, "NIPTeRSample") || S7::S7_inherits(sample, NIPTSample))
-  stopifnot(inherits(control_group, "NIPTeRControlGroup") ||
-              S7::S7_inherits(control_group, NIPTControlGroup))
+  stopifnot(.is_nipt_sample_object(sample))
+  stopifnot(.is_nipt_control_group_object(control_group))
   stopifnot(is.numeric(n), length(n) == 1L, n >= 1L)
 
   # Strand-type compatibility guard
@@ -250,18 +244,11 @@ nipter_match_control_group <- function(sample,
   # Subset mode: return top n as a new control group
   n <- min(n, length(scores))
   keep_names <- names(scores)[seq_len(n)]
-  all_samples <- if (S7::S7_inherits(control_group, NIPTControlGroup))
-    control_group@samples else control_group$samples
-  keep_idx   <- match(keep_names, vapply(all_samples,
-                                         function(s) {
-                                           if (S7::S7_inherits(s, NIPTSample))
-                                             s@sample_name else s$sample_name
-                                         },
-                                         character(1L)))
-  sname <- if (S7::S7_inherits(sample, NIPTSample)) sample@sample_name
-           else sample$sample_name
+  all_samples <- control_group$samples
+  keep_idx   <- match(keep_names, vapply(all_samples, .sample_name, character(1L)))
+  sname <- .sample_name(sample)
   keep_sex <- NULL
-  if (S7::S7_inherits(control_group, NIPTControlGroup) &&
+  if (.is_s7_nipt_control_group(control_group) &&
       !is.null(control_group$sample_sex)) {
     keep_sex <- control_group$sample_sex[keep_names]
   }
@@ -269,7 +256,7 @@ nipter_match_control_group <- function(sample,
     all_samples[keep_idx],
     description = sprintf("Fitted to %s", sname),
     sample_sex = keep_sex,
-    sex_source = if (S7::S7_inherits(control_group, NIPTControlGroup))
+    sex_source = if (.is_s7_nipt_control_group(control_group))
       control_group$sex_source else NULL
   )
 }
@@ -307,8 +294,7 @@ nipter_match_matrix <- function(control_group,
                                 exclude_chromosomes = c(13L, 18L, 21L),
                                 include_chromosomes = NULL,
                                 cpus = 1L) {
-  stopifnot(inherits(control_group, "NIPTeRControlGroup") ||
-              S7::S7_inherits(control_group, NIPTControlGroup))
+  stopifnot(.is_nipt_control_group_object(control_group))
   cpus <- as.integer(cpus)
 
   if (is.null(include_chromosomes)) {
@@ -456,11 +442,7 @@ nipter_control_group_from_beds <- function(bed_dir,
     stop("All BED files in '", bed_dir, "' appear to be empty.", call. = FALSE)
   }
 
-  # Infer binsize from first row if not supplied
-  if (is.null(binsize)) {
-    binsize <- as.integer(rows$end_pos[1L] - rows$start_pos[1L])
-  }
-  binsize <- as.integer(binsize)
+  binsize <- .infer_bed_binsize(rows, binsize, bed_dir)
 
   # Derive sample name from file path (strip directory + extension)
   rows$sample_name <- sub("\\.bed(\\.gz)?$|\\.tsv(\\.bgz)?$", "",
@@ -476,12 +458,12 @@ nipter_control_group_from_beds <- function(bed_dir,
   if (is_separated) {
     samples <- lapply(sample_names, function(nm) {
       sub_rows <- rows[rows$sample_name == nm, , drop = FALSE]
-      .bed_rows_to_nipter_sep(sub_rows, nm, binsize, n_bins_global)
+      .rows_to_nipter_sep(sub_rows, nm, binsize, n_bins = n_bins_global)
     })
   } else {
     samples <- lapply(sample_names, function(nm) {
       sub_rows <- rows[rows$sample_name == nm, , drop = FALSE]
-      .bed_rows_to_nipter_combined(sub_rows, nm, binsize, n_bins_global)
+      .rows_to_nipter_combined(sub_rows, nm, binsize, n_bins = n_bins_global)
     })
   }
 
@@ -491,26 +473,6 @@ nipter_control_group_from_beds <- function(bed_dir,
     sample_sex = sample_sex,
     sex_source = sex_source
   )
-}
-
-
-# Internal helper: build a CombinedStrandsSample from a data frame of rows
-# already fetched from the multi-reader table.
-# Columns: chrom, start_pos, end_pos, count, corrected_count (all typed).
-# n_bins_global: shared column width so all samples in a control group have
-#   identical matrix dimensions (narrower chromosomes are zero-padded).
-# Delegates to .rows_to_nipter_combined() in bed_reader.R for the core logic.
-.bed_rows_to_nipter_combined <- function(rows, name, binsize, n_bins_global) {
-  .rows_to_nipter_combined(rows, name, binsize)
-}
-
-
-# Internal helper: build a SeparatedStrandsSample from rows already fetched
-# from the multi-reader table. Delegates to .rows_to_nipter_sep() in bed_reader.R.
-# n_bins_global is accepted for API compatibility but not used (the core helper
-# infers n_bins from the row data).
-.bed_rows_to_nipter_sep <- function(rows, name, binsize, n_bins_global) {
-  .rows_to_nipter_sep(rows, name, binsize)
 }
 
 
@@ -533,11 +495,7 @@ nipter_control_group_from_beds <- function(bed_dir,
   if (.strand_type_of(sample) == "separated") {
     # SeparatedStrands: per-strand fractions, each strand normalised to its own
     # total, then divided by 2 (matches NIPTeR's chrfractions.SeparatedStrands).
-    if (S7::S7_inherits(sample, SeparatedStrandsSample)) {
-      auto_list <- list(sample@auto_fwd, sample@auto_rev)
-    } else {
-      auto_list <- sample$autosomal_chromosome_reads  # list of 2 matrices
-    }
+    auto_list <- .sample_autosomal_reads(sample)
     fracs <- unlist(lapply(auto_list, function(mat) {
       s <- sum(mat)
       if (s == 0) return(stats::setNames(rep(0, nrow(mat)), rownames(mat)))
@@ -573,7 +531,7 @@ nipter_control_group_from_beds <- function(bed_dir,
 # Compute a fractions matrix for a control group.
 # CombinedStrands: 22 x n_samples. SeparatedStrands: 44 x n_samples.
 .control_group_fractions <- function(control_group) {
-  if (S7::S7_inherits(control_group, NIPTControlGroup)) {
+  if (.is_s7_nipt_control_group(control_group)) {
     return(fractions_for_regression(control_group))
   }
   frac_list <- lapply(control_group$samples, .sample_chr_fractions)
@@ -585,7 +543,7 @@ nipter_control_group_from_beds <- function(bed_dir,
 
 # Compute collapsed 22 x n_samples fractions matrix for any control group.
 .control_group_fractions_collapsed <- function(control_group) {
-  if (S7::S7_inherits(control_group, NIPTControlGroup)) {
+  if (.is_s7_nipt_control_group(control_group)) {
     return(fractions_auto(control_group))
   }
   frac_list <- lapply(control_group$samples, .sample_chr_fractions_collapsed)
@@ -642,8 +600,7 @@ nipter_control_group_from_beds <- function(bed_dir,
 #'
 #' @export
 nipter_reference_frame <- function(control_group, sample_sex = NULL) {
-  stopifnot(inherits(control_group, "NIPTeRControlGroup") ||
-              S7::S7_inherits(control_group, NIPTControlGroup))
+  stopifnot(.is_nipt_control_group_object(control_group))
 
   samples <- control_group$samples
   sample_names <- vapply(samples, .sample_name, character(1L))

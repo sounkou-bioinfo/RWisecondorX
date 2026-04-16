@@ -78,9 +78,8 @@ nipter_regression <- function(sample,
                               overdispersion_rate  = 1.15,
                               force_practical_cv   = FALSE,
                               seed                 = NULL) {
-  stopifnot(inherits(sample, "NIPTeRSample") || S7::S7_inherits(sample, NIPTSample))
-  stopifnot(inherits(control_group, "NIPTeRControlGroup") ||
-              S7::S7_inherits(control_group, NIPTControlGroup))
+  stopifnot(.is_nipt_sample_object(sample))
+  stopifnot(.is_nipt_control_group_object(control_group))
   stopifnot(is.numeric(chromo_focus), length(chromo_focus) == 1L,
             chromo_focus >= 1L, chromo_focus <= 22L)
 
@@ -226,7 +225,7 @@ nipter_regression <- function(sample,
     z_sample   <- (sample_ratio - 1) / cv_used
     ctrl_z     <- (test_ratio - 1) / cv_used
     ctrl_names <- vapply(control_group$samples[test_idx],
-                         function(s) s$sample_name, character(1L))
+                         .sample_name, character(1L))
     names(ctrl_z) <- ctrl_names
 
     # Shapiro-Wilk
@@ -250,8 +249,8 @@ nipter_regression <- function(sample,
     list(
       models            = models_out,
       focus_chromosome  = chr_focus_key,
-      correction_status = sample$correction_status_autosomal,
-      sample_name       = sample$sample_name
+      correction_status = .sample_correction_status(sample, "autosomal"),
+      sample_name       = .sample_name(sample)
     ),
     class = "NIPTeRRegression"
   )
@@ -430,7 +429,7 @@ nipter_regression <- function(sample,
     z_sample   <- (sample_ratio - 1) / cv_used
     ctrl_z     <- (test_ratio - 1) / cv_used
     ctrl_names <- vapply(control_group$samples[test_idx],
-                         function(s) s$sample_name, character(1L))
+                         .sample_name, character(1L))
     names(ctrl_z) <- ctrl_names
 
     # Shapiro-Wilk
@@ -454,8 +453,8 @@ nipter_regression <- function(sample,
     list(
       models            = models_out,
       focus_chromosome  = chr_focus_key,
-      correction_status = sample$correction_status_autosomal,
-      sample_name       = sample$sample_name
+      correction_status = .sample_correction_status(sample, "autosomal"),
+      sample_name       = .sample_name(sample)
     ),
     class = "NIPTeRRegression"
   )

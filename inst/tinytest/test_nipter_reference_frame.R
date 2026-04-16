@@ -48,6 +48,20 @@ expect_true(all(vapply(ref[paste0("FrChrReads_", c(1:22, "X", "Y"))],
                        is.numeric, logical(1L))),
             info = "reference frame fraction columns are numeric")
 
+sample1 <- ctrl_samples[[1L]]
+sample1_row <- match(sample1$sample_name, ref$Sample_name)
+expect_equal(
+  ref$NChrReads_1[[sample1_row]],
+  sum(sample1$autosomal_chromosome_reads[[1L]]["1", ]),
+  info = "reference frame chr1 counts equal the summed chr1 bin counts"
+)
+expect_equal(
+  sum(as.numeric(ref[sample1_row, paste0("FrChrReads_", 1:22), drop = TRUE])),
+  1.0,
+  tolerance = 1e-9,
+  info = "autosomal fractions sum to 1.0 for each reference row"
+)
+
 subset_cg <- nipter_match_control_group(
   ctrl_samples[[1L]],
   cg,

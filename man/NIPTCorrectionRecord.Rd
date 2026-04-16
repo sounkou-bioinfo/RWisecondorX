@@ -4,14 +4,17 @@
 \alias{NIPTCorrectionRecord}
 \title{Correction record for a NIPTeR sample}
 \usage{
-NIPTCorrectionRecord(autosomal = "Uncorrected", sex = "Uncorrected")
+NIPTCorrectionRecord(
+  autosomal = .nipt_raw_correction_path(),
+  sex = .nipt_raw_correction_path()
+)
 }
 \arguments{
-\item{autosomal}{Character vector describing the autosomal correction
-history. Defaults to \code{"Uncorrected"}.}
+\item{autosomal}{A \code{NIPTCorrectionPath} describing the autosomal
+correction history. Defaults to a single \code{"raw"} step.}
 
-\item{sex}{Character vector describing the sex-chromosome correction
-history. Defaults to \code{"Uncorrected"}.}
+\item{sex}{A \code{NIPTCorrectionPath} describing the sex-chromosome
+correction history. Defaults to a single \code{"raw"} step.}
 }
 \description{
 Tracks the sequence of corrections applied to the autosomal and sex

@@ -68,15 +68,11 @@ library(mclust)
   if (rem_y > 0L && y_total > 0L) y_counts[sample(n_bins, min(rem_y, n_bins))] <- y_counts[sample(n_bins, min(rem_y, n_bins))] + 1L
   sex_mat["Y", ] <- as.integer(y_counts)
 
-  structure(
-    list(
-      autosomal_chromosome_reads  = list(auto_mat),
-      sex_chromosome_reads        = list(sex_mat),
-      correction_status_autosomal = "Uncorrected",
-      correction_status_sex       = "Uncorrected",
-      sample_name                 = name
-    ),
-    class = c("NIPTeRSample", "CombinedStrands")
+  CombinedStrandsSample(
+    sample_name = name,
+    binsize = as.integer(50000L),
+    auto_matrix = auto_mat,
+    sex_matrix_ = sex_mat
   )
 }
 
@@ -202,6 +198,20 @@ pred_consensus_m <- nipter_predict_sex(test_male, model_y, model_xy)
 expect_identical(pred_consensus_m$prediction, "male",
                  info = "consensus predicts male for male sample")
 
+model_y_tie <- RWisecondorX:::.as_nipter_sex_model(
+  modifyList(
+    as.list(model_y),
+    list(male_cluster = if (model_y$male_cluster == 1L) 2L else 1L)
+  )
+)
+expect_warning(
+  pred_tie <- nipter_predict_sex(test_female, model_y_tie, model_xy),
+  pattern = "tied",
+  info = "sex prediction warns on a tied model vote"
+)
+expect_identical(pred_tie$prediction, "female",
+                 info = "tied sex-model vote resolves conservatively to female")
+
 # --- Predict with list of models ---
 
 pred_list <- nipter_predict_sex(test_male, list(model_y, model_xy))
@@ -217,6 +227,79 @@ expect_identical(pred_list$prediction, "male",
 small_cg <- nipter_as_control_group(sex_samples[1:3])
 expect_error(nipter_sex_model(small_cg),
              info = "rejects control group with < 4 samples")
+
+imbalanced_ncv_samples <- c(
+  list(.make_sex_sample("few_female_1", "female", seed = 2001L)),
+  lapply(seq_len(4L), function(i) .make_sex_sample(paste0("few_male_", i), "male",
+                                                   seed = 2010L + i))
+)
+imbalanced_ncv_labels <- c(
+  few_female_1 = "female",
+  few_male_1 = "male",
+  few_male_2 = "male",
+  few_male_3 = "male",
+  few_male_4 = "male"
+)
+imbalanced_ncv_cg <- nipter_as_control_group(
+  imbalanced_ncv_samples,
+  sample_sex = imbalanced_ncv_labels,
+  sex_source = "synthetic_truth"
+)
+imbalanced_ncv_ref <- nipter_build_reference(
+  imbalanced_ncv_cg,
+  sample_sex = imbalanced_ncv_labels,
+  sex_source = "synthetic_truth",
+  sex_methods = c("y_fraction", "xy_fraction")
+)
+expect_error(
+  nipter_build_sex_ncv_models(
+    imbalanced_ncv_ref,
+    candidate_chromosomes = c(1L, 2L, 4L, 5L, 6L, 7L),
+    min_elements = 2L,
+    max_elements = 3L
+  ),
+  pattern = "female non-outlier subset has only 1 sample",
+  info = "NCV builder errors clearly when one sex subset is too small"
+)
+
+imbalanced_reg_samples <- c(
+  lapply(seq_len(3L), function(i) .make_sex_sample(paste0("reg_female_", i), "female",
+                                                   seed = 2100L + i)),
+  lapply(seq_len(4L), function(i) .make_sex_sample(paste0("reg_male_", i), "male",
+                                                   seed = 2200L + i))
+)
+imbalanced_reg_samples <- unlist(imbalanced_reg_samples, recursive = FALSE)
+imbalanced_reg_labels <- c(
+  reg_female_1 = "female",
+  reg_female_2 = "female",
+  reg_female_3 = "female",
+  reg_male_1 = "male",
+  reg_male_2 = "male",
+  reg_male_3 = "male",
+  reg_male_4 = "male"
+)
+imbalanced_reg_cg <- nipter_as_control_group(
+  imbalanced_reg_samples,
+  sample_sex = imbalanced_reg_labels,
+  sex_source = "synthetic_truth"
+)
+imbalanced_reg_ref <- nipter_build_reference(
+  imbalanced_reg_cg,
+  sample_sex = imbalanced_reg_labels,
+  sex_source = "synthetic_truth",
+  sex_methods = c("y_fraction", "xy_fraction")
+)
+expect_error(
+  nipter_build_sex_regression_models(
+    imbalanced_reg_ref,
+    candidate_chromosomes = c(1L, 2L, 4L, 5L, 6L, 7L),
+    n_models = 2L,
+    n_predictors = 2L,
+    extra_predictors = character()
+  ),
+  pattern = "female non-outlier subset has only .*need >= 4",
+  info = "regression builder errors clearly when one sex subset is too small"
+)
 
 # No model provided to predict
 expect_error(nipter_predict_sex(test_female),
@@ -303,16 +386,12 @@ pred_3m <- nipter_predict_sex(test_male, model_y, model_xy, model_yu,
 expect_identical(pred_3m$prediction, "male",
                  info = "3-model consensus predicts male correctly")
 
-# y_unique model without ratio → warning + NA + skipped in consensus
-expect_warning(
-  pred_skip <- nipter_predict_sex(test_female, model_yu),
-  info = "warns when y_unique model present but ratio missing"
+# y_unique model without ratio → warning + hard error because no usable model
+expect_error(
+  suppressWarnings(nipter_predict_sex(test_female, model_yu)),
+  pattern = "No usable sex-model predictions remain",
+  info = "predict errors when every candidate model is skipped"
 )
-expect_true(is.na(pred_skip$model_predictions[["y_unique"]]),
-            info = "y_unique prediction is NA when ratio missing")
-# With only the y_unique model skipped, consensus defaults to female (tie)
-expect_identical(pred_skip$prediction, "female",
-                 info = "consensus defaults to female when only model skipped")
 
 
 # ===================================================================
@@ -568,9 +647,11 @@ manual_reg_f_x_ratio <- test_female_rr[[female_x_reg_model$response_column]] /
   as.numeric(stats::predict(female_x_reg_model$fit, newdata = female_x_newdata))
 manual_reg_m_y_ratio <- test_male_rr[[male_y_reg_model$response_column]] /
   as.numeric(stats::predict(male_y_reg_model$fit, newdata = male_y_newdata))
-manual_reg_f_x <- (manual_reg_f_x_ratio - 1) /
+manual_reg_f_x <- (manual_reg_f_x_ratio -
+                     female_x_reg_model$control_statistics[["mean_ratio"]]) /
   female_x_reg_model$control_statistics[["sd_ratio"]]
-manual_reg_m_y <- (manual_reg_m_y_ratio - 1) /
+manual_reg_m_y <- (manual_reg_m_y_ratio -
+                     male_y_reg_model$control_statistics[["mean_ratio"]]) /
   male_y_reg_model$control_statistics[["sd_ratio"]]
 
 expect_equal(reg_x_f$scores$female[[1L]], manual_reg_f_x,

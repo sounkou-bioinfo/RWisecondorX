@@ -1,3 +1,5 @@
+# wisecondorx_npz.R — WisecondorX-compatible NPZ serialization
+#
 #' Convert BAM/CRAM to WisecondorX NPZ format
 #'
 #' Runs [bam_convert()] and serialises the resulting bin-count list to a

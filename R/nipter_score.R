@@ -31,9 +31,8 @@
 #'
 #' @export
 nipter_z_score <- function(sample, control_group, chromo_focus) {
-  stopifnot(inherits(sample, "NIPTeRSample") || S7::S7_inherits(sample, NIPTSample))
-  stopifnot(inherits(control_group, "NIPTeRControlGroup") ||
-              S7::S7_inherits(control_group, NIPTControlGroup))
+  stopifnot(.is_nipt_sample_object(sample))
+  stopifnot(.is_nipt_control_group_object(control_group))
   stopifnot(is.numeric(chromo_focus), length(chromo_focus) == 1L,
             chromo_focus >= 1L, chromo_focus <= 22L)
 
@@ -83,8 +82,8 @@ nipter_z_score <- function(sample, control_group, chromo_focus) {
       control_statistics = c(mean = ctrl_mean, sd = ctrl_sd,
                              shapiro_p_value = shap_p),
       control_z_scores   = control_z,
-      correction_status  = sample$correction_status_autosomal,
-      sample_name        = sample$sample_name
+      correction_status  = .sample_correction_status(sample, "autosomal"),
+      sample_name        = .sample_name(sample)
     ),
     class = "NIPTeRZScore"
   )
@@ -150,9 +149,8 @@ nipter_ncv_score <- function(sample,
                              max_elements          = 5L,
                              exclude_chromosomes   = c(13L, 18L, 21L),
                              include_chromosomes   = NULL) {
-  stopifnot(inherits(sample, "NIPTeRSample") || S7::S7_inherits(sample, NIPTSample))
-  stopifnot(inherits(control_group, "NIPTeRControlGroup") ||
-              S7::S7_inherits(control_group, NIPTControlGroup))
+  stopifnot(.is_nipt_sample_object(sample))
+  stopifnot(.is_nipt_control_group_object(control_group))
   stopifnot(is.numeric(chromo_focus), length(chromo_focus) == 1L,
             chromo_focus >= 1L, chromo_focus <= 22L)
 
@@ -219,7 +217,7 @@ nipter_ncv_score <- function(sample,
   # Control NCV Z-scores
   ctrl_z <- (ctrl_ratios - ctrl_mean) / ctrl_sd
   names(ctrl_z) <- vapply(control_group$samples,
-                          function(s) s$sample_name, character(1L))
+                          .sample_name, character(1L))
 
   # Sample NCV score
   sample_denom <- sum(sample_reads[denom_keys])
@@ -242,8 +240,8 @@ nipter_ncv_score <- function(sample,
                              shapiro_p_value = shap_p),
       control_z_scores   = ctrl_z,
       best_cv            = best_cv,
-      correction_status  = sample$correction_status_autosomal,
-      sample_name        = sample$sample_name
+      correction_status  = .sample_correction_status(sample, "autosomal"),
+      sample_name        = .sample_name(sample)
     ),
     class = "NIPTeRNCV"
   )

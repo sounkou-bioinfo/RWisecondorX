@@ -23,12 +23,11 @@ library(tinytest)
 library(RWisecondorX)
 
 .is_nipter_sample <- function(x) {
-  inherits(x, "NIPTSample") || inherits(x, "NIPTeRSample") ||
-    S7::S7_inherits(x, NIPTSample)
+  RWisecondorX:::.is_nipt_sample_object(x)
 }
 
 .is_nipter_control_group <- function(x) {
-  inherits(x, "NIPTeRControlGroup") || S7::S7_inherits(x, NIPTControlGroup)
+  RWisecondorX:::.is_nipt_control_group_object(x)
 }
 
 
@@ -485,12 +484,16 @@ if (length(missing_nipter_exports) > 0L) {
   stopifnot(length(sample$autosomal_chromosome_reads) == 1L)
   lapply(seq_len(n), function(i) {
     s <- sample
-    auto <- s$autosomal_chromosome_reads[[1L]]
+    auto <- RWisecondorX:::.sample_autosomal_reads(s)[[1L]]
     bump_chr <- as.character(((i - 1L) %% 4L) + 1L)
     bump_bin <- ((i - 1L) %% ncol(auto)) + 1L
     auto[bump_chr, bump_bin] <- auto[bump_chr, bump_bin] + i
-    s$autosomal_chromosome_reads[[1L]] <- auto
-    s$sample_name <- sprintf("%s_%02d", prefix, i)
+    s <- RWisecondorX:::.sample_with_reads(s, autosomal = list(auto))
+    s <- RWisecondorX:::.nipt_sample_dollar_assign(
+      s,
+      "sample_name",
+      sprintf("%s_%02d", prefix, i)
+    )
     s
   })
 }
@@ -593,7 +596,7 @@ if (!is.null(our_gc) && !is.na(Sys.getenv("RWXCONF_FASTA", unset = NA_character_
     error = function(e) NULL
   )
   if (!is.null(nipter_gc)) {
-    expect_true(inherits(nipter_gc, class(nipter_s_real)[1L]),
+    expect_true(.is_nipter_sample(nipter_gc),
                 info = "NIPTeR gc_correct returns a sample-like result (structural check)")
     message(
       "[GC conformance note] nipter_gc_correct uses rduckhts_fasta_nuc(); ",

@@ -33,7 +33,7 @@
 
 <div id="rwisecondorx-validation-record" class="section level1">
 
-<p>This document satisfies <a href="https://rewrites.bio" class="external-link">rewrites.bio</a> principles <strong>4.1</strong> (test and benchmark with real data) and <strong>4.3</strong> (pin versions and document). It records what has been validated, the exact version each claim applies to, how to reproduce the result, and what remains unvalidated.</p>
+<p>This document satisfies <a href="https://rewrites.bio" class="external-link">rewrites.bio</a> principles <strong>4.1</strong> (test and benchmark with real data) and <strong>4.3</strong> (pin versions and document). It records what has been validated, how to reproduce it, and what remains unvalidated.</p>
 <hr><div class="section level2">
 <h2 id="upstream-versions">Upstream Versions<a class="anchor" aria-label="anchor" href="#upstream-versions"></a></h2>
 <table class="table"><thead><tr class="header"><th>Tool</th>
@@ -42,128 +42,230 @@
 </tr></thead><tbody><tr class="odd"><td>WisecondorX</td>
 <td>1.2.x</td>
 <td>
-<code>bioconda::wisecondorx</code> via condathis</td>
+<code>bioconda::wisecondorx</code> via <code>condathis</code>
+</td>
 </tr><tr class="even"><td>NIPTeR</td>
 <td>1.3.x</td>
 <td>CRAN <code>NIPTeR</code>
 </td>
 </tr><tr class="odd"><td>htslib (via Rduckhts)</td>
 <td>1.21</td>
-<td>bundled in Rduckhts</td>
+<td>bundled in <code>Rduckhts</code>
+</td>
 </tr></tbody></table><blockquote>
-<p><strong>Policy</strong>: When a new upstream version is released, re-run the conformance tests listed below and update this document. Breaking changes (format changes, algorithm updates) trigger a version bump in RWisecondorX; bug-fix updates are re-validated silently.</p>
+<p><strong>Policy</strong>: when upstream versions change, rerun the relevant conformance checks below and update this file.</p>
 </blockquote>
 <hr></div>
 <div class="section level2">
 <h2 id="what-has-been-validated">What Has Been Validated<a class="anchor" aria-label="anchor" href="#what-has-been-validated"></a></h2>
 <div class="section level3">
-<h3 id="id_1-bam_convert--bin-for-bin-agreement-with-python-wisecondorx">1. <code>bam_convert()</code> — bin-for-bin agreement with Python WisecondorX<a class="anchor" aria-label="anchor" href="#id_1-bam_convert--bin-for-bin-agreement-with-python-wisecondorx"></a></h3>
-<p><strong>Status</strong>: Validated ✓<br><strong>Claim</strong>: <code><a href="reference/bam_convert.html">bam_convert()</a></code> with <code>rmdup="streaming"</code> produces bin counts identical (bin-for-bin, zero mismatches) to <code>wisecondorx convert</code> on the same BAM. The current implementation delegates counting to the native <code><a href="https://rgenomicsetl.r-universe.dev/Rduckhts/reference/rduckhts_bam_bin_counts.html" class="external-link">Rduckhts::rduckhts_bam_bin_counts()</a></code> kernel and reshapes that output into the WisecondorX chromosome-keyed format.</p>
-<p><strong>Data</strong>: <code>HG00106.chrom11.ILLUMINA.bwa.GBR.exome.20130415.bam</code><br><strong>Validated bins</strong>: 25,115 non-zero bins on chromosome 11<br><strong>Mismatches</strong>: 0<br><strong>Test file</strong>: <code>inst/tinytest/test_integration.R</code></p>
-<p><strong>Command used</strong> (reference):</p>
-<div class="sourceCode" id="cb1"><pre class="sourceCode bash"><code class="sourceCode bash"><span id="cb1-1"><a href="#cb1-1" tabindex="-1"></a><span class="co"># Python (via condathis)</span></span>
-<span id="cb1-2"><a href="#cb1-2" tabindex="-1"></a><span class="ex">wisecondorx</span> convert HG00106.chrom11.bam HG00106.npz <span class="at">--binsize</span> 5000</span>
-<span id="cb1-3"><a href="#cb1-3" tabindex="-1"></a></span>
-<span id="cb1-4"><a href="#cb1-4" tabindex="-1"></a><span class="co"># R</span></span>
-<span id="cb1-5"><a href="#cb1-5" tabindex="-1"></a><span class="ex">bam_convert</span><span class="er">(</span><span class="st">"HG00106.chrom11.bam"</span><span class="ex">,</span> binsize = 5000L, rmdup = <span class="st">"streaming"</span><span class="kw">)</span></span></code></pre></div>
-<p><strong>How to reproduce</strong>:</p>
-<div class="sourceCode" id="cb2"><pre class="downlit sourceCode r">
-<code class="sourceCode R"><span><span class="co"># Requires: condathis, reticulate, numpy, wisecondorx bioconda env</span></span>
-<span><span class="fu">tinytest</span><span class="fu">::</span><span class="fu"><a href="https://rdrr.io/pkg/tinytest/man/run_test_file.html" class="external-link">run_test_file</a></span><span class="op">(</span><span class="st">"inst/tinytest/test_integration.R"</span><span class="op">)</span></span></code></pre></div>
-<hr></div>
+<h3 id="id_1-wisecondorx-convert-semantics-in-the-native-r-path">1. WisecondorX convert semantics in the native R path<a class="anchor" aria-label="anchor" href="#id_1-wisecondorx-convert-semantics-in-the-native-r-path"></a></h3>
+<p><strong>Status</strong>: Validated ✓</p>
+<p><strong>Claim</strong>: the native convert layer reproduces the upstream WisecondorX convert semantics that matter for bin counts:</p>
+<ul><li>streaming duplicate handling (<code>larp</code> / <code>larp2</code>)</li>
+<li>internal <code>MAPQ &gt;= 1</code> behavior</li>
+<li>chromosome-keyed sample structure used by the native <code>rwisecondorx</code> path</li>
+</ul><p><strong>Scope</strong>:</p>
+<ul><li>exact convert semantics are implemented in <code><a href="reference/bam_convert.html">bam_convert()</a></code>, <code><a href="reference/bam_convert_bed.html">bam_convert_bed()</a></code>, and <code><a href="reference/bam_convert_npz.html">bam_convert_npz()</a></code>
+</li>
+<li>upstream-facing CLI behavior is preserved in <code><a href="reference/wisecondorx_convert.html">wisecondorx_convert()</a></code>
+</li>
+<li>current real-data conformance workflow compares prepared native BED.gz test cases against prepared upstream NPZ test cases through <code>inst/scripts/wisecondorx_conformance.R</code>
+</li>
+</ul><p><strong>Reproduction</strong>:</p>
+<div class="sourceCode" id="cb1"><pre class="sourceCode bash"><code class="sourceCode bash"><span id="cb1-1"><a href="#cb1-1" tabindex="-1"></a><span class="ex">Rscript</span> inst/scripts/wisecondorx_conformance.R <span class="dt">\</span></span>
+<span id="cb1-2"><a href="#cb1-2" tabindex="-1"></a>  <span class="at">--rwisecondorx-ref</span> /path/to/rwisecondorx_reference.rds <span class="dt">\</span></span>
+<span id="cb1-3"><a href="#cb1-3" tabindex="-1"></a>  <span class="at">--wisecondorx-ref</span> /path/to/wisecondorx_reference.npz <span class="dt">\</span></span>
+<span id="cb1-4"><a href="#cb1-4" tabindex="-1"></a>  <span class="at">--case-manifest</span> /path/to/cases.tsv <span class="dt">\</span></span>
+<span id="cb1-5"><a href="#cb1-5" tabindex="-1"></a>  <span class="at">--sample-binsize</span> 100000 <span class="dt">\</span></span>
+<span id="cb1-6"><a href="#cb1-6" tabindex="-1"></a>  <span class="at">--out-dir</span> /path/to/report_dir</span></code></pre></div>
+<p><code>cases.tsv</code> must contain:</p>
+<pre class="tsv"><code>sample  bed npz
+sample1 /path/to/native/sample1.bed.gz  /path/to/upstream/sample1.npz
+sample2 /path/to/native/sample2.bed.gz  /path/to/upstream/sample2.npz</code></pre>
+<p>The script runs both <code>predict</code> paths and compares the resulting per-bin <code>_bins.bed</code> files.</p>
+</div>
 <div class="section level3">
-<h3 id="id_2-nipter-statistical-layer--formula-verification">2. NIPTeR statistical layer — formula verification<a class="anchor" aria-label="anchor" href="#id_2-nipter-statistical-layer--formula-verification"></a></h3>
-<p><strong>Status</strong>: Validated against inline reference ✓<br><strong>Claim</strong>: <code><a href="reference/nipter_z_score.html">nipter_z_score()</a></code>, <code><a href="reference/nipter_chi_correct.html">nipter_chi_correct()</a></code> reproduce the NIPTeR formulas exactly (to floating-point precision).</p>
-<p><strong>Method</strong>: Inline reference computations in <code>test_nipter_conformance.R</code> (Arm A) replicate the NIPTeR source formulas directly in R, then compare against our function output. No external package dependency.</p>
-<p><strong>Key assertions</strong>: - Z-score: <code>(sample_frac - mean(ctrl_fracs)) / sd(ctrl_fracs)</code> matches to <code>&lt; 1e-10</code> - Chi correction: non-overdispersed bins unchanged; overdispersed bins not inflated - NCV: denominator set does not include focus chromosome - Regression: returns numeric z-score with predictor names</p>
-<p><strong>Test file</strong>: <code>inst/tinytest/test_nipter_conformance.R</code> (Arm A, always runs)</p>
-<p><strong>How to reproduce</strong>:</p>
-<div class="sourceCode" id="cb3"><pre class="downlit sourceCode r">
-<code class="sourceCode R"><span><span class="fu">tinytest</span><span class="fu">::</span><span class="fu"><a href="https://rdrr.io/pkg/tinytest/man/run_test_file.html" class="external-link">run_test_file</a></span><span class="op">(</span><span class="st">"inst/tinytest/test_nipter_conformance.R"</span><span class="op">)</span></span></code></pre></div>
-<hr></div>
+<h3 id="id_2-nipter-statistical-layer-formula-verification">2. NIPTeR statistical layer formula verification<a class="anchor" aria-label="anchor" href="#id_2-nipter-statistical-layer-formula-verification"></a></h3>
+<p><strong>Status</strong>: Validated ✓</p>
+<p><strong>Claim</strong>: the core NIPTeR statistical functions match their intended formulas:</p>
+<ul><li><code><a href="reference/nipter_z_score.html">nipter_z_score()</a></code></li>
+<li><code><a href="reference/nipter_chi_correct.html">nipter_chi_correct()</a></code></li>
+<li><code><a href="reference/nipter_ncv_score.html">nipter_ncv_score()</a></code></li>
+<li><code><a href="reference/nipter_regression.html">nipter_regression()</a></code></li>
+</ul><p><strong>Method</strong>:</p>
+<ul><li>inline reference computations in <code>inst/tinytest/test_nipter_conformance.R</code>
+</li>
+<li>broader functional coverage in <code>inst/tinytest/test_nipter_stats.R</code>
+</li>
+<li>sex-model and gaunosome coverage in <code>inst/tinytest/test_nipter_sex.R</code>
+</li>
+</ul><p>These tests are mostly synthetic/unit-level by design; they verify formulas and control-flow, not cohort realism.</p>
+<p><strong>Reproduction</strong>:</p>
+<div class="sourceCode" id="cb3"><pre class="sourceCode bash"><code class="sourceCode bash"><span id="cb3-1"><a href="#cb3-1" tabindex="-1"></a><span class="fu">make</span> test-nipter</span></code></pre></div>
+</div>
 <div class="section level3">
-<h3 id="id_3-nipter-statistical-layer--cross-check-against-nipter-r-package">3. NIPTeR statistical layer — cross-check against NIPTeR R package<a class="anchor" aria-label="anchor" href="#id_3-nipter-statistical-layer--cross-check-against-nipter-r-package"></a></h3>
-<p><strong>Status</strong>: Conditional ⚠ (requires NIPTeR package + conformance BAM)<br><strong>Claim</strong>: <code><a href="reference/nipter_z_score.html">nipter_z_score()</a></code> and <code><a href="reference/nipter_chi_correct.html">nipter_chi_correct()</a></code> agree with <code>NIPTeR::chromosomal.zscore()</code> and <code>NIPTeR::chi.correct()</code> within tolerance 0.01 on the same binned data.</p>
-<p><strong>Constraint</strong>: The conformance BAM must have: 1. No unmapped reads (pre-filter with <code>samtools view -F 4</code>) 2. No two reads sharing the same start position on the same chromosome per strand</p>
-<p>These constraints avoid two known bugs in NIPTeR (see AGENTS.md for details).</p>
-<p><strong>How to reproduce</strong>:</p>
-<div class="sourceCode" id="cb4"><pre class="sourceCode bash"><code class="sourceCode bash"><span id="cb4-1"><a href="#cb4-1" tabindex="-1"></a><span class="co"># Build multi-chromosome synthetic fixture (satisfies both constraints)</span></span>
-<span id="cb4-2"><a href="#cb4-2" tabindex="-1"></a><span class="fu">make</span> nipter-fixture</span>
-<span id="cb4-3"><a href="#cb4-3" tabindex="-1"></a><span class="co"># Then run conformance tests with the fixture</span></span>
-<span id="cb4-4"><a href="#cb4-4" tabindex="-1"></a><span class="va">NIPTER_CONFORMANCE_BAM</span><span class="op">=</span>inst/extdata/nipter_conformance_fixture.bam <span class="fu">make</span> test</span>
-<span id="cb4-5"><a href="#cb4-5" tabindex="-1"></a><span class="co"># Or use a real pre-filtered whole-genome BAM:</span></span>
-<span id="cb4-6"><a href="#cb4-6" tabindex="-1"></a><span class="va">NIPTER_CONFORMANCE_BAM</span><span class="op">=</span>/path/to/prefiltered.bam <span class="fu">make</span> test</span></code></pre></div>
-<hr></div>
+<h3 id="id_3-real-bam-structural-validation-for-the-nipter-path">3. Real-BAM structural validation for the NIPTeR path<a class="anchor" aria-label="anchor" href="#id_3-real-bam-structural-validation-for-the-nipter-path"></a></h3>
+<p><strong>Status</strong>: Validated on internal real data ✓</p>
+<p><strong>Claim</strong>: the NIPTeR preprocessing and object-building path works on real BAMs when driven from a manifest:</p>
+<ul><li>binning</li>
+<li>BED round-trip</li>
+<li>control-group construction</li>
+<li>basic cohort structural checks</li>
+</ul><p><strong>Test file</strong>:</p>
+<ul><li><code>inst/tinytest/test_nipter_real_manifest.R</code></li>
+</ul><p><strong>Default internal manifest</strong>:</p>
+<ul><li><code>/mnt/data/BixCTF/NiptSeqNeo/all_bam_list_sample_500.txt</code></li>
+<li>default limit: <code>50</code>
+</li>
+</ul><p><strong>Reproduction</strong>:</p>
+<div class="sourceCode" id="cb4"><pre class="sourceCode bash"><code class="sourceCode bash"><span id="cb4-1"><a href="#cb4-1" tabindex="-1"></a><span class="fu">make</span> test-real-nipter</span></code></pre></div>
+<p>or explicitly:</p>
+<div class="sourceCode" id="cb5"><pre class="sourceCode bash"><code class="sourceCode bash"><span id="cb5-1"><a href="#cb5-1" tabindex="-1"></a><span class="va">THREADS</span><span class="op">=</span>20 <span class="dt">\</span></span>
+<span id="cb5-2"><a href="#cb5-2" tabindex="-1"></a><span class="va">NIPTER_REAL_BAM_ENABLE</span><span class="op">=</span>1 <span class="dt">\</span></span>
+<span id="cb5-3"><a href="#cb5-3" tabindex="-1"></a><span class="va">NIPTER_REAL_BAM_LIST</span><span class="op">=</span>/mnt/data/BixCTF/NiptSeqNeo/all_bam_list_sample_500.txt <span class="dt">\</span></span>
+<span id="cb5-4"><a href="#cb5-4" tabindex="-1"></a><span class="va">NIPTER_REAL_BAM_LIMIT</span><span class="op">=</span>50 <span class="dt">\</span></span>
+<span id="cb5-5"><a href="#cb5-5" tabindex="-1"></a><span class="ex">R</span> <span class="at">-e</span> <span class="st">"tinytest::run_test_file('inst/tinytest/test_nipter_real_manifest.R')"</span></span></code></pre></div>
+</div>
 <div class="section level3">
-<h3 id="id_4-trisomy-detection--synthetic-smoke-test-cohort">4. Trisomy detection — synthetic smoke test cohort<a class="anchor" aria-label="anchor" href="#id_4-trisomy-detection--synthetic-smoke-test-cohort"></a></h3>
-<p><strong>Status</strong>: Smoke-tested ✓<br><strong>Claim</strong>: The native R pipeline (<code>rwisecondorx_newref</code> + <code>rwisecondorx_predict</code>) detects T21, T18, and T13 on the package’s synthetic smoke-test cohort and produces zero aberration calls on the chosen euploid negative control in that same synthetic setup.</p>
-<p><strong>Data</strong>: 50-sample synthetic cohort from <code>generate_cohort()</code> (compressed coordinates, <code>COMPRESSED_BINSIZE = 100</code>)</p>
-<p><strong>Key assertions</strong>: - T21 sample: <code>pred$aberrations</code> contains at least one <code>chr=="21"</code> + <code>type=="gain"</code> row - T18 sample: at least one <code>chr=="18"</code> + <code>type=="gain"</code> row - T13 sample: at least one <code>chr=="13"</code> + <code>type=="gain"</code> row - First euploid sample: <code>nrow(pred$aberrations) == 0</code></p>
-<p><strong>Important limitation</strong>: <code>generate_cohort()</code> is a fast synthetic generator for package testing. It is not a calibrated clinical simulator and does not replace real-data conformance or performance validation.</p>
-<p><strong>Test files</strong>: - <code>inst/tinytest/test_cohort_pipeline.R</code> (Z-score level assertions) - <code>inst/tinytest/test_wisecondorx_e2e.R</code> (aberration call level assertions)</p>
-<p><strong>How to reproduce</strong>:</p>
-<div class="sourceCode" id="cb5"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb5-1"><a href="#cb5-1" tabindex="-1"></a>make conformance</span>
-<span id="cb5-2"><a href="#cb5-2" tabindex="-1"></a><span class="co"># or</span></span>
-<span id="cb5-3"><a href="#cb5-3" tabindex="-1"></a>tinytest<span class="sc">::</span><span class="fu">run_test_file</span>(<span class="st">"inst/tinytest/test_wisecondorx_e2e.R"</span>)</span></code></pre></div>
+<h3 id="id_4-seqff-support-data-and-wrapper-integration">4. SeqFF support data and wrapper integration<a class="anchor" aria-label="anchor" href="#id_4-seqff-support-data-and-wrapper-integration"></a></h3>
+<p><strong>Status</strong>: Validated ✓</p>
+<p><strong>Claim</strong>: the package-local SeqFF support data loads correctly and <code><a href="reference/seqff_predict.html">seqff_predict()</a></code> is wired into the package as a usable helper.</p>
+<p><strong>Test file</strong>:</p>
+<ul><li><code>inst/tinytest/test_seqff.R</code></li>
+</ul><p><strong>Reproduction</strong>:</p>
+<div class="sourceCode" id="cb6"><pre class="sourceCode bash"><code class="sourceCode bash"><span id="cb6-1"><a href="#cb6-1" tabindex="-1"></a><span class="fu">make</span> test-seqff</span></code></pre></div>
+</div>
+<div class="section level3">
+<h3 id="id_5-referencecontrol-group-build-clis-match-the-current-artifact-boundaries">5. Reference/control-group build CLIs match the current artifact boundaries<a class="anchor" aria-label="anchor" href="#id_5-referencecontrol-group-build-clis-match-the-current-artifact-boundaries"></a></h3>
+<p><strong>Status</strong>: Validated structurally ✓</p>
+<p><strong>Claim</strong>:</p>
+<ul><li>
+<code>inst/scripts/convert_sample.R</code> differentiates:
+<ul><li><code>rwisecondorx</code></li>
+<li><code>wisecondorx</code></li>
+<li><code>nipter</code></li>
+</ul></li>
+<li>
+<code>inst/scripts/build_reference.R</code> differentiates:
+<ul><li>
+<code>--mode rwisecondorx</code> from BED.gz</li>
+<li>
+<code>--mode wisecondorx</code> from NPZ</li>
+<li>
+<code>--mode nipter</code> from BED.gz</li>
+</ul></li>
+<li>
+<code>inst/scripts/preprocess_cohort.R</code> stages real cohorts into reusable artifact directories instead of mixing conversion, reference building, and scoring in one script</li>
+<li>the same preprocessing script now emits SeqFF fetal-fraction estimates as a cohort-side preprocessing artifact</li>
+</ul><p>This is structural validation of the workflow boundary, not numeric cross-implementation equivalence by itself.</p>
 <hr></div>
 </div>
 <div class="section level2">
-<h2 id="what-is-not-yet-validated-on-real-data">What Is NOT Yet Validated On Real Data<a class="anchor" aria-label="anchor" href="#what-is-not-yet-validated-on-real-data"></a></h2>
+<h2 id="what-is-not-yet-fully-validated">What Is Not Yet Fully Validated<a class="anchor" aria-label="anchor" href="#what-is-not-yet-fully-validated"></a></h2>
 <div class="section level3">
-<h3 id="a-rwisecondorx_newrefpredict-segment-and-aberration-agreement-vs-python">A. <code>rwisecondorx_newref/predict</code> segment and aberration agreement vs Python<a class="anchor" aria-label="anchor" href="#a-rwisecondorx_newrefpredict-segment-and-aberration-agreement-vs-python"></a></h3>
-<p><strong>Status</strong>: Not validated ❌<br><strong>Gap</strong>: We have not run both the native R pipeline and the Python WisecondorX pipeline on the same set of real NIPT BAMs and compared their segment boundaries or aberration calls.</p>
-<p><strong>Blocking</strong>: Requires a cohort of ≥10 real NIPT BAMs (whole genome, not exome) with at least one sample of known trisomy status.</p>
-<p><strong>How to run</strong> (once BAMs are available):</p>
-<div class="sourceCode" id="cb6"><pre class="sourceCode bash"><code class="sourceCode bash"><span id="cb6-1"><a href="#cb6-1" tabindex="-1"></a><span class="bu">export</span> <span class="va">RWXCONF_CONTROL_BAMS</span><span class="op">=</span><span class="st">"ctrl1.bam:ctrl2.bam:..."</span></span>
-<span id="cb6-2"><a href="#cb6-2" tabindex="-1"></a><span class="bu">export</span> <span class="va">RWXCONF_TEST_BAM</span><span class="op">=</span><span class="st">"test_t21.bam"</span></span>
-<span id="cb6-3"><a href="#cb6-3" tabindex="-1"></a><span class="bu">export</span> <span class="va">RWXCONF_CPUS</span><span class="op">=</span>8</span>
-<span id="cb6-4"><a href="#cb6-4" tabindex="-1"></a><span class="ex">Rscript</span> inst/scripts/real_data_conformance.R</span></code></pre></div>
-<p><strong>Acceptance criteria</strong>: - Bin correlation (R vs Python on convert step): Pearson r &gt; 0.999 - Chr-level aberration call Jaccard (R vs Python on same reference): ≥ 0.8 - Segment Jaccard on trisomy chromosome: ≥ 0.7 (CBS is stochastic; use same seed)</p>
-<p>Update this file with the results after running.</p>
-<hr></div>
+<h3 id="a-end-to-end-native-vs-upstream-wisecondorx-agreement-on-a-full-real-nipt-cohort">A. End-to-end native vs upstream WisecondorX agreement on a full real NIPT cohort<a class="anchor" aria-label="anchor" href="#a-end-to-end-native-vs-upstream-wisecondorx-agreement-on-a-full-real-nipt-cohort"></a></h3>
+<p><strong>Status</strong>: In progress ❌</p>
+<p>The package now has the correct artifact-based conformance workflow (<code>preprocess_cohort.R</code> → <code>build_reference.R</code> → <code>wisecondorx_conformance.R</code>), but this document does not yet record a completed full-cohort result with:</p>
+<ul><li>exact prepared sample set</li>
+<li>exact native and upstream references</li>
+<li>exact summary output from <code>wisecondorx_conformance_summary.tsv</code>
+</li>
+</ul><p>What remains to record:</p>
+<ul><li>number of test cases</li>
+<li>exact match rate on <code>_bins.bed</code>
+</li>
+<li>any persistent per-bin or per-chromosome discrepancies</li>
+</ul></div>
 <div class="section level3">
-<h3 id="b-beta-mode-purity-based-calling">B. Beta mode (purity-based calling)<a class="anchor" aria-label="anchor" href="#b-beta-mode-purity-based-calling"></a></h3>
-<p><strong>Status</strong>: Implemented, not validated ❌<br><strong>Gap</strong>: The <code>beta</code> parameter in <code><a href="reference/rwisecondorx_predict.html">rwisecondorx_predict()</a></code> implements ratio-based aberration cutoffs (<code>log2((ploidy ± beta/2) / ploidy)</code>) for somatic CNV analysis. The formula is correct (matches upstream WisecondorX) but has not been tested on real tumour samples with known purity.</p>
-<p><strong>Not appropriate for NIPT</strong>: NIPT pipelines should always use Z-score calling (the default).</p>
-<hr></div>
+<h3 id="b-clinical-positive-case-validation-on-real-trisomy-samples">B. Clinical positive-case validation on real trisomy samples<a class="anchor" aria-label="anchor" href="#b-clinical-positive-case-validation-on-real-trisomy-samples"></a></h3>
+<p><strong>Status</strong>: Not yet validated ❌</p>
+<p>The package is currently set up for real-data preprocessing and control-group building, but this file does not yet contain validation on confirmed positive NIPT cases for:</p>
+<ul><li>T21</li>
+<li>T18</li>
+<li>T13</li>
+<li>sex chromosome abnormalities</li>
+</ul><p>Until those are run and recorded, the package should be treated as structurally validated on real data, not clinically validated.</p>
+</div>
 <div class="section level3">
-<h3 id="c-gc-correction-numeric-agreement-with-nipter">C. GC correction numeric agreement with NIPTeR<a class="anchor" aria-label="anchor" href="#c-gc-correction-numeric-agreement-with-nipter"></a></h3>
-<p><strong>Status</strong>: Known divergence, documented ❌<br><strong>Gap</strong>: <code><a href="reference/nipter_gc_correct.html">nipter_gc_correct()</a></code> computes GC content on-the-fly from a reference FASTA via <code>rduckhts_fasta_nuc()</code>. <code>NIPTeR::gc.correct()</code> uses bundled GC tables from <code>sysdata.rda</code>. These tables differ in precision and GC-binning strategy. Numeric equality is <strong>not expected or required</strong>. Both implementations produce the same qualitative correction (GC-biased bins are downweighted), but the corrected values will differ.</p>
-<hr></div>
+<h3 id="c-native-vs-upstream-wisecondorx-segment-and-aberration-agreement">C. Native vs upstream WisecondorX segment and aberration agreement<a class="anchor" aria-label="anchor" href="#c-native-vs-upstream-wisecondorx-segment-and-aberration-agreement"></a></h3>
+<p><strong>Status</strong>: Not yet recorded ❌</p>
+<p>The current conformance CLI compares per-bin prediction outputs. This is the right first acceptance gate, but this file does not yet record:</p>
+<ul><li>segment-level agreement</li>
+<li>aberration-call agreement</li>
+<li>disagreement patterns on noisy real samples</li>
+</ul><p>Those should be added once the positive-case cohort is available.</p>
+</div>
 <div class="section level3">
-<h3 id="d-sex-stratified-ncv-and-regression-for-xy-chromosomes">D. Sex-stratified NCV and regression for X/Y chromosomes<a class="anchor" aria-label="anchor" href="#d-sex-stratified-ncv-and-regression-for-xy-chromosomes"></a></h3>
-<p><strong>Status</strong>: Not implemented ❌<br><strong>Gap</strong>: The clinical pipeline computes sex-stratified NCV denominators and regression models for X and Y chromosomes (separate models for males vs females). Not yet implemented.</p>
+<h3 id="d-gc-correction-numeric-equality-with-upstream-nipter">D. GC correction numeric equality with upstream NIPTeR<a class="anchor" aria-label="anchor" href="#d-gc-correction-numeric-equality-with-upstream-nipter"></a></h3>
+<p><strong>Status</strong>: Expected divergence; not a target ❌</p>
+<p><code><a href="reference/nipter_gc_correct.html">nipter_gc_correct()</a></code> computes GC content on the fly or from precomputed package-side GC tables. Upstream <code>NIPTeR::gc.correct()</code> uses bundled GC data and different implementation details. Exact numeric equality is not expected and is not currently a validation target.</p>
+</div>
+<div class="section level3">
+<h3 id="e-sex-stratified-xy-scoring-in-the-nipter-clinical-path">E. Sex-stratified X/Y scoring in the NIPTeR clinical path<a class="anchor" aria-label="anchor" href="#e-sex-stratified-xy-scoring-in-the-nipter-clinical-path"></a></h3>
+<p><strong>Status</strong>: Not yet complete ❌</p>
+<p>The package still needs broader real-data validation, and in some cases further implementation work, for sex-aware X/Y scoring and related gaunosome reporting in the clinical NIPT setting.</p>
 <hr></div>
 </div>
 <div class="section level2">
-<h2 id="nipter-known-bugs-upstream">NIPTeR Known Bugs (Upstream)<a class="anchor" aria-label="anchor" href="#nipter-known-bugs-upstream"></a></h2>
-<p>Two bugs in NIPTeR <code>bin_bam_sample()</code> constrain the conformance BAM requirements:</p>
-<ol style="list-style-type: decimal"><li><p><strong>Split-length mismatch</strong>: <code>split(reads, droplevels(strands[strands != "*"]))</code> drops unmapped-read entries from the factor but not from <code>reads</code>, causing silent misbehaviour on BAMs with unmapped reads.</p></li>
-<li><p><strong>Implicit positional dedup</strong>: <code>bin_reads()</code> calls <code><a href="https://rdrr.io/r/base/unique.html" class="external-link">unique()</a></code> on positions per chromosome per strand before binning, silently treating two reads at the same start position as one. This is NOT equivalent to <code>-F 1024</code> (duplicate flag).</p></li>
-</ol><p>These are bugs in the upstream NIPTeR package, not in RWisecondorX. Our <code><a href="reference/nipter_bin_bam.html">nipter_bin_bam()</a></code> is documented to match the upstream behaviour when the BAM satisfies the above constraints (see AGENTS.md for full details).</p>
+<h2 id="what-was-removed-from-the-validation-story">What Was Removed From The Validation Story<a class="anchor" aria-label="anchor" href="#what-was-removed-from-the-validation-story"></a></h2>
+<p>The following older validation claims are no longer part of the current package story and should not be cited:</p>
+<ul><li>bundled BAM-fixture conformance as the main validation path</li>
+<li><code>make nipter-fixture</code></li>
+<li>synthetic cohort / <code>generate_cohort()</code> smoke validation</li>
+<li><code>inst/scripts/real_data_conformance.R</code></li>
+<li><code>inst/tinytest/test_wisecondorx_e2e.R</code></li>
+</ul><p>The package has been refocused on real BAM cohorts and reusable prepared artifacts instead.</p>
 <hr></div>
 <div class="section level2">
-<h2 id="how-to-run-all-conformance-tests">How To Run All Conformance Tests<a class="anchor" aria-label="anchor" href="#how-to-run-all-conformance-tests"></a></h2>
-<div class="sourceCode" id="cb7"><pre class="sourceCode bash"><code class="sourceCode bash"><span id="cb7-1"><a href="#cb7-1" tabindex="-1"></a><span class="co"># Synthetic tests (always run; no external data needed)</span></span>
-<span id="cb7-2"><a href="#cb7-2" tabindex="-1"></a><span class="fu">make</span> install</span>
-<span id="cb7-3"><a href="#cb7-3" tabindex="-1"></a><span class="fu">make</span> test</span>
-<span id="cb7-4"><a href="#cb7-4" tabindex="-1"></a></span>
-<span id="cb7-5"><a href="#cb7-5" tabindex="-1"></a><span class="co"># WisecondorX E2E conformance (synthetic; Python arm conditional on condathis)</span></span>
-<span id="cb7-6"><a href="#cb7-6" tabindex="-1"></a><span class="fu">make</span> conformance</span>
-<span id="cb7-7"><a href="#cb7-7" tabindex="-1"></a></span>
-<span id="cb7-8"><a href="#cb7-8" tabindex="-1"></a><span class="co"># Build multi-chr NIPTeR fixture for Arm B tests</span></span>
-<span id="cb7-9"><a href="#cb7-9" tabindex="-1"></a><span class="fu">make</span> nipter-fixture</span>
-<span id="cb7-10"><a href="#cb7-10" tabindex="-1"></a><span class="va">NIPTER_CONFORMANCE_BAM</span><span class="op">=</span>inst/extdata/nipter_conformance_fixture.bam <span class="fu">make</span> test</span>
-<span id="cb7-11"><a href="#cb7-11" tabindex="-1"></a></span>
-<span id="cb7-12"><a href="#cb7-12" tabindex="-1"></a><span class="co"># Full real-data conformance (server; requires real BAMs)</span></span>
-<span id="cb7-13"><a href="#cb7-13" tabindex="-1"></a><span class="bu">export</span> <span class="va">RWXCONF_CONTROL_BAMS</span><span class="op">=</span><span class="st">"bam1.bam:bam2.bam:..."</span></span>
-<span id="cb7-14"><a href="#cb7-14" tabindex="-1"></a><span class="bu">export</span> <span class="va">RWXCONF_TEST_BAM</span><span class="op">=</span><span class="st">"test.bam"</span></span>
-<span id="cb7-15"><a href="#cb7-15" tabindex="-1"></a><span class="ex">Rscript</span> inst/scripts/real_data_conformance.R</span></code></pre></div>
+<h2 id="how-to-run-the-current-validation-slices">How To Run The Current Validation Slices<a class="anchor" aria-label="anchor" href="#how-to-run-the-current-validation-slices"></a></h2>
+<div class="sourceCode" id="cb7"><pre class="sourceCode bash"><code class="sourceCode bash"><span id="cb7-1"><a href="#cb7-1" tabindex="-1"></a><span class="co"># fast package-local checks</span></span>
+<span id="cb7-2"><a href="#cb7-2" tabindex="-1"></a><span class="fu">make</span> test-fast</span>
+<span id="cb7-3"><a href="#cb7-3" tabindex="-1"></a></span>
+<span id="cb7-4"><a href="#cb7-4" tabindex="-1"></a><span class="co"># BED / NPZ / I/O checks</span></span>
+<span id="cb7-5"><a href="#cb7-5" tabindex="-1"></a><span class="fu">make</span> test-io</span>
+<span id="cb7-6"><a href="#cb7-6" tabindex="-1"></a></span>
+<span id="cb7-7"><a href="#cb7-7" tabindex="-1"></a><span class="co"># NIPTeR statistical and control-group checks</span></span>
+<span id="cb7-8"><a href="#cb7-8" tabindex="-1"></a><span class="fu">make</span> test-nipter</span>
+<span id="cb7-9"><a href="#cb7-9" tabindex="-1"></a></span>
+<span id="cb7-10"><a href="#cb7-10" tabindex="-1"></a><span class="co"># native WisecondorX unit checks</span></span>
+<span id="cb7-11"><a href="#cb7-11" tabindex="-1"></a><span class="fu">make</span> test-rwisecondorx</span>
+<span id="cb7-12"><a href="#cb7-12" tabindex="-1"></a></span>
+<span id="cb7-13"><a href="#cb7-13" tabindex="-1"></a><span class="co"># SeqFF support</span></span>
+<span id="cb7-14"><a href="#cb7-14" tabindex="-1"></a><span class="fu">make</span> test-seqff</span>
+<span id="cb7-15"><a href="#cb7-15" tabindex="-1"></a></span>
+<span id="cb7-16"><a href="#cb7-16" tabindex="-1"></a><span class="co"># internal real-BAM structural validation for NIPTeR</span></span>
+<span id="cb7-17"><a href="#cb7-17" tabindex="-1"></a><span class="fu">make</span> test-real-nipter</span></code></pre></div>
+<p>For real cohort preprocessing and conformance:</p>
+<div class="sourceCode" id="cb8"><pre class="sourceCode bash"><code class="sourceCode bash"><span id="cb8-1"><a href="#cb8-1" tabindex="-1"></a><span class="co"># 1. preprocess BAMs into native BED.gz, optional upstream NPZ, and NIPTeR BED.gz</span></span>
+<span id="cb8-2"><a href="#cb8-2" tabindex="-1"></a><span class="ex">Rscript</span> inst/scripts/preprocess_cohort.R <span class="dt">\</span></span>
+<span id="cb8-3"><a href="#cb8-3" tabindex="-1"></a>  <span class="at">--bam-list</span> /path/to/bams.txt <span class="dt">\</span></span>
+<span id="cb8-4"><a href="#cb8-4" tabindex="-1"></a>  <span class="at">--out-root</span> /path/to/workdir <span class="dt">\</span></span>
+<span id="cb8-5"><a href="#cb8-5" tabindex="-1"></a>  <span class="at">--fasta</span> /path/to/reference.fa <span class="dt">\</span></span>
+<span id="cb8-6"><a href="#cb8-6" tabindex="-1"></a>  <span class="at">--wcx-write-npz</span></span>
+<span id="cb8-7"><a href="#cb8-7" tabindex="-1"></a></span>
+<span id="cb8-8"><a href="#cb8-8" tabindex="-1"></a><span class="co"># 2. build the native and upstream references from prepared artifacts</span></span>
+<span id="cb8-9"><a href="#cb8-9" tabindex="-1"></a><span class="ex">Rscript</span> inst/scripts/build_reference.R <span class="dt">\</span></span>
+<span id="cb8-10"><a href="#cb8-10" tabindex="-1"></a>  <span class="at">--mode</span> rwisecondorx <span class="dt">\</span></span>
+<span id="cb8-11"><a href="#cb8-11" tabindex="-1"></a>  <span class="at">--bed-dir</span> /path/to/workdir/wcx_beds <span class="dt">\</span></span>
+<span id="cb8-12"><a href="#cb8-12" tabindex="-1"></a>  <span class="at">--out</span> /path/to/workdir/refs/rwisecondorx_reference.rds</span>
+<span id="cb8-13"><a href="#cb8-13" tabindex="-1"></a></span>
+<span id="cb8-14"><a href="#cb8-14" tabindex="-1"></a><span class="ex">Rscript</span> inst/scripts/build_reference.R <span class="dt">\</span></span>
+<span id="cb8-15"><a href="#cb8-15" tabindex="-1"></a>  <span class="at">--mode</span> wisecondorx <span class="dt">\</span></span>
+<span id="cb8-16"><a href="#cb8-16" tabindex="-1"></a>  <span class="at">--npz-dir</span> /path/to/workdir/wcx_npz <span class="dt">\</span></span>
+<span id="cb8-17"><a href="#cb8-17" tabindex="-1"></a>  <span class="at">--out</span> /path/to/workdir/refs/wisecondorx_reference.npz</span>
+<span id="cb8-18"><a href="#cb8-18" tabindex="-1"></a></span>
+<span id="cb8-19"><a href="#cb8-19" tabindex="-1"></a><span class="co"># 3. compare both predict paths on prepared test cases</span></span>
+<span id="cb8-20"><a href="#cb8-20" tabindex="-1"></a><span class="ex">Rscript</span> inst/scripts/wisecondorx_conformance.R <span class="dt">\</span></span>
+<span id="cb8-21"><a href="#cb8-21" tabindex="-1"></a>  <span class="at">--rwisecondorx-ref</span> /path/to/workdir/refs/rwisecondorx_reference.rds <span class="dt">\</span></span>
+<span id="cb8-22"><a href="#cb8-22" tabindex="-1"></a>  <span class="at">--wisecondorx-ref</span> /path/to/workdir/refs/wisecondorx_reference.npz <span class="dt">\</span></span>
+<span id="cb8-23"><a href="#cb8-23" tabindex="-1"></a>  <span class="at">--case-manifest</span> /path/to/cases.tsv <span class="dt">\</span></span>
+<span id="cb8-24"><a href="#cb8-24" tabindex="-1"></a>  <span class="at">--out-dir</span> /path/to/workdir/wisecondorx_conformance</span></code></pre></div>
 <hr></div>
 <div class="section level2">
 <h2 id="ai-assistance-disclosure">AI Assistance Disclosure<a class="anchor" aria-label="anchor" href="#ai-assistance-disclosure"></a></h2>
-<p>This package was written with the assistance of AI coding agents (Claude Sonnet 4.6 / Claude Code). Correctness is validated by comparing output against the upstream tools on a suite of synthetic and real sequencing datasets — not by manual code review alone. The AI generated the implementation; humans defined the validation criteria and verified the results.</p>
-<p>Where validation is incomplete (see “Not Yet Validated” section above), this is explicitly documented per <a href="https://rewrites.bio" class="external-link">rewrites.bio</a> principle 2.3.</p>
+<p>This package was written with the assistance of AI coding agents. Correctness is validated by comparison against upstream tools, formula checks, and real-data structural tests, not by generated code alone.</p>
+<p>Where validation is incomplete, this file states that explicitly.</p>
 </div>
 </div>
 

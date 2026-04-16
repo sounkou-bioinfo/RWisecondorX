@@ -3,11 +3,12 @@
 #
 # CLI script for converting a single BAM/CRAM into a binned BED.gz or NPZ file.
 #
-# Supports both WisecondorX and NIPTeR binning modes.
+# Supports native RWisecondorX, upstream WisecondorX, and NIPTeR modes.
 #
 # Usage:
-#   Rscript convert_sample.R --mode wisecondorx --bam sample.bam --out sample.bed.gz
-#   Rscript convert_sample.R --mode wisecondorx --bam sample.bam --out sample.npz --npz
+#   Rscript convert_sample.R --mode rwisecondorx --bam sample.bam --out sample.bed.gz
+#   Rscript convert_sample.R --mode rwisecondorx --bam sample.bam --out sample.npz --npz
+#   Rscript convert_sample.R --mode wisecondorx --bam sample.bam --out sample.npz
 #   Rscript convert_sample.R --mode nipter --bam sample.bam --out sample.bed.gz
 #   Rscript convert_sample.R --mode nipter --bam sample.bam --out sample.bed.gz --gc-table hg38_gc.tsv.bgz
 #   Rscript convert_sample.R --mode nipter --bam sample.bam --out sample.bed.gz --fasta hg38.fa
@@ -20,8 +21,8 @@ if (!requireNamespace("optparse", quietly = TRUE)) {
 library(optparse)
 
 option_list <- list(
-  make_option("--mode", type = "character", default = "wisecondorx",
-              help = "Binning mode: 'wisecondorx' or 'nipter' [default: %default]"),
+  make_option("--mode", type = "character", default = "rwisecondorx",
+              help = "Conversion mode: 'rwisecondorx', 'wisecondorx', or 'nipter' [default: %default]"),
 
   # --- Input / output ---
   make_option("--bam", type = "character", default = NULL,
@@ -32,11 +33,11 @@ option_list <- list(
   # --- Output format ---
   make_option("--npz", action = "store_true", default = FALSE,
               help = paste0("Write WisecondorX-compatible NPZ instead of BED.gz. ",
-                            "Only valid in wisecondorx mode [default: %default]")),
+                            "Only valid in rwisecondorx mode [default: %default]")),
 
   # --- Binning parameters ---
   make_option("--binsize", type = "integer", default = NULL,
-              help = paste0("Bin size in bp. Defaults: 5000 (wisecondorx), ",
+              help = paste0("Bin size in bp. Defaults: 100000 (wisecondorx), ",
                             "50000 (nipter) [default: mode-dependent]")),
   make_option("--mapq", type = "integer", default = NULL,
               help = "Minimum MAPQ [default: 1 wisecondorx, 0 nipter]"),
@@ -66,14 +67,17 @@ parser <- OptionParser(
   description = paste(
     "Convert a single BAM/CRAM file to a binned BED.gz or NPZ file.",
     "",
-    "Supports WisecondorX and NIPTeR binning modes with all filtering options.",
+    "Supports native RWisecondorX, upstream WisecondorX, and NIPTeR conversion modes.",
     "",
     "Examples:",
-    "  # WisecondorX BED output (default)",
-    "  %prog --bam sample.bam --out sample.bed.gz",
+    "  # Native RWisecondorX BED output",
+    "  %prog --mode rwisecondorx --bam sample.bam --out sample.bed.gz",
     "",
-    "  # WisecondorX NPZ output (for Python interop)",
-    "  %prog --bam sample.bam --out sample.npz --npz",
+    "  # Native RWisecondorX NPZ output",
+    "  %prog --mode rwisecondorx --bam sample.bam --out sample.npz --npz",
+    "",
+    "  # Upstream WisecondorX NPZ output via condathis wrapper",
+    "  %prog --mode wisecondorx --bam sample.bam --out sample.npz",
     "",
     "  # NIPTeR BED output with GC correction (precomputed table)",
     "  %prog --mode nipter --bam sample.bam --out sample.bed.gz --gc-table hg38_gc.tsv.bgz",
@@ -95,8 +99,8 @@ opts <- parse_args(parser)
 # ---------------------------------------------------------------------------
 
 mode <- tolower(opts$mode)
-if (!mode %in% c("wisecondorx", "nipter")) {
-  stop("--mode must be 'wisecondorx' or 'nipter', got: ", opts$mode, call. = FALSE)
+if (!mode %in% c("rwisecondorx", "wisecondorx", "nipter")) {
+  stop("--mode must be 'rwisecondorx', 'wisecondorx', or 'nipter', got: ", opts$mode, call. = FALSE)
 }
 
 if (is.null(opts$bam)) {
@@ -111,8 +115,8 @@ if (is.null(opts$out)) {
   stop("--out is required (output path for BED.gz or NPZ file)", call. = FALSE)
 }
 
-if (opts$npz && mode != "wisecondorx") {
-  stop("--npz is only valid in wisecondorx mode", call. = FALSE)
+if (opts$npz && mode != "rwisecondorx") {
+  stop("--npz is only valid in rwisecondorx mode", call. = FALSE)
 }
 
 if (!is.null(opts$`gc-table`) && mode != "nipter") {
@@ -131,12 +135,24 @@ if (opts$`separate-strands` && mode != "nipter") {
   stop("--separate-strands is only valid in nipter mode", call. = FALSE)
 }
 
+if (mode == "wisecondorx" && !grepl("\\.npz$", opts$out, ignore.case = TRUE)) {
+  stop("wisecondorx mode writes upstream NPZ output; --out must end in .npz", call. = FALSE)
+}
+
+if (mode == "wisecondorx" && opts$npz) {
+  stop("wisecondorx mode already uses the upstream NPZ wrapper; do not pass --npz", call. = FALSE)
+}
+
 # ---------------------------------------------------------------------------
 # Set mode-dependent defaults
 # ---------------------------------------------------------------------------
 
-if (mode == "wisecondorx") {
-  binsize <- if (is.null(opts$binsize)) 5000L else opts$binsize
+if (mode == "rwisecondorx") {
+  binsize <- if (is.null(opts$binsize)) 100000L else opts$binsize
+  mapq    <- if (is.null(opts$mapq)) 1L else opts$mapq
+  rmdup   <- if (is.null(opts$rmdup)) "streaming" else opts$rmdup
+} else if (mode == "wisecondorx") {
+  binsize <- if (is.null(opts$binsize)) 100000L else opts$binsize
   mapq    <- if (is.null(opts$mapq)) 1L else opts$mapq
   rmdup   <- if (is.null(opts$rmdup)) "streaming" else opts$rmdup
 } else {
@@ -154,9 +170,9 @@ library(RWisecondorX)
 bam <- opts$bam
 out <- opts$out
 
-if (mode == "wisecondorx") {
+if (mode == "rwisecondorx") {
   if (opts$npz) {
-    cat(sprintf("Converting %s → %s (WisecondorX NPZ, binsize=%d, rmdup=%s)\n",
+    cat(sprintf("Converting %s → %s (native rwisecondorx NPZ, binsize=%d, rmdup=%s)\n",
                 basename(bam), basename(out), binsize, rmdup))
     bam_convert_npz(
       bam       = bam,
@@ -169,7 +185,7 @@ if (mode == "wisecondorx") {
       reference = opts$reference
     )
   } else {
-    cat(sprintf("Converting %s → %s (WisecondorX BED, binsize=%d, mapq=%d, rmdup=%s)\n",
+    cat(sprintf("Converting %s → %s (native rwisecondorx BED, binsize=%d, mapq=%d, rmdup=%s)\n",
                 basename(bam), basename(out), binsize, mapq, rmdup))
     bam_convert_bed(
       bam           = bam,
@@ -182,6 +198,17 @@ if (mode == "wisecondorx") {
       reference     = opts$reference
     )
   }
+} else if (mode == "wisecondorx") {
+  cat(sprintf("Converting %s → %s (upstream wisecondorx NPZ wrapper, binsize=%d)\n",
+              basename(bam), basename(out), binsize))
+  wisecondorx_convert(
+    bam = bam,
+    npz = out,
+    reference = opts$reference,
+    binsize = binsize,
+    normdup = identical(rmdup, "none"),
+    extra_args = character(0)
+  )
 } else {
   # NIPTeR mode
   gc_table <- opts$`gc-table`

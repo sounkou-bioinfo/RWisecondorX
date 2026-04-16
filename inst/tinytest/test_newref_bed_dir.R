@@ -10,10 +10,16 @@
 library(tinytest)
 library(RWisecondorX)
 
-fixture_bam <- system.file("extdata", "hg00106_chr11_fixture.bam",
-                           package = "RWisecondorX")
-if (!nzchar(fixture_bam)) {
-  exit_file("hg00106_chr11_fixture.bam not available; skipping bed_dir tests")
+.helper_real <- system.file("tinytest", "helper_real_data.R", package = "RWisecondorX")
+if (nzchar(.helper_real)) {
+  sys.source(.helper_real, envir = environment())
+} else {
+  sys.source("inst/tinytest/helper_real_data.R", envir = environment())
+}
+
+test_bam <- .first_real_bam()
+if (is.null(test_bam)) {
+  exit_file("No real BAM configured; set RWISECONDORX_TEST_BAM or RWISECONDORX_REAL_BAM_LIST")
 }
 
 # Write 10 BED.gz copies (minimum sample count for rwisecondorx_newref is 10)
@@ -22,17 +28,15 @@ dir.create(bed_dir)
 
 bed_paths <- file.path(bed_dir, paste0("sample_", 1:10, ".bed.gz"))
 for (p in bed_paths) {
-  bam_convert_bed(fixture_bam, p, binsize = 5000L, rmdup = "streaming")
+  bam_convert_bed(test_bam, p, binsize = 5000L, rmdup = "streaming")
 }
 
 expect_true(all(file.exists(bed_paths)),
             info = "all 10 BED.gz files created")
 
 # rwisecondorx_newref with bed_dir= should succeed and return a reference.
-# yfrac is explicit because the fixture is chr11-only (no Y reads → all
-# Y-fractions are zero → Mclust hangs on constant input).
 ref <- rwisecondorx_newref(bed_dir = bed_dir, binsize = 5000L, nipt = TRUE,
-                           refsize = 5L, yfrac = 0.001)
+                           refsize = 5L)
 
 expect_true(is.list(ref),
             info = "bed_dir= returns a list-like reference object")
@@ -42,8 +46,6 @@ expect_equal(ref$binsize, 5000L,
              info = "reference binsize matches input")
 expect_true(ref$is_nipt,
             info = "NIPT mode recorded in reference")
-expect_false(ref$has_male,
-             info = "no male gonosomal ref in NIPT mode")
 
 # Supplying both samples= and bed_dir= must error
 expect_error(

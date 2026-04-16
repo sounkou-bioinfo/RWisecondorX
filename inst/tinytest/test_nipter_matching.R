@@ -16,6 +16,12 @@ if (nzchar(.helper_nipter)) {
 } else {
   sys.source("inst/tinytest/helper_nipter.R", envir = environment())
 }
+.helper_real <- system.file("tinytest", "helper_real_data.R", package = "RWisecondorX")
+if (nzchar(.helper_real)) {
+  sys.source(.helper_real, envir = environment())
+} else {
+  sys.source("inst/tinytest/helper_real_data.R", envir = environment())
+}
 
 .is_nipter_sample <- function(x) {
   RWisecondorX:::.is_nipt_sample_object(x)
@@ -173,14 +179,10 @@ expect_true(scores_no_excl["b"] > scores_no_excl["c"],
 # 5. nipter_control_group_from_beds() — round-trip via BAM fixture
 # ---------------------------------------------------------------------------
 
-.fixture_path <- function(name) {
-  f <- system.file("extdata", name, package = "RWisecondorX")
-  if (nzchar(f)) f else NULL
-}
-test_bam <- .fixture_path("hg00106_chr11_fixture.bam")
+test_bam <- .first_real_bam()
 
 if (is.null(test_bam)) {
-  exit_file("hg00106_chr11_fixture.bam not available; skipping from_beds tests")
+  exit_file("No real BAM configured; set RWISECONDORX_TEST_BAM or RWISECONDORX_REAL_BAM_LIST")
 }
 
 # Write 3 copies of the same BED (representing 3 "different" control samples
@@ -197,7 +199,7 @@ for (p in bed_paths) {
 }
 
 expect_true(all(file.exists(bed_paths)),
-            info = "BED.gz fixture files created")
+            info = "BED.gz files created")
 expect_true(all(file.exists(paste0(bed_paths, ".tbi"))),
             info = "tabix indexes created")
 
@@ -341,9 +343,9 @@ expect_equal(unname(diag(mm_ss)), rep(0.0, 3L),
 # 6. nipter_gc_precompute() and gc_table= parameter on nipter_gc_correct()
 # ---------------------------------------------------------------------------
 
-fixture_ref <- .fixture_path("fixture_ref.fa")
+fixture_ref <- .real_reference_fasta()
 if (is.null(fixture_ref)) {
-  exit_file("fixture_ref.fa not available; run `make fixtures` to generate GC tests")
+  exit_file("No real FASTA configured; set RWISECONDORX_REAL_FASTA or NIPTER_REAL_FASTA")
 }
 
 # Load one BED sample for GC correction

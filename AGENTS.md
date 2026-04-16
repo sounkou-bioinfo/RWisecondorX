@@ -257,6 +257,7 @@ Always read the existing implementation before changing it:
 5. Preserve CRAN-friendly package behaviour. Do not make package loading depend on a preconfigured external Python installation.
 6. Keep package runtime logic and conformance tooling separate.
 7. Keep WisecondorX and NIPTeR layers in **separate files** (`nipter_*.R` vs `wisecondorx_*.R`). The shared engine is `convert.R`.
+8. When work depends on filesystem permissions outside the writable sandbox or on directories with restricted rights, stop and ask the user before proceeding with escalated writes or assuming an alternate location.
 
 ---
 

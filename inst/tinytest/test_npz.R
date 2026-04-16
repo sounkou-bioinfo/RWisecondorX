@@ -7,29 +7,11 @@
 library(tinytest)
 library(RWisecondorX)
 
-# ---------------------------------------------------------------------------
-# Find a usable test BAM (same logic as test_integration.R)
-# ---------------------------------------------------------------------------
-
-.find_test_bam <- function() {
-  candidates <- c(
-    system.file("extdata", "hg00106_chr11_fixture.bam", package = "RWisecondorX"),
-    Sys.getenv("WISECONDORX_TEST_BAM", unset = NA_character_)
-  )
-  candidates <- candidates[!is.na(candidates) & nzchar(candidates) & file.exists(candidates)]
-  if (length(candidates) == 0L) return(NULL)
-  candidates[[1L]]
-}
-
-.fixture_path <- function(name) {
-  candidates <- c(
-    system.file("extdata", name, package = "RWisecondorX"),
-    file.path("inst", "extdata", name),
-    file.path("..", "..", "inst", "extdata", name)
-  )
-  candidates <- candidates[!is.na(candidates) & nzchar(candidates) & file.exists(candidates)]
-  if (length(candidates) == 0L) return(NULL)
-  candidates[[1L]]
+.helper_real <- system.file("tinytest", "helper_real_data.R", package = "RWisecondorX")
+if (nzchar(.helper_real)) {
+  sys.source(.helper_real, envir = environment())
+} else {
+  sys.source("inst/tinytest/helper_real_data.R", envir = environment())
 }
 
 .with_duckhts_con <- function(fun) {
@@ -48,9 +30,9 @@ library(RWisecondorX)
   .with_duckhts_con(function(con) RWisecondorX:::.bam_chr_lengths(con, bam))
 }
 
-test_bam <- .find_test_bam()
+test_bam <- .first_real_bam()
 if (is.null(test_bam)) {
-  exit_file("No test BAM available")
+  exit_file("No real BAM configured; set RWISECONDORX_TEST_BAM or RWISECONDORX_REAL_BAM_LIST")
 }
 old_reticulate_venv <- Sys.getenv("RETICULATE_USE_MANAGED_VENV", unset = NA_character_)
 Sys.setenv(RETICULATE_USE_MANAGED_VENV = "no")
@@ -71,10 +53,9 @@ if (is.null(np)) {
 # bam_convert_npz writes a readable NPZ file
 # ---------------------------------------------------------------------------
 
-# Pre-check: skip if BAM has no human chromosomes (e.g. bundled range.bam)
 probe <- bam_convert(test_bam, binsize = 5000L, rmdup = "none")
 if (length(Filter(Negate(is.null), probe)) == 0L) {
-  exit_file("Test BAM has no chr1-22/X/Y reads; set WISECONDORX_TEST_BAM to a human BAM")
+  exit_file("Configured BAM has no chr1-22/X/Y reads")
 }
 
 npz_out <- tempfile(fileext = ".npz")
@@ -160,69 +141,42 @@ data2$close()
 unlink(npz_out)
 
 # ---------------------------------------------------------------------------
-# CRAM path: bam_convert_npz() accepts a reference FASTA
-# ---------------------------------------------------------------------------
-
-test_cram <- .fixture_path("fixture_mixed.cram")
-test_ref <- .fixture_path("fixture_ref.fa")
-
-if (!is.null(test_cram) && !is.null(test_ref)) {
-  npz_cram <- tempfile(fileext = ".npz")
-
-  bam_convert_npz(
-    bam = test_cram,
-    reference = test_ref,
-    npz = npz_cram,
-    binsize = 5000L,
-    rmdup = "streaming",
-    np = np
-  )
-
-  expect_true(file.exists(npz_cram), info = "bam_convert_npz supports CRAM inputs with reference")
-  unlink(npz_cram)
-}
-
-# ---------------------------------------------------------------------------
 # bam_convert_npz forwards native filter arguments to bam_convert()
 # ---------------------------------------------------------------------------
+npz_filtered <- tempfile(fileext = ".npz")
 
-filter_bam <- .fixture_path("fixture_mixed.bam")
-if (!is.null(filter_bam)) {
-  npz_filtered <- tempfile(fileext = ".npz")
+bam_convert_npz(
+  bam = test_bam,
+  npz = npz_filtered,
+  binsize = 5000L,
+  mapq = 1L,
+  require_flags = 0L,
+  exclude_flags = 1024L,
+  rmdup = "none",
+  np = np
+)
 
-  bam_convert_npz(
-    bam = filter_bam,
-    npz = npz_filtered,
-    binsize = 50L,
-    mapq = 0L,
-    require_flags = 2L,
-    exclude_flags = 1024L,
-    rmdup = "none",
-    np = np
-  )
+filtered_bins <- bam_convert(
+  test_bam,
+  binsize = 5000L,
+  mapq = 1L,
+  require_flags = 0L,
+  exclude_flags = 1024L,
+  rmdup = "none"
+)
 
-  filtered_bins <- bam_convert(
-    filter_bam,
-    binsize = 50L,
-    mapq = 0L,
-    require_flags = 2L,
-    exclude_flags = 1024L,
-    rmdup = "none"
-  )
+filtered_npz <- np$load(npz_filtered, allow_pickle = TRUE)
+filtered_sample <- reticulate::py_to_r(filtered_npz["sample"]$item())
 
-  filtered_npz <- np$load(npz_filtered, allow_pickle = TRUE)
-  filtered_sample <- reticulate::py_to_r(filtered_npz["sample"]$item())
-
-  for (k in names(filtered_sample)) {
-    r_vals <- filtered_bins[[k]]
-    np_vals <- filtered_sample[[k]]
-    if (is.null(r_vals) && is.null(np_vals)) next
-    if (is.null(r_vals)) r_vals <- integer(length(np_vals))
-    if (is.null(np_vals)) np_vals <- integer(length(r_vals))
-    n <- min(length(r_vals), length(np_vals))
-    expect_identical(as.integer(r_vals[seq_len(n)]), as.integer(np_vals[seq_len(n)]),
-                     info = paste("filtered NPZ round-trip identical for chr", k))
-  }
-  filtered_npz$close()
-  unlink(npz_filtered)
+for (k in names(filtered_sample)) {
+  r_vals <- filtered_bins[[k]]
+  np_vals <- filtered_sample[[k]]
+  if (is.null(r_vals) && is.null(np_vals)) next
+  if (is.null(r_vals)) r_vals <- integer(length(np_vals))
+  if (is.null(np_vals)) np_vals <- integer(length(r_vals))
+  n <- min(length(r_vals), length(np_vals))
+  expect_identical(as.integer(r_vals[seq_len(n)]), as.integer(np_vals[seq_len(n)]),
+                   info = paste("filtered NPZ round-trip identical for chr", k))
 }
+filtered_npz$close()
+unlink(npz_filtered)

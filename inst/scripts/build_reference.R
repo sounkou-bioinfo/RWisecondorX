@@ -1,19 +1,15 @@
 #!/usr/bin/env Rscript
 # inst/scripts/build_reference.R
 #
-# CLI script for building a WisecondorX or NIPTeR reference from BAM/CRAM
-# files or pre-binned BED.gz files.
+# Build a reference/control object from preprocessed cohort artifacts only.
 #
-# Input can be specified as:
-#   --bam-dir / --bed-dir   : all matching files in a directory
-#   --bam-list / --bed-list : a text file with one path per line
+# Supported modes:
+#   - rwisecondorx : native RWisecondorX reference from 4-column BED.gz files
+#   - wisecondorx  : upstream WisecondorX reference NPZ via condathis wrapper
+#   - nipter       : NIPTeR control group from 5/9-column BED.gz files
 #
-# Usage:
-#   Rscript build_reference.R --mode wisecondorx --bam-dir /path/to/bams --out ref.rds
-#   Rscript build_reference.R --mode nipter --bam-list samples.txt --out control.rds
-#   Rscript build_reference.R --mode nipter --bam-list samples.txt --fasta hg38.fa --out control.rds
-#   Rscript build_reference.R --mode wisecondorx --bed-dir /path/to/beds --out ref.rds
-#   Rscript build_reference.R --mode nipter --bed-list beds.txt --gc-table hg38_gc.tsv.bgz --out control.rds
+# This script intentionally does not accept BAM/CRAM input. Preprocessing
+# belongs in convert_sample.R or preprocess_cohort.R.
 
 if (!requireNamespace("optparse", quietly = TRUE)) {
   stop("optparse is required. Install it with: install.packages('optparse')",
@@ -21,180 +17,6 @@ if (!requireNamespace("optparse", quietly = TRUE)) {
 }
 
 library(optparse)
-
-option_list <- list(
-  make_option("--mode", type = "character", default = "wisecondorx",
-              help = "Reference type: 'wisecondorx' or 'nipter' [default: %default]"),
-
-  # --- Input sources (exactly one BAM source + optional BED source) ---
-  make_option("--bam-dir", type = "character", default = NULL,
-              help = "Directory of BAM/CRAM files to bin"),
-  make_option("--bam-list", type = "character", default = NULL,
-              help = "Text file with one BAM/CRAM path per line"),
-  make_option("--bed-dir", type = "character", default = NULL,
-              help = "Directory of pre-binned BED.gz files (skip binning)"),
-  make_option("--bed-list", type = "character", default = NULL,
-              help = "Text file with one BED.gz path per line (skip binning)"),
-  make_option("--out", type = "character", default = NULL,
-              help = "Output path for the reference RDS file [required]"),
-
-  # --- File discovery ---
-  make_option("--bam-pattern", type = "character", default = "*.bam",
-              help = "Glob pattern for BAM files in --bam-dir [default: %default]"),
-  make_option("--bed-pattern", type = "character", default = "*.bed.gz",
-              help = "Glob pattern for BED files in --bed-dir [default: %default]"),
-
-  # --- Binning parameters ---
-  make_option("--binsize", type = "integer", default = NULL,
-              help = paste0("Bin size in bp. Defaults: 5000 (wisecondorx), ",
-                            "50000 (nipter) [default: mode-dependent]")),
-  make_option("--ref-binsize", type = "integer", default = NULL,
-              help = paste0("Reference binsize for wisecondorx newref (rescale target). ",
-                            "Defaults to 100000 in wisecondorx mode. ",
-                            "Not used in nipter mode, where the sample/reference binsize ",
-                            "is typically 50000.")),
-  make_option("--mapq", type = "integer", default = NULL,
-              help = "Minimum MAPQ for binning [default: 1 wisecondorx, 0 nipter]"),
-  make_option("--rmdup", type = "character", default = NULL,
-              help = paste0("Dedup mode: 'streaming', 'flag', 'none'. ",
-                            "Defaults: 'streaming' (wisecondorx), 'none' (nipter)")),
-  make_option("--exclude-flags", type = "integer", default = 0L,
-              help = "SAM flag bitmask to exclude (samtools -F) [default: %default]"),
-  make_option("--require-flags", type = "integer", default = 0L,
-              help = "SAM flag bitmask to require (samtools -f) [default: %default]"),
-  make_option("--reference", type = "character", default = NULL,
-              help = "FASTA reference for CRAM decoding"),
-
-  # --- Binning output location ---
-  make_option("--bed-out-dir", type = "character", default = NULL,
-              help = paste0("Directory for binned BED.gz output (used with --bam-dir/--bam-list). ",
-                            "Defaults to <bam-dir>/beds or a temp directory")),
-
-  # --- NIPTeR GC correction ---
-  make_option("--gc-table", type = "character", default = NULL,
-              help = paste0("Precomputed GC table (TSV.bgz from nipter_gc_precompute). ",
-                            "NIPTeR mode: GC-correct each sample before writing BED. ",
-                            "Requires binning from BAMs (ignored with --bed-dir/--bed-list)")),
-  make_option("--fasta", type = "character", default = NULL,
-              help = paste0("FASTA reference for on-the-fly GC correction (alternative to --gc-table). ",
-                            "NIPTeR mode only. Slower than --gc-table for large cohorts")),
-
-  # --- WisecondorX newref parameters ---
-  make_option("--refsize", type = "integer", default = 300L,
-              help = "KNN neighbors for wisecondorx newref [default: %default]"),
-  make_option("--nipt", action = "store_true", default = FALSE,
-              help = "Enable NIPT mode in wisecondorx newref [default: %default]"),
-  make_option("--cpus", type = "integer", default = 4L,
-              help = "Thread count for KNN/CBS [default: %default]"),
-
-  # --- NIPTeR parameters ---
-  make_option("--separate-strands", action = "store_true", default = FALSE,
-              help = "NIPTeR mode: produce SeparatedStrands samples [default: %default]"),
-  make_option("--description", type = "character", default = "General control group",
-              help = "Description for the NIPTeR control group [default: %default]")
-)
-
-parser <- OptionParser(
-  usage = "usage: %prog [options]",
-  description = paste(
-    "Build a WisecondorX reference or NIPTeR control group from BAM/CRAM or BED.gz files.",
-    "",
-    "Input files can be specified via --bam-dir/--bed-dir (directory + glob pattern)",
-    "or --bam-list/--bed-list (text file with one path per line).",
-    "",
-    "Examples:",
-    "  # WisecondorX: bin BAMs at 5kb, build reference at 100kb",
-    "  %prog --mode wisecondorx --bam-dir bams/ --binsize 5000 --ref-binsize 100000 --out ref.rds",
-    "",
-    "  # WisecondorX: use a file list of pre-binned BEDs",
-    "  %prog --mode wisecondorx --bed-list beds.txt --out ref.rds",
-    "",
-    "  # NIPTeR: bin BAMs with GC correction",
-    "  %prog --mode nipter --bam-dir bams/ --gc-table hg38_gc_50k.tsv.bgz --out control.rds",
-    "",
-    "  # NIPTeR: bin BAMs with on-the-fly GC correction from FASTA",
-    "  %prog --mode nipter --bam-dir bams/ --fasta hg38.fa --out control.rds",
-    "",
-    "  # NIPTeR: pre-filtered BAMs from a file list",
-    "  %prog --mode nipter --bam-list samples.txt --mapq 40 --exclude-flags 1024 --out control.rds",
-    sep = "\n"
-  ),
-  option_list = option_list
-)
-
-opts <- parse_args(parser)
-
-# ---------------------------------------------------------------------------
-# Validate inputs
-# ---------------------------------------------------------------------------
-
-mode <- tolower(opts$mode)
-if (!mode %in% c("wisecondorx", "nipter")) {
-  stop("--mode must be 'wisecondorx' or 'nipter', got: ", opts$mode, call. = FALSE)
-}
-
-if (is.null(opts$out)) {
-  stop("--out is required (path for the output RDS file)", call. = FALSE)
-}
-
-# Resolve BAM input sources
-has_bam_dir  <- !is.null(opts$`bam-dir`)
-has_bam_list <- !is.null(opts$`bam-list`)
-has_bed_dir  <- !is.null(opts$`bed-dir`)
-has_bed_list <- !is.null(opts$`bed-list`)
-
-has_bam_input <- has_bam_dir || has_bam_list
-has_bed_input <- has_bed_dir || has_bed_list
-
-if (!has_bam_input && !has_bed_input) {
-  stop("At least one input source is required: --bam-dir, --bam-list, --bed-dir, or --bed-list",
-       call. = FALSE)
-}
-
-if (has_bam_input && has_bed_input) {
-  stop("Provide BAM input (--bam-dir/--bam-list) OR BED input (--bed-dir/--bed-list), not both",
-       call. = FALSE)
-}
-
-if (has_bam_dir && has_bam_list) {
-  stop("--bam-dir and --bam-list are mutually exclusive", call. = FALSE)
-}
-
-if (has_bed_dir && has_bed_list) {
-  stop("--bed-dir and --bed-list are mutually exclusive", call. = FALSE)
-}
-
-if (!is.null(opts$`gc-table`) && !is.null(opts$fasta)) {
-  stop("--gc-table and --fasta are mutually exclusive; provide one or the other", call. = FALSE)
-}
-
-if (!is.null(opts$fasta) && mode != "nipter") {
-  stop("--fasta GC correction is only valid in nipter mode", call. = FALSE)
-}
-
-if (!is.null(opts$`ref-binsize`) && mode == "nipter") {
-  stop("--ref-binsize is not used in nipter mode; use --binsize (default 50000) instead",
-       call. = FALSE)
-}
-
-if (mode == "nipter" && has_bed_input && !is.null(opts$`gc-table`)) {
-  stop("--gc-table cannot be used with --bed-dir/--bed-list in nipter mode; BED inputs are loaded as-is",
-       call. = FALSE)
-}
-
-if (mode == "nipter" && has_bed_input && !is.null(opts$fasta)) {
-  stop("--fasta cannot be used with --bed-dir/--bed-list in nipter mode; BED inputs are loaded as-is",
-       call. = FALSE)
-}
-
-if (mode == "nipter" && has_bed_input && isTRUE(opts$`separate-strands`)) {
-  stop("--separate-strands cannot be used with --bed-dir/--bed-list in nipter mode; strand layout is read from the BED columns",
-       call. = FALSE)
-}
-
-# ---------------------------------------------------------------------------
-# Resolve file lists
-# ---------------------------------------------------------------------------
 
 .read_file_list <- function(path) {
   stopifnot(file.exists(path))
@@ -204,208 +26,201 @@ if (mode == "nipter" && has_bed_input && isTRUE(opts$`separate-strands`)) {
   missing <- lines[!file.exists(lines)]
   if (length(missing) > 0L) {
     stop("Files not found (listed in ", path, "):\n  ",
-         paste(head(missing, 10), collapse = "\n  "),
-         if (length(missing) > 10) paste0("\n  ... and ", length(missing) - 10, " more"),
+         paste(head(missing, 10L), collapse = "\n  "),
+         if (length(missing) > 10L) {
+           paste0("\n  ... and ", length(missing) - 10L, " more")
+         },
          call. = FALSE)
   }
   lines
 }
 
-if (has_bam_dir) {
-  stopifnot(dir.exists(opts$`bam-dir`))
-  bam_files <- sort(Sys.glob(file.path(opts$`bam-dir`, opts$`bam-pattern`)))
-  if (length(bam_files) == 0L) {
-    stop("No files matching '", opts$`bam-pattern`, "' in ", opts$`bam-dir`, call. = FALSE)
+option_list <- list(
+  make_option("--mode", type = "character", default = "rwisecondorx",
+              help = "Reference type: 'rwisecondorx', 'wisecondorx', or 'nipter' [default: %default]"),
+  make_option("--bed-dir", type = "character", default = NULL,
+              help = "Directory of pre-binned BED.gz files"),
+  make_option("--bed-list", type = "character", default = NULL,
+              help = "Text file with one BED.gz path per line"),
+  make_option("--npz-dir", type = "character", default = NULL,
+              help = "Directory of WisecondorX NPZ files"),
+  make_option("--npz-list", type = "character", default = NULL,
+              help = "Text file with one WisecondorX NPZ path per line"),
+  make_option("--out", type = "character", default = NULL,
+              help = "Output path [required]"),
+  make_option("--bed-pattern", type = "character", default = "*.bed.gz",
+              help = "Glob pattern for BED files in --bed-dir [default: %default]"),
+  make_option("--npz-pattern", type = "character", default = "*.npz",
+              help = "Glob pattern for NPZ files in --npz-dir [default: %default]"),
+  make_option("--binsize", type = "integer", default = NULL,
+              help = "Input bin size. Defaults: 100000 (rwisecondorx/wisecondorx), 50000 (nipter)"),
+  make_option("--ref-binsize", type = "integer", default = NULL,
+              help = "Reference output binsize for wisecondorx/rwisecondorx [default: same as --binsize for rwisecondorx, 100000 for wisecondorx]"),
+  make_option("--refsize", type = "integer", default = 300L,
+              help = "KNN neighbors for wisecondorx/rwisecondorx reference building [default: %default]"),
+  make_option("--nipt", action = "store_true", default = FALSE,
+              help = "Enable NIPT mode in wisecondorx/rwisecondorx reference building [default: %default]"),
+  make_option("--cpus", type = "integer", default = 4L,
+              help = "Thread count for reference building [default: %default]"),
+  make_option("--qc-json", type = "character", default = NULL,
+              help = "Optional QC JSON output path for reference modes. Defaults to <out stem>_qc.json for rwisecondorx; upstream wisecondorx writes this automatically."),
+  make_option("--description", type = "character", default = "General control group",
+              help = "Description for the NIPTeR control group [default: %default]")
+)
+
+parser <- OptionParser(
+  usage = paste(
+    "%prog --mode rwisecondorx --bed-dir wcx_beds/ --out rwx_ref.rds",
+    "%prog --mode wisecondorx --npz-dir wcx_npz/ --out wcx_ref.npz",
+    "%prog --mode nipter --bed-dir nipter_beds/ --out nipter_cg.rds",
+    sep = "\n"
+  ),
+  description = paste(
+    "Build a reference/control object from preprocessed cohort artifacts only.",
+    "",
+    "Modes:",
+    "  rwisecondorx : native RWisecondorX reference from BED.gz",
+    "  wisecondorx  : upstream WisecondorX reference from NPZ",
+    "  nipter       : NIPTeR control group from BED.gz",
+    "",
+    "Examples:",
+    "  %prog --mode rwisecondorx --bed-dir wcx_beds/ --binsize 100000 --out rwx_ref.rds",
+    "  %prog --mode wisecondorx --npz-dir wcx_npz/ --binsize 100000 --ref-binsize 100000 --out wcx_ref.npz",
+    "  %prog --mode nipter --bed-dir nipter_beds/ --out nipter_cg.rds",
+    sep = "\n"
+  ),
+  option_list = option_list
+)
+
+opts <- parse_args(parser)
+mode <- tolower(opts$mode)
+if (!mode %in% c("rwisecondorx", "wisecondorx", "nipter")) {
+  stop("--mode must be 'rwisecondorx', 'wisecondorx', or 'nipter'", call. = FALSE)
+}
+if (is.null(opts$out) || !nzchar(opts$out)) {
+  stop("--out is required", call. = FALSE)
+}
+
+has_bed_dir <- !is.null(opts$`bed-dir`)
+has_bed_list <- !is.null(opts$`bed-list`)
+has_npz_dir <- !is.null(opts$`npz-dir`)
+has_npz_list <- !is.null(opts$`npz-list`)
+
+if (mode %in% c("rwisecondorx", "nipter")) {
+  if ((has_bed_dir || has_bed_list) == FALSE) {
+    stop(mode, " mode requires --bed-dir or --bed-list", call. = FALSE)
   }
-} else if (has_bam_list) {
-  bam_files <- .read_file_list(opts$`bam-list`)
-  if (length(bam_files) == 0L) {
-    stop("No files listed in ", opts$`bam-list`, call. = FALSE)
+  if (has_npz_dir || has_npz_list) {
+    stop(mode, " mode does not accept NPZ input", call. = FALSE)
+  }
+  if (has_bed_dir && has_bed_list) {
+    stop("--bed-dir and --bed-list are mutually exclusive", call. = FALSE)
   }
 } else {
-  bam_files <- NULL
+  if ((has_npz_dir || has_npz_list) == FALSE) {
+    stop("wisecondorx mode requires --npz-dir or --npz-list", call. = FALSE)
+  }
+  if (has_bed_dir || has_bed_list) {
+    stop("wisecondorx mode does not accept BED input", call. = FALSE)
+  }
+  if (has_npz_dir && has_npz_list) {
+    stop("--npz-dir and --npz-list are mutually exclusive", call. = FALSE)
+  }
+}
+
+if (mode == "rwisecondorx") {
+  binsize <- if (is.null(opts$binsize)) 100000L else as.integer(opts$binsize)
+  ref_binsize <- if (is.null(opts$`ref-binsize`)) binsize else as.integer(opts$`ref-binsize`)
+} else if (mode == "wisecondorx") {
+  binsize <- if (is.null(opts$binsize)) 100000L else as.integer(opts$binsize)
+  ref_binsize <- if (is.null(opts$`ref-binsize`)) 100000L else as.integer(opts$`ref-binsize`)
+} else {
+  binsize <- if (is.null(opts$binsize)) 50000L else as.integer(opts$binsize)
+  ref_binsize <- NA_integer_
+}
+
+if (mode %in% c("rwisecondorx", "wisecondorx") && ref_binsize %% binsize != 0L) {
+  stop("--ref-binsize must be a multiple of --binsize", call. = FALSE)
+}
+
+.default_qc_json <- function(path) {
+  if (grepl("\\.npz$", path, ignore.case = TRUE)) {
+    sub("\\.npz$", "_qc.json", path, ignore.case = TRUE)
+  } else {
+    sub("\\.rds$", "_qc.json", path, ignore.case = TRUE)
+  }
+}
+
+qc_json <- opts$`qc-json`
+if (is.null(qc_json) && mode == "rwisecondorx") {
+  qc_json <- .default_qc_json(opts$out)
 }
 
 if (has_bed_dir) {
   stopifnot(dir.exists(opts$`bed-dir`))
-  bed_files <- sort(Sys.glob(file.path(opts$`bed-dir`, opts$`bed-pattern`)))
-  if (length(bed_files) == 0L) {
+  input_files <- sort(Sys.glob(file.path(opts$`bed-dir`, opts$`bed-pattern`)))
+  if (length(input_files) == 0L) {
     stop("No files matching '", opts$`bed-pattern`, "' in ", opts$`bed-dir`, call. = FALSE)
   }
 } else if (has_bed_list) {
-  bed_files <- .read_file_list(opts$`bed-list`)
-  if (length(bed_files) == 0L) {
-    stop("No files listed in ", opts$`bed-list`, call. = FALSE)
+  input_files <- .read_file_list(opts$`bed-list`)
+} else if (has_npz_dir) {
+  stopifnot(dir.exists(opts$`npz-dir`))
+  input_files <- sort(Sys.glob(file.path(opts$`npz-dir`, opts$`npz-pattern`)))
+  if (length(input_files) == 0L) {
+    stop("No files matching '", opts$`npz-pattern`, "' in ", opts$`npz-dir`, call. = FALSE)
   }
 } else {
-  bed_files <- NULL
-}
-
-# ---------------------------------------------------------------------------
-# Set mode-dependent defaults
-# ---------------------------------------------------------------------------
-
-if (mode == "wisecondorx") {
-  binsize <- if (is.null(opts$binsize)) 5000L else opts$binsize
-  mapq    <- if (is.null(opts$mapq)) 1L else opts$mapq
-  rmdup   <- if (is.null(opts$rmdup)) "streaming" else opts$rmdup
-  ref_binsize <- if (is.null(opts$`ref-binsize`)) 100000L else opts$`ref-binsize`
-} else {
-  binsize <- if (is.null(opts$binsize)) 50000L else opts$binsize
-  mapq    <- if (is.null(opts$mapq)) 0L else opts$mapq
-  rmdup   <- if (is.null(opts$rmdup)) "none" else opts$rmdup
-  ref_binsize <- binsize
-}
-
-gc_table    <- opts$`gc-table`
-gc_fasta    <- opts$fasta
-
-if (mode == "wisecondorx" && ref_binsize %% binsize != 0L) {
-  stop("--ref-binsize must be a multiple of --binsize in wisecondorx mode",
-       call. = FALSE)
+  input_files <- .read_file_list(opts$`npz-list`)
 }
 
 library(RWisecondorX)
 
-# ---------------------------------------------------------------------------
-# Step 1: Bin BAMs → BED.gz (if BAM input provided)
-# ---------------------------------------------------------------------------
-
-if (!is.null(bam_files)) {
-  # Determine output directory for BED files
-  bed_out_dir <- opts$`bed-out-dir`
-  if (is.null(bed_out_dir)) {
-    if (has_bam_dir) {
-      bed_out_dir <- file.path(opts$`bam-dir`, "beds")
-    } else {
-      bed_out_dir <- tempfile("rwx_beds_")
-    }
-  }
-  if (!dir.exists(bed_out_dir)) dir.create(bed_out_dir, recursive = TRUE)
-
-  cat(sprintf("Binning %d BAM files into %s (binsize=%d, mapq=%d, rmdup=%s) ...\n",
-              length(bam_files), bed_out_dir, binsize, mapq, rmdup))
-
-  bed_files <- character(length(bam_files))
-
-  # Create a single DuckDB connection for the entire binning loop (NIPTeR GC
-
-  # correction path). Avoids leaking one connection per BAM when on.exit()
-  # handlers only fire at script exit.
-  gc_con <- NULL
-  if (mode == "nipter" && (!is.null(gc_table) || !is.null(gc_fasta))) {
-    drv <- duckdb::duckdb(config = list(allow_unsigned_extensions = "true"))
-    gc_con <- DBI::dbConnect(drv)
-    Rduckhts::rduckhts_load(gc_con)
-    on.exit(DBI::dbDisconnect(gc_con, shutdown = TRUE), add = TRUE)
-  }
-
-  for (i in seq_along(bam_files)) {
-    bam <- bam_files[i]
-    bed_name <- paste0(tools::file_path_sans_ext(basename(bam)), ".bed.gz")
-    bed_path <- file.path(bed_out_dir, bed_name)
-    bed_files[i] <- bed_path
-
-    if (file.exists(bed_path)) {
-      cat(sprintf("  [%d/%d] %s (exists, skipping)\n", i, length(bam_files), basename(bam)))
-      next
-    }
-
-    cat(sprintf("  [%d/%d] %s\n", i, length(bam_files), basename(bam)))
-
-    if (mode == "wisecondorx") {
-      bam_convert_bed(
-        bam           = bam,
-        bed           = bed_path,
-        binsize       = binsize,
-        mapq          = mapq,
-        require_flags = opts$`require-flags`,
-        exclude_flags = opts$`exclude-flags`,
-        rmdup         = rmdup,
-        reference     = opts$reference
-      )
-    } else {
-      if (!is.null(gc_table) || !is.null(gc_fasta)) {
-        raw_sample <- nipter_bin_bam(
-          bam              = bam,
-          binsize          = binsize,
-          mapq             = mapq,
-          require_flags    = opts$`require-flags`,
-          exclude_flags    = opts$`exclude-flags`,
-          rmdup            = rmdup,
-          separate_strands = opts$`separate-strands`,
-          con              = gc_con,
-          reference        = opts$reference
-        )
-        corrected_sample <- if (!is.null(gc_table)) {
-          nipter_gc_correct(raw_sample, gc_table = gc_table, con = gc_con)
-        } else {
-          nipter_gc_correct(raw_sample, fasta = gc_fasta, binsize = binsize, con = gc_con)
-        }
-
-        nipter_sample_to_bed(
-          sample    = raw_sample,
-          bed       = bed_path,
-          binsize   = binsize,
-          corrected = corrected_sample,
-          con       = gc_con
-        )
-      } else {
-        nipter_bin_bam_bed(
-          bam              = bam,
-          bed              = bed_path,
-          binsize          = binsize,
-          mapq             = mapq,
-          require_flags    = opts$`require-flags`,
-          exclude_flags    = opts$`exclude-flags`,
-          rmdup            = rmdup,
-          separate_strands = opts$`separate-strands`,
-          reference        = opts$reference
-        )
-      }
-    }
-  }
-
-  cat("Binning complete.\n")
-}
-
-# ---------------------------------------------------------------------------
-# Step 2: Build reference from BED files
-# ---------------------------------------------------------------------------
-
-if (mode == "wisecondorx") {
-  cat(sprintf("Building WisecondorX reference from %d BED files ...\n", length(bed_files)))
-
-  # Load samples from BED files
-  samples <- lapply(bed_files, function(f) bed_to_sample(f))
-  cat(sprintf("  Loaded %d samples.\n", length(samples)))
-
+if (mode == "rwisecondorx") {
+  cat(sprintf("Building native rwisecondorx reference from %d BED files ...\n", length(input_files)))
   ref <- rwisecondorx_newref(
-    samples     = samples,
-    binsize     = ref_binsize,
-    nipt        = opts$nipt,
-    refsize     = opts$refsize,
-    cpus        = opts$cpus
+    bed_dir = if (has_bed_dir) opts$`bed-dir` else NULL,
+    samples = if (has_bed_list) lapply(input_files, bed_to_sample) else NULL,
+    binsize = ref_binsize,
+    nipt = opts$nipt,
+    refsize = as.integer(opts$refsize),
+    cpus = as.integer(opts$cpus)
   )
-
   saveRDS(ref, opts$out)
-  cat(sprintf("Reference saved to %s\n", opts$out))
-  cat(sprintf("  Masked autosomal bins: %d / %d\n", sum(ref$mask), length(ref$mask)))
-  cat(sprintf("  Gender model: %s\n",
-              if (is.null(ref$gender_model)) "none" else "trained"))
-
+  qc <- rwisecondorx_ref_qc(ref, output_json = qc_json)
+  cat(sprintf("Native reference saved to %s\n", opts$out))
+  if (!is.null(qc_json)) {
+    cat(sprintf("Native reference QC written to %s\n", qc_json))
+  }
+  cat(sprintf("Native reference QC verdict: %s\n", qc$overall_verdict))
+} else if (mode == "wisecondorx") {
+  cat(sprintf("Building upstream wisecondorx reference from %d NPZ files ...\n", length(input_files)))
+  wisecondorx_newref(
+    npz_files = input_files,
+    output = opts$out,
+    binsize = binsize,
+    ref_binsize = ref_binsize,
+    nipt = opts$nipt,
+    refsize = as.integer(opts$refsize),
+    cpus = as.integer(opts$cpus)
+  )
+  cat(sprintf("Upstream reference saved to %s\n", opts$out))
+  cat(sprintf("Upstream reference QC written to %s\n", .default_qc_json(opts$out)))
 } else {
-  cat(sprintf("Building NIPTeR control group from %d BED files ...\n", length(bed_files)))
-
-  # Load each BED into a NIPTeRSample
-  samples <- lapply(bed_files, function(f) bed_to_nipter_sample(f))
-  ctrl <- nipter_as_control_group(samples, description = opts$description)
-
-  # If BEDs already have corrected counts (from GC correction during binning),
-  # they were loaded by bed_to_nipter_sample(). If the user wants to GC-correct
-  # from pre-existing BEDs, they should re-bin with --gc-table.
+  cat(sprintf("Building NIPTeR control group from %d BED files ...\n", length(input_files)))
+  ctrl <- if (has_bed_dir) {
+    nipter_control_group_from_beds(
+      bed_dir = opts$`bed-dir`,
+      pattern = opts$`bed-pattern`,
+      binsize = binsize,
+      description = opts$description
+    )
+  } else {
+    nipter_as_control_group(
+      lapply(input_files, bed_to_nipter_sample),
+      description = opts$description
+    )
+  }
   saveRDS(ctrl, opts$out)
   cat(sprintf("Control group saved to %s\n", opts$out))
-  cat(sprintf("  Samples: %d\n", length(ctrl$samples)))
-  cat(sprintf("  Description: %s\n", ctrl$description))
 }

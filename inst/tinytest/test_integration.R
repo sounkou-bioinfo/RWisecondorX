@@ -8,18 +8,11 @@
 #   ../../duckhts/scripts/wisecondorx_convert_conformance.py achieves exact
 #   bin-for-bin agreement (0 mismatches across 25,115 non-zero bins).
 
-# ---------------------------------------------------------------------------
-# Helper: find a usable test BAM
-# ---------------------------------------------------------------------------
-
-.find_test_bam <- function() {
-  candidates <- c(
-    system.file("extdata", "hg00106_chr11_fixture.bam", package = "RWisecondorX"),
-    Sys.getenv("WISECONDORX_TEST_BAM", unset = NA_character_)
-  )
-  candidates <- candidates[!is.na(candidates) & nzchar(candidates) & file.exists(candidates)]
-  if (length(candidates) == 0L) return(NULL)
-  candidates[[1L]]
+.helper_real <- system.file("tinytest", "helper_real_data.R", package = "RWisecondorX")
+if (nzchar(.helper_real)) {
+  sys.source(.helper_real, envir = environment())
+} else {
+  sys.source("inst/tinytest/helper_real_data.R", envir = environment())
 }
 
 # ---------------------------------------------------------------------------
@@ -77,10 +70,10 @@
 # Basic unit test: bam_convert() returns expected structure
 # ---------------------------------------------------------------------------
 
-test_bam <- .find_test_bam()
+test_bam <- .first_real_bam()
 
 if (is.null(test_bam)) {
-  exit_file("No test BAM available; set WISECONDORX_TEST_BAM to run convert tests")
+  exit_file("No real BAM configured; set RWISECONDORX_TEST_BAM or RWISECONDORX_REAL_BAM_LIST")
 }
 
 bins <- bam_convert(test_bam, binsize = 5000L, rmdup = "streaming")
@@ -92,10 +85,8 @@ expect_identical(names(bins), as.character(1:24), info = "result has keys 1-24")
 
 non_null <- Filter(Negate(is.null), bins)
 
-# If the BAM has no human chromosomes (e.g. the bundled range.bam which uses
-# CHROMOSOME_I/II/III/IV), there is nothing more to test for WisecondorX.
 if (length(non_null) == 0L) {
-  exit_file("Test BAM has no chr1-22/X/Y reads; set WISECONDORX_TEST_BAM to a human BAM")
+  exit_file("Configured BAM has no chr1-22/X/Y reads")
 }
 
 # All non-null entries should be non-negative integer vectors

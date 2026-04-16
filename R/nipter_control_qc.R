@@ -48,7 +48,7 @@ nipter_control_group_qc <- function(control_group,
   )
 
   ssd_mat <- nipter_match_matrix(control_group)
-  sample_names <- control_names(control_group)
+  sample_names <- unname(as.character(control_names(control_group)))
   mean_ssd <- vapply(seq_len(nrow(ssd_mat)), function(i) {
     mean(ssd_mat[i, setdiff(seq_len(ncol(ssd_mat)), i), drop = TRUE])
   }, numeric(1L))
@@ -106,30 +106,58 @@ nipter_control_group_qc <- function(control_group,
   ref <- nipter_reference_frame(control_group, sample_sex = sample_sex)
   ref$RR_X <- ref$FrChrReads_X
   ref$RR_Y <- ref$FrChrReads_Y
+  consensus_gender <- sample_sex
+
+  if (!all(sample_sex %in% c("female", "male"))) {
+    predicted_gender <- tryCatch(
+      .predict_reference_sample_sex(
+        .control_with_sample_sex(control_group, sample_sex = sample_sex),
+        sex_models = list(
+          y_fraction = nipter_sex_model(control_group, method = "y_fraction"),
+          xy_fraction = nipter_sex_model(control_group, method = "xy_fraction")
+        )
+      ),
+      error = function(e) NULL
+    )
+    resolved <- .resolve_reference_consensus_gender(
+      sample_sex = sample_sex,
+      predicted_gender = predicted_gender
+    )
+    if (!is.null(resolved)) {
+      consensus_gender <- resolved
+    }
+  }
+
+  ref <- .annotate_reference_frame_sex(
+    ref,
+    consensus_gender = consensus_gender,
+    outlier_threshold = 3
+  )
 
   out <- lapply(c("female", "male"), function(sex) {
-    idx <- ref$SampleSex == sex
-    rr_x <- ref$RR_X[idx]
-    rr_y <- ref$RR_Y[idx]
-    rr_x_loocv <- .zscore_minus_self(rr_x)
-    rr_y_loocv <- .zscore_minus_self(rr_y)
-    rr_x_sd <- if (sum(idx) >= 2L) stats::sd(rr_x) else NA_real_
-    rr_y_sd <- if (sum(idx) >= 2L) stats::sd(rr_y) else NA_real_
-    rr_x_mean <- if (sum(idx)) mean(rr_x) else NA_real_
-    rr_y_mean <- if (sum(idx)) mean(rr_y) else NA_real_
+    idx_all <- ref$ConsensusGender == sex
+    idx_use <- idx_all & !ref$IsRefSexOutlier
+    rr_x <- ref$RR_X[idx_use]
+    rr_y <- ref$RR_Y[idx_use]
+    n_use <- sum(idx_use)
+    rr_x_sd <- if (n_use >= 2L) stats::sd(rr_x) else NA_real_
+    rr_y_sd <- if (n_use >= 2L) stats::sd(rr_y) else NA_real_
+    rr_x_mean <- if (n_use) mean(rr_x) else NA_real_
+    rr_y_mean <- if (n_use) mean(rr_y) else NA_real_
     data.frame(
       sex_group = sex,
-      n_samples = sum(idx),
+      n_samples = sum(idx_all),
+      n_non_outlier_samples = n_use,
       rr_x_mean = rr_x_mean,
       rr_x_sd = rr_x_sd,
       rr_x_cv = if (is.finite(rr_x_mean) && abs(rr_x_mean) > .Machine$double.eps) 100 * rr_x_sd / rr_x_mean else NA_real_,
       rr_y_mean = rr_y_mean,
       rr_y_sd = rr_y_sd,
       rr_y_cv = if (is.finite(rr_y_mean) && abs(rr_y_mean) > .Machine$double.eps) 100 * rr_y_sd / rr_y_mean else NA_real_,
-      rr_x_outliers = sum(is.finite(rr_x_loocv) & abs(rr_x_loocv) >= 3),
-      rr_y_outliers = sum(is.finite(rr_y_loocv) & abs(rr_y_loocv) >= 3),
-      can_build_ncv = sum(idx) >= 2L,
-      can_build_regression = sum(idx) >= 4L,
+      rr_x_outliers = sum(idx_all & ref$IsRefSexOutlier),
+      rr_y_outliers = sum(idx_all & ref$IsRefSexOutlier),
+      can_build_ncv = n_use >= 2L,
+      can_build_regression = n_use >= 4L,
       stringsAsFactors = FALSE
     )
   })

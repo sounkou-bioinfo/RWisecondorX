@@ -184,24 +184,56 @@ nipter_build_reference <- function(control_group,
 }
 
 .resolve_reference_consensus_gender <- function(sample_sex, predicted_gender) {
-  out <- predicted_gender
-
-  if (!is.null(sample_sex)) {
-    explicit <- ifelse(sample_sex %in% c("female", "male"),
-                       sample_sex, NA_character_)
-    if (is.null(out)) {
-      out <- explicit
-    } else {
-      use_explicit <- !is.na(explicit)
-      out[use_explicit] <- explicit[use_explicit]
-    }
-  }
-
-  if (is.null(out) || anyNA(out) || !all(out %in% c("female", "male"))) {
+  if (is.null(sample_sex) && is.null(predicted_gender)) {
     return(NULL)
   }
 
+  out <- predicted_gender
+
+  if (!is.null(sample_sex)) {
+    explicit <- sample_sex
+    storage.mode(explicit) <- "character"
+    if (is.null(out)) {
+      out <- explicit
+    } else {
+      idx <- match(names(explicit), names(out))
+      out[idx[!is.na(idx)]] <- unname(explicit[!is.na(idx)])
+    }
+  }
+
   out
+}
+
+.annotate_reference_frame_sex <- function(frame,
+                                          consensus_gender = NULL,
+                                          outlier_threshold = 3) {
+  if (is.null(consensus_gender)) {
+    return(frame)
+  }
+
+  frame$ConsensusGender <- unname(consensus_gender[frame$Sample_name])
+  frame$RR_X_SexClassMAD <- NA_real_
+  frame$RR_Y_SexClassMAD <- NA_real_
+  frame$IsRefSexOutlier <- FALSE
+
+  for (sex in c("female", "male")) {
+    idx <- which(frame$ConsensusGender == sex)
+    if (!length(idx)) {
+      next
+    }
+    frame$RR_X_SexClassMAD[idx] <- .zscore_minus_self(frame$RR_X[idx])
+    frame$RR_Y_SexClassMAD[idx] <- .zscore_minus_self(frame$RR_Y[idx])
+  }
+
+  frame$IsRefSexOutlier <- (
+    is.finite(frame$RR_X_SexClassMAD) &
+      abs(frame$RR_X_SexClassMAD) >= outlier_threshold
+  ) | (
+    is.finite(frame$RR_Y_SexClassMAD) &
+      abs(frame$RR_Y_SexClassMAD) >= outlier_threshold
+  )
+
+  frame
 }
 
 .augment_reference_frame_for_sex <- function(reference_frame,
@@ -230,26 +262,11 @@ nipter_build_reference <- function(control_group,
     predicted_gender = predicted_gender
   )
 
-  if (!is.null(consensus_gender)) {
-    frame$ConsensusGender <- unname(consensus_gender[frame$Sample_name])
-    frame$RR_X_SexClassMAD <- NA_real_
-    frame$RR_Y_SexClassMAD <- NA_real_
-    for (sex in c("female", "male")) {
-      idx <- which(frame$ConsensusGender == sex)
-      if (!length(idx)) {
-        next
-      }
-      frame$RR_X_SexClassMAD[idx] <- .zscore_minus_self(frame$RR_X[idx])
-      frame$RR_Y_SexClassMAD[idx] <- .zscore_minus_self(frame$RR_Y[idx])
-    }
-    frame$IsRefSexOutlier <- (
-      is.finite(frame$RR_X_SexClassMAD) &
-        abs(frame$RR_X_SexClassMAD) >= outlier_threshold
-    ) | (
-      is.finite(frame$RR_Y_SexClassMAD) &
-        abs(frame$RR_Y_SexClassMAD) >= outlier_threshold
-    )
-  }
+  frame <- .annotate_reference_frame_sex(
+    frame,
+    consensus_gender = consensus_gender,
+    outlier_threshold = outlier_threshold
+  )
 
   .as_nipt_reference_frame(frame)
 }

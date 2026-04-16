@@ -7,9 +7,8 @@
 # Arm B (conditional): cross-checks against the NIPTeR R package itself on
 # a whole-genome BAM. Requires:
 #   - NIPTeR package installed
-#   - the bundled `nipter_conformance_fixture.bam` (used by default), or
-#     `NIPTER_CONFORMANCE_BAM` pointing to a custom pre-filtered whole-genome
-#     BAM override (no unmapped reads, no same-position collisions per strand;
+#   - `NIPTER_CONFORMANCE_BAM` pointing to a pre-filtered whole-genome BAM
+#     override (no unmapped reads, no same-position collisions per strand;
 #     see AGENTS.md for the exact constraints and the known NIPTeR bugs that
 #     impose them)
 #
@@ -455,12 +454,7 @@ if (!requireNamespace("NIPTeR", quietly = TRUE)) {
 
 conf_bam <- Sys.getenv("NIPTER_CONFORMANCE_BAM", unset = NA_character_)
 if (is.na(conf_bam) || !nzchar(conf_bam) || !file.exists(conf_bam)) {
-  conf_bam <- system.file("extdata", "nipter_conformance_fixture.bam",
-                          package = "RWisecondorX")
-}
-if (!nzchar(conf_bam) || !file.exists(conf_bam)) {
-  stop("Bundled NIPTeR conformance fixture is missing; run `make fixtures` and commit it.",
-       call. = FALSE)
+  exit_file("NIPTER_CONFORMANCE_BAM not set; skipping cross-package conformance arm")
 }
 
 nipter_exports <- getNamespaceExports("NIPTeR")

@@ -1125,8 +1125,8 @@ NCVTemplate <- S7::new_class(
   }
   if ("ConsensusGender" %in% names(x)) {
     if (!is.character(x$ConsensusGender) || anyNA(x$ConsensusGender) ||
-        !all(x$ConsensusGender %in% c("female", "male"))) {
-      return("NIPTReferenceFrame$ConsensusGender must contain only female or male.")
+        !all(x$ConsensusGender %in% c("female", "male", "ambiguous", "unknown"))) {
+      return("NIPTReferenceFrame$ConsensusGender must contain only female, male, ambiguous, or unknown.")
     }
   }
   for (col in .nipt_reference_count_cols) {

@@ -8,23 +8,22 @@
 library(tinytest)
 library(RWisecondorX)
 
+.helper_real <- system.file("tinytest", "helper_real_data.R", package = "RWisecondorX")
+if (nzchar(.helper_real)) {
+  sys.source(.helper_real, envir = environment())
+} else {
+  sys.source("inst/tinytest/helper_real_data.R", envir = environment())
+}
+
 expect_identical(
   RWisecondorX:::.normalize_chr_name(c("chrx", "chry"), xy_to_numeric = FALSE),
   c("X", "Y"),
   info = "chromosome normalization uppercases x/y in NIPTeR-mode imports"
 )
 
-
-# ---------- Fixture setup -------------------------------------------------
-
-.fixture_path <- function(name) {
-  f <- system.file("extdata", name, package = "RWisecondorX")
-  if (nzchar(f)) f else NULL
-}
-
-mixed_bam <- .fixture_path("fixture_mixed.bam")
+mixed_bam <- .first_real_bam()
 if (is.null(mixed_bam)) {
-  exit_file("Synthetic BAM fixtures not available; run `make fixtures`")
+  exit_file("No real BAM configured; set RWISECONDORX_TEST_BAM or RWISECONDORX_REAL_BAM_LIST")
 }
 
 
@@ -50,9 +49,9 @@ expect_identical(length(bins_rt), 24L,
 expect_identical(names(bins_rt), as.character(1:24),
                  info = "bed_to_sample() keys are '1'-'24'")
 
-# Compare chr11 counts (the only chromosome with reads in this fixture)
-expect_identical(bins_rt[["11"]], bins_orig[["11"]],
-                 info = "bed_to_sample() chr11 round-trips exactly")
+nonempty_chr <- names(Filter(function(x) !is.null(x) && sum(x) > 0L, bins_orig))[[1L]]
+expect_identical(bins_rt[[nonempty_chr]], bins_orig[[nonempty_chr]],
+                 info = "bed_to_sample() round-trips a populated chromosome exactly")
 
 # Total read count preserved
 total_orig <- sum(vapply(bins_orig, function(x) if (is.null(x)) 0L else sum(x),
@@ -114,7 +113,8 @@ expect_identical(as.integer(sex_rt), as.integer(sex_orig),
 
 # bed_to_sample() should stay strand-agnostic and just use the first 4 columns
 nipter_bins_rt <- bed_to_sample(nipter_bed)
-expect_identical(nipter_bins_rt[["11"]], as.integer(auto_orig["11", ]),
+auto_chr <- rownames(auto_orig)[which(rowSums(auto_orig) > 0L)[1L]]
+expect_identical(nipter_bins_rt[[auto_chr]], as.integer(auto_orig[auto_chr, ]),
                  info = "bed_to_sample() reads CombinedStrands BED via total-count column")
 expect_identical(nipter_bins_rt[["23"]], as.integer(sex_orig["X", ]),
                  info = "bed_to_sample() preserves X counts from a CombinedStrands BED")
@@ -192,7 +192,8 @@ expect_identical(as.integer(rev_sex_rt), as.integer(rev_sex_orig),
 ss_bins_rt <- bed_to_sample(ss_bed)
 ss_auto_total <- fwd_auto_orig + rev_auto_orig
 ss_sex_total  <- fwd_sex_orig + rev_sex_orig
-expect_identical(ss_bins_rt[["11"]], as.integer(ss_auto_total[11L, ]),
+ss_auto_chr <- rownames(ss_auto_total)[which(rowSums(ss_auto_total) > 0L)[1L]]
+expect_identical(ss_bins_rt[[ss_auto_chr]], as.integer(ss_auto_total[ss_auto_chr, ]),
                  info = "bed_to_sample() reads SeparatedStrands BED via total-count column")
 expect_identical(ss_bins_rt[["23"]], as.integer(ss_sex_total[1L, ]),
                  info = "bed_to_sample() preserves X counts from a SeparatedStrands BED")

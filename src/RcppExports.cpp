@@ -10,40 +10,6 @@ Rcpp::Rostream<true>&  Rcpp::Rcout = Rcpp::Rcpp_cout_get();
 Rcpp::Rostream<false>& Rcpp::Rcerr = Rcpp::Rcpp_cerr_get();
 #endif
 
-// simulate_trisomy_bam_cpp
-List simulate_trisomy_bam_cpp(const std::string& input_path, const std::string& output_path, const std::string& trisomy_chr, const double other_keep_prob, const int seed, const int threads, const std::string& reference);
-RcppExport SEXP _RWisecondorX_simulate_trisomy_bam_cpp(SEXP input_pathSEXP, SEXP output_pathSEXP, SEXP trisomy_chrSEXP, SEXP other_keep_probSEXP, SEXP seedSEXP, SEXP threadsSEXP, SEXP referenceSEXP) {
-BEGIN_RCPP
-    Rcpp::RObject rcpp_result_gen;
-    Rcpp::RNGScope rcpp_rngScope_gen;
-    Rcpp::traits::input_parameter< const std::string& >::type input_path(input_pathSEXP);
-    Rcpp::traits::input_parameter< const std::string& >::type output_path(output_pathSEXP);
-    Rcpp::traits::input_parameter< const std::string& >::type trisomy_chr(trisomy_chrSEXP);
-    Rcpp::traits::input_parameter< const double >::type other_keep_prob(other_keep_probSEXP);
-    Rcpp::traits::input_parameter< const int >::type seed(seedSEXP);
-    Rcpp::traits::input_parameter< const int >::type threads(threadsSEXP);
-    Rcpp::traits::input_parameter< const std::string& >::type reference(referenceSEXP);
-    rcpp_result_gen = Rcpp::wrap(simulate_trisomy_bam_cpp(input_path, output_path, trisomy_chr, other_keep_prob, seed, threads, reference));
-    return rcpp_result_gen;
-END_RCPP
-}
-// write_synthetic_bam_cpp
-double write_synthetic_bam_cpp(const std::string& path, const CharacterVector& chr_names, const IntegerVector& chr_lengths, const List& positions_by_chr, const int read_len, const int mapq, const int threads);
-RcppExport SEXP _RWisecondorX_write_synthetic_bam_cpp(SEXP pathSEXP, SEXP chr_namesSEXP, SEXP chr_lengthsSEXP, SEXP positions_by_chrSEXP, SEXP read_lenSEXP, SEXP mapqSEXP, SEXP threadsSEXP) {
-BEGIN_RCPP
-    Rcpp::RObject rcpp_result_gen;
-    Rcpp::RNGScope rcpp_rngScope_gen;
-    Rcpp::traits::input_parameter< const std::string& >::type path(pathSEXP);
-    Rcpp::traits::input_parameter< const CharacterVector& >::type chr_names(chr_namesSEXP);
-    Rcpp::traits::input_parameter< const IntegerVector& >::type chr_lengths(chr_lengthsSEXP);
-    Rcpp::traits::input_parameter< const List& >::type positions_by_chr(positions_by_chrSEXP);
-    Rcpp::traits::input_parameter< const int >::type read_len(read_lenSEXP);
-    Rcpp::traits::input_parameter< const int >::type mapq(mapqSEXP);
-    Rcpp::traits::input_parameter< const int >::type threads(threadsSEXP);
-    rcpp_result_gen = Rcpp::wrap(write_synthetic_bam_cpp(path, chr_names, chr_lengths, positions_by_chr, read_len, mapq, threads));
-    return rcpp_result_gen;
-END_RCPP
-}
 // knn_reference_cpp
 List knn_reference_cpp(NumericMatrix pca_corrected, IntegerVector masked_bins_per_chr, IntegerVector masked_bins_per_chr_cum, int refsize, std::string gender, int cpus);
 RcppExport SEXP _RWisecondorX_knn_reference_cpp(SEXP pca_correctedSEXP, SEXP masked_bins_per_chrSEXP, SEXP masked_bins_per_chr_cumSEXP, SEXP refsizeSEXP, SEXP genderSEXP, SEXP cpusSEXP) {
@@ -131,8 +97,6 @@ END_RCPP
 }
 
 static const R_CallMethodDef CallEntries[] = {
-    {"_RWisecondorX_simulate_trisomy_bam_cpp", (DL_FUNC) &_RWisecondorX_simulate_trisomy_bam_cpp, 7},
-    {"_RWisecondorX_write_synthetic_bam_cpp", (DL_FUNC) &_RWisecondorX_write_synthetic_bam_cpp, 7},
     {"_RWisecondorX_knn_reference_cpp", (DL_FUNC) &_RWisecondorX_knn_reference_cpp, 6},
     {"_RWisecondorX_null_ratios_cpp", (DL_FUNC) &_RWisecondorX_null_ratios_cpp, 4},
     {"_RWisecondorX_nipter_ssd_scores_cpp", (DL_FUNC) &_RWisecondorX_nipter_ssd_scores_cpp, 4},

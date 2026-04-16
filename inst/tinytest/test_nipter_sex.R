@@ -445,6 +445,38 @@ expect_equal(ref_model$reference_frame$YUniqueRatio,
 expect_true(is.logical(ref_model$reference_frame$IsRefSexOutlier),
             info = "reference model frame stores logical sex-outlier flags")
 
+nonbinary_labels <- sex_labels
+nonbinary_labels[["female_1"]] <- "ambiguous"
+nonbinary_labels[["male_1"]] <- "unknown"
+
+ref_model_nonbinary <- nipter_build_reference(
+  sex_cg,
+  sample_sex = nonbinary_labels,
+  sex_source = "synthetic_truth",
+  sex_methods = c("y_fraction", "xy_fraction"),
+  y_unique_ratios = all_ratios
+)
+
+expect_identical(
+  ref_model_nonbinary$reference_frame$ConsensusGender[
+    match(c("female_1", "male_1"), ref_model_nonbinary$reference_frame$Sample_name)
+  ],
+  c("ambiguous", "unknown"),
+  info = "reference frame preserves explicit ambiguous and unknown consensus labels"
+)
+expect_true(all(c("ConsensusGender", "IsRefSexOutlier") %in%
+                  names(ref_model_nonbinary$reference_frame)),
+            info = "reference frame still carries sex metadata when non-binary labels are present")
+
+ref_model_nonbinary_ncv <- nipter_build_sex_ncv_models(
+  ref_model_nonbinary,
+  min_elements = 2L,
+  max_elements = 2L,
+  candidate_chromosomes = 1:12
+)
+expect_true("sex_ncv_models" %in% names(ref_model_nonbinary_ncv),
+            info = "gaunosome NCV models still build from remaining binary non-outlier subsets")
+
 pred_from_ref <- nipter_predict_sex(test_male, ref_model, y_unique_ratio = 0.004)
 expect_identical(pred_from_ref$prediction, "male",
                  info = "reference-model dispatch predicts male sample correctly")

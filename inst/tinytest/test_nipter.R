@@ -1,14 +1,16 @@
 library(tinytest)
 library(RWisecondorX)
 
-.fixture_path <- function(name) {
-  f <- system.file("extdata", name, package = "RWisecondorX")
-  if (nzchar(f)) f else NULL
+.helper_real <- system.file("tinytest", "helper_real_data.R", package = "RWisecondorX")
+if (nzchar(.helper_real)) {
+  sys.source(.helper_real, envir = environment())
+} else {
+  sys.source("inst/tinytest/helper_real_data.R", envir = environment())
 }
 
-test_bam <- .fixture_path("hg00106_chr11_fixture.bam")
+test_bam <- .first_real_bam()
 if (is.null(test_bam)) {
-  exit_file("hg00106_chr11_fixture.bam not available")
+  exit_file("No real BAM configured; set RWISECONDORX_TEST_BAM or RWISECONDORX_REAL_BAM_LIST")
 }
 
 # ---------------------------------------------------------------------------
@@ -34,7 +36,8 @@ expect_identical(sample$correction_status_sex, "Uncorrected",
                  info = "sex correction status is Uncorrected")
 expect_true(is.character(sample$sample_name) && nzchar(sample$sample_name),
             info = "sample_name is a non-empty string")
-expect_identical(sample$sample_name, "hg00106_chr11_fixture",
+expect_identical(sample$sample_name,
+                 sub("\\.(bam|cram)$", "", basename(test_bam), ignore.case = TRUE),
                  info = "sample_name is BAM basename without extension")
 
 auto_mat <- sample$autosomal_chromosome_reads[[1L]]
@@ -51,12 +54,8 @@ expect_true(is.integer(sex_mat),  info = "sex matrix is integer")
 expect_true(all(auto_mat >= 0L),  info = "autosomal counts are non-negative")
 expect_true(all(sex_mat  >= 0L),  info = "sex counts are non-negative")
 
-# The fixture BAM is chr11-only; all other autosomes should be zero.
-expect_true(sum(auto_mat["11", ]) > 0L, info = "chr11 has reads in the fixture")
-for (chr in setdiff(as.character(1:22), "11")) {
-  expect_true(sum(auto_mat[chr, ]) == 0L,
-              info = paste("chr", chr, "is zero (fixture is chr11-only)"))
-}
+expect_true(sum(auto_mat) + sum(sex_mat) > 0L,
+            info = "real BAM contributes non-zero counts")
 
 # ---------------------------------------------------------------------------
 # MAPQ filter reduces read count
@@ -81,8 +80,7 @@ total_nodup <- sum(sample_nodup$autosomal_chromosome_reads[[1L]]) +
                sum(sample_nodup$sex_chromosome_reads[[1L]])
 
 expect_true(total_nodup <= total_default, info = "exclude_flags=1024 keeps <= reads than no filter")
-# Fixture has 68 duplicates; total should drop
-expect_true(total_nodup < total_default,  info = "exclude_flags=1024 removes some reads (fixture has duplicates)")
+expect_true(total_nodup < total_default,  info = "exclude_flags=1024 removes some reads on the real BAM")
 
 # ---------------------------------------------------------------------------
 # BED output
@@ -96,7 +94,7 @@ expect_true(file.exists(bed_out),                    info = "BED.gz file created
 expect_true(file.exists(paste0(bed_out, ".tbi")),    info = "tabix index created")
 expect_true(file.info(bed_out)$size > 0L,            info = "BED.gz is non-empty")
 
-# Spot-check: 24 chromosomes × n_bins rows, 5 columns (tab-delimited)
+# Spot-check: BED rows have 5 columns in CombinedStrands mode
 lines <- readLines(gzcon(file(bed_out, "rb")), n = 5L)
 expect_identical(lengths(strsplit(lines, "\t")), rep(5L, 5L),
                  info = "BED rows have 5 tab-delimited columns")
@@ -133,11 +131,7 @@ if (!requireNamespace("NIPTeR", quietly = TRUE)) {
 
 conf_bam <- Sys.getenv("NIPTER_CONFORMANCE_BAM", unset = NA_character_)
 if (is.na(conf_bam) || !nzchar(conf_bam) || !file.exists(conf_bam)) {
-  conf_bam <- .fixture_path("nipter_conformance_fixture.bam")
-}
-if (is.null(conf_bam) || !file.exists(conf_bam)) {
-  stop("Bundled NIPTeR conformance fixture is missing; run `make fixtures` and commit it.",
-       call. = FALSE)
+  exit_file("NIPTER_CONFORMANCE_BAM not set; skipping cross-package conformance")
 }
 
 our_sample <- nipter_bin_bam(conf_bam, binsize = 50000L,

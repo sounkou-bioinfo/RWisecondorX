@@ -43,6 +43,8 @@ expect_true(all(c("sex_group", "n_samples", "rr_x_cv", "rr_y_cv",
                   "can_build_ncv", "can_build_regression") %in%
                   names(qc$sex_summary)),
             info = "sex summary exposes gaunosome readiness metrics")
+expect_true("n_non_outlier_samples" %in% names(qc$sex_summary),
+            info = "sex summary reports non-outlier subset sizes")
 expect_true(all(c("chromosome", "bin", "mean_scaled", "sd_scaled",
                   "cv_scaled", "chi_z", "overdispersed",
                   "correction_factor") %in%
@@ -73,6 +75,8 @@ expect_true(all(qc$sex_summary$can_build_ncv),
             info = "three controls per sex are sufficient for NCV model building")
 expect_true(!any(qc$sex_summary$can_build_regression),
             info = "three controls per sex are insufficient for regression model building")
+expect_true(all(qc$sex_summary$n_non_outlier_samples == 3L),
+            info = "clean cohort keeps all sex-stratified controls after outlier filtering")
 
 profile_n_bins <- ncol(ctrl_samples[[1L]]$autosomal_chromosome_reads[[1L]])
 expect_identical(nrow(qc$bin_summary), 22L * profile_n_bins,
@@ -113,3 +117,56 @@ expect_equal(qc$bin_summary$chi_z[[1L]], manual_chiz_bin1,
 qc_no_bins <- nipter_control_group_qc(cg, include_bins = FALSE)
 expect_true(is.null(qc_no_bins$bin_summary),
             info = "bin_summary is omitted when include_bins = FALSE")
+
+outlier_samples <- .sim_nipter_control_set(9L, seed = 33L)
+outlier_labels <- c(
+  ctrl_01 = "female",
+  ctrl_02 = "female",
+  ctrl_03 = "female",
+  ctrl_04 = "female",
+  ctrl_05 = "male",
+  ctrl_06 = "male",
+  ctrl_07 = "male",
+  ctrl_08 = "male",
+  ctrl_09 = "male"
+)
+
+for (nm in names(outlier_labels)) {
+  idx <- match(nm, vapply(outlier_samples, function(s) s@sample_name, character(1L)))
+  sx <- outlier_samples[[idx]]@sex_matrix_
+  if (outlier_labels[[nm]] == "female") {
+    sx["X", ] <- 25L
+    sx["Y", ] <- 0L
+  } else {
+    sx["X", ] <- 12L
+    sx["Y", ] <- 4L
+  }
+  outlier_samples[[idx]]@sex_matrix_ <- sx
+}
+
+# One extreme female should be dropped by the same outlier logic used by the
+# gaunosome reference builders, leaving only three usable female controls.
+sx <- outlier_samples[[1L]]@sex_matrix_
+sx["X", ] <- 2L
+sx["Y", ] <- 20L
+outlier_samples[[1L]]@sex_matrix_ <- sx
+
+outlier_cg <- nipter_as_control_group(
+  outlier_samples,
+  description = "QC outlier controls",
+  sample_sex = outlier_labels,
+  sex_source = "synthetic_truth"
+)
+
+qc_outlier <- nipter_control_group_qc(outlier_cg)
+female_row <- qc_outlier$sex_summary[qc_outlier$sex_summary$sex_group == "female", , drop = FALSE]
+male_row <- qc_outlier$sex_summary[qc_outlier$sex_summary$sex_group == "male", , drop = FALSE]
+
+expect_identical(female_row$n_samples, 4L,
+                 info = "outlier cohort reports raw female control count")
+expect_identical(female_row$n_non_outlier_samples, 3L,
+                 info = "outlier cohort reports filtered female control count")
+expect_true(!female_row$can_build_regression,
+            info = "regression readiness follows filtered female subset size")
+expect_true(male_row$can_build_regression,
+            info = "regression readiness remains true for unaffected male subset")

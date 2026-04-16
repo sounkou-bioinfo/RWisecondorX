@@ -60,6 +60,17 @@ seqff_prepare_counts <- function(input,
     return(counts)
   }
 
+  if (input_type == "bam") {
+    return(seqff_bam_counts(
+      bam = input,
+      mapq = mapq,
+      require_flags = require_flags,
+      exclude_flags = exclude_flags,
+      con = con,
+      reference = reference
+    ))
+  }
+
   positions <- seqff_read_positions(
     input = input,
     input_type = input_type,
@@ -150,6 +161,65 @@ seqff_read_positions_bam <- function(bam,
   data.frame(
     refChr = rows[[chrom_col[[1L]]]],
     begin = as.integer(rows$bin_id) * 50000L + 1L,
+    stringsAsFactors = FALSE
+  )
+}
+
+seqff_bam_counts <- function(bam,
+                             mapq,
+                             require_flags,
+                             exclude_flags,
+                             con,
+                             reference) {
+  stopifnot(is.character(bam), length(bam) == 1L, nzchar(bam))
+  stopifnot(file.exists(bam))
+  if (!is.null(reference)) {
+    stopifnot(is.character(reference), length(reference) == 1L, nzchar(reference))
+    stopifnot(file.exists(reference))
+  }
+
+  mapq <- if (is.null(mapq)) 0L else as.integer(mapq)
+  require_flags <- if (is.null(require_flags)) 0L else as.integer(require_flags)
+  exclude_flags <- if (is.null(exclude_flags)) 0L else as.integer(exclude_flags)
+
+  own_con <- is.null(con)
+  if (own_con) {
+    drv <- duckdb::duckdb(config = list(allow_unsigned_extensions = "true"))
+    con <- DBI::dbConnect(drv)
+    Rduckhts::rduckhts_load(con)
+    on.exit(DBI::dbDisconnect(con, shutdown = TRUE), add = TRUE)
+  }
+
+  rows <- Rduckhts::rduckhts_bam_bin_counts(
+    con,
+    path = bam,
+    bin_width = 50000L,
+    reference = reference,
+    mapq = mapq,
+    require_flags = require_flags,
+    exclude_flags = exclude_flags,
+    rmdup = "none"
+  )
+
+  if (!nrow(rows)) {
+    return(data.frame(binName = character(0), counts = numeric(0), stringsAsFactors = FALSE))
+  }
+
+  chrom_col <- grep("^chrom$", names(rows), ignore.case = TRUE, value = TRUE)
+  count_col <- grep("^count_total$", names(rows), ignore.case = TRUE, value = TRUE)
+  if (!length(chrom_col) || !length(count_col)) {
+    stop("SeqFF BAM bin counts missing expected columns.", call. = FALSE)
+  }
+
+  ref_chr <- seqff_normalize_chr_names(rows[[chrom_col[[1L]]]])
+  keep <- !ref_chr %in% c("*", "chrM", "chrMT", "M", "MT")
+  if (!any(keep)) {
+    return(data.frame(binName = character(0), counts = numeric(0), stringsAsFactors = FALSE))
+  }
+
+  data.frame(
+    binName = paste(ref_chr[keep], as.integer(rows$bin_id[keep]), sep = "_"),
+    counts = as.numeric(rows[[count_col[[1L]]]][keep]),
     stringsAsFactors = FALSE
   )
 }

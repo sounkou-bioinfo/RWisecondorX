@@ -533,8 +533,14 @@ roxygen2 comments, `make fixtures` to rebuild the bundled test data, and
   : Pre-computed NCV denominator template
 - [`NIPTControlGroup()`](https://sounkou-bioinfo.github.io/RWisecondorX/reference/NIPTControlGroup.md)
   : Abstract base class for NIPTeR control groups
+- [`NIPTControlGroupQC()`](https://sounkou-bioinfo.github.io/RWisecondorX/reference/NIPTControlGroupQC.md)
+  : Control-group QC report
+- [`NIPTCorrectionPath()`](https://sounkou-bioinfo.github.io/RWisecondorX/reference/NIPTCorrectionPath.md)
+  : Ordered correction path for autosomal or sex-chromosome processing
 - [`NIPTCorrectionRecord()`](https://sounkou-bioinfo.github.io/RWisecondorX/reference/NIPTCorrectionRecord.md)
   : Correction record for a NIPTeR sample
+- [`NIPTCorrectionStep()`](https://sounkou-bioinfo.github.io/RWisecondorX/reference/NIPTCorrectionStep.md)
+  : Typed correction step in a NIPTeR correction path
 - [`NIPTGaunosomeReport()`](https://sounkou-bioinfo.github.io/RWisecondorX/reference/NIPTGaunosomeReport.md)
   : Aggregate gaunosome cohort report
 - [`NIPTGaunosomeScore()`](https://sounkou-bioinfo.github.io/RWisecondorX/reference/NIPTGaunosomeScore.md)
@@ -616,6 +622,8 @@ roxygen2 comments, `make fixtures` to rebuild the bundled test data, and
   : Chi-squared correction for overdispersed bins
 - [`nipter_control_group_from_beds()`](https://sounkou-bioinfo.github.io/RWisecondorX/reference/nipter_control_group_from_beds.md)
   : Load a NIPTeR control group from a directory of TSV.bgz files
+- [`nipter_control_group_qc()`](https://sounkou-bioinfo.github.io/RWisecondorX/reference/nipter_control_group_qc.md)
+  : Build a typed QC report for a NIPTeR control group
 - [`nipter_diagnose_control_group()`](https://sounkou-bioinfo.github.io/RWisecondorX/reference/nipter_diagnose_control_group.md)
   : Diagnose a NIPTeR control group
 - [`nipter_gaunosome_report()`](https://sounkou-bioinfo.github.io/RWisecondorX/reference/nipter_gaunosome_report.md)

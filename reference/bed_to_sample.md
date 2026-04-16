@@ -1,8 +1,7 @@
 # Read a WisecondorX-format BED file into a sample list
 
-Reads a 4-column bgzipped BED file (as written by
-[`bam_convert_bed()`](https://sounkou-bioinfo.github.io/RWisecondorX/reference/bam_convert_bed.md))
-and returns a named list of integer vectors suitable for
+Reads a bgzipped BED file and returns a named list of integer vectors
+suitable for
 [`rwisecondorx_newref()`](https://sounkou-bioinfo.github.io/RWisecondorX/reference/rwisecondorx_newref.md),
 [`rwisecondorx_predict()`](https://sounkou-bioinfo.github.io/RWisecondorX/reference/rwisecondorx_predict.md),
 [`scale_sample()`](https://sounkou-bioinfo.github.io/RWisecondorX/reference/scale_sample.md),
@@ -40,9 +39,11 @@ is the same format returned by
 
 ## Details
 
-The BED file must have 4 tab-delimited columns: `chrom`, `start`, `end`,
-`count` (no header). Coordinates are 0-based half-open intervals. The
-bin size is inferred from the first row (`end - start`) unless
+Only the first 4 tab-delimited columns are used: `chrom`, `start`,
+`end`, `count` (no header). Any trailing columns are ignored, so this
+reader stays strand-agnostic and can also consume NIPTeR BEDs by taking
+their total-count column. Coordinates are 0-based half-open intervals.
+The bin size is inferred from the first row (`end - start`) unless
 explicitly provided.
 
 ## See also

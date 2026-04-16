@@ -12,7 +12,10 @@
 <url><loc>https://sounkou-bioinfo.github.io/RWisecondorX/reference/CombinedStrandsSample.html</loc></url>
 <url><loc>https://sounkou-bioinfo.github.io/RWisecondorX/reference/NCVTemplate.html</loc></url>
 <url><loc>https://sounkou-bioinfo.github.io/RWisecondorX/reference/NIPTControlGroup.html</loc></url>
+<url><loc>https://sounkou-bioinfo.github.io/RWisecondorX/reference/NIPTControlGroupQC.html</loc></url>
+<url><loc>https://sounkou-bioinfo.github.io/RWisecondorX/reference/NIPTCorrectionPath.html</loc></url>
 <url><loc>https://sounkou-bioinfo.github.io/RWisecondorX/reference/NIPTCorrectionRecord.html</loc></url>
+<url><loc>https://sounkou-bioinfo.github.io/RWisecondorX/reference/NIPTCorrectionStep.html</loc></url>
 <url><loc>https://sounkou-bioinfo.github.io/RWisecondorX/reference/NIPTGaunosomeReport.html</loc></url>
 <url><loc>https://sounkou-bioinfo.github.io/RWisecondorX/reference/NIPTGaunosomeScore.html</loc></url>
 <url><loc>https://sounkou-bioinfo.github.io/RWisecondorX/reference/NIPTReferenceFrame.html</loc></url>
@@ -91,6 +94,7 @@
 <url><loc>https://sounkou-bioinfo.github.io/RWisecondorX/reference/nipter_build_sex_regression_models.html</loc></url>
 <url><loc>https://sounkou-bioinfo.github.io/RWisecondorX/reference/nipter_chi_correct.html</loc></url>
 <url><loc>https://sounkou-bioinfo.github.io/RWisecondorX/reference/nipter_control_group_from_beds.html</loc></url>
+<url><loc>https://sounkou-bioinfo.github.io/RWisecondorX/reference/nipter_control_group_qc.html</loc></url>
 <url><loc>https://sounkou-bioinfo.github.io/RWisecondorX/reference/nipter_diagnose_control_group.html</loc></url>
 <url><loc>https://sounkou-bioinfo.github.io/RWisecondorX/reference/nipter_gaunosome_report.html</loc></url>
 <url><loc>https://sounkou-bioinfo.github.io/RWisecondorX/reference/nipter_gaunosome_score.html</loc></url>

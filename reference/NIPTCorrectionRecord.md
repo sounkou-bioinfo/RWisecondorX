@@ -6,17 +6,20 @@ chromosome matrices of a `NIPTSample` object.
 ## Usage
 
 ``` r
-NIPTCorrectionRecord(autosomal = "Uncorrected", sex = "Uncorrected")
+NIPTCorrectionRecord(
+  autosomal = .nipt_raw_correction_path(),
+  sex = .nipt_raw_correction_path()
+)
 ```
 
 ## Arguments
 
 - autosomal:
 
-  Character vector describing the autosomal correction history. Defaults
-  to `"Uncorrected"`.
+  A `NIPTCorrectionPath` describing the autosomal correction history.
+  Defaults to a single `"raw"` step.
 
 - sex:
 
-  Character vector describing the sex-chromosome correction history.
-  Defaults to `"Uncorrected"`.
+  A `NIPTCorrectionPath` describing the sex-chromosome correction
+  history. Defaults to a single `"raw"` step.

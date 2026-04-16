@@ -53,7 +53,7 @@ and `rduckhts_tabix_index()` — no external tools.
 [`wisecondorx_newref()`](https://sounkou-bioinfo.github.io/RWisecondorX/reference/wisecondorx_newref.md),
 [`wisecondorx_predict()`](https://sounkou-bioinfo.github.io/RWisecondorX/reference/wisecondorx_predict.md)
 — thin `condathis` wrappers delegating to the official bioconda
-package. - `R/npz.R`:
+package. - `R/wisecondorx_npz.R`:
 [`bam_convert_npz()`](https://sounkou-bioinfo.github.io/RWisecondorX/reference/bam_convert_npz.md)
 — WisecondorX-compatible NPZ output via `reticulate`.
 
@@ -253,7 +253,7 @@ Python runtime dependency.
 
 **Synthetic cohort generator**
 
-- `R/cohort.R` —
+- `R/synthetic_cohort.R` —
   [`generate_cohort()`](https://sounkou-bioinfo.github.io/RWisecondorX/reference/generate_cohort.md):
   creates synthetic BAMs with “compressed” chromosome lengths (100bp per
   bin) for testing. Produces ~435KB BAMs per sample. Trisomy simulation
@@ -388,10 +388,12 @@ validation and extension:
   ([`bed_to_sample()`](https://sounkou-bioinfo.github.io/RWisecondorX/reference/bed_to_sample.md),
   [`bed_to_nipter_sample()`](https://sounkou-bioinfo.github.io/RWisecondorX/reference/bed_to_nipter_sample.md))
   for round-tripping from stored BED files.
-- `R/cohort.R` — synthetic cohort generator for testing.
+- `R/synthetic_cohort.R` — synthetic cohort generator for testing.
+- `R/simulate_trisomy_cohort.R` — donor BAM/CRAM cohort simulator for
+  trisomy positives.
 - `R/wisecondorx_cli.R` — CLI wrappers (condathis-based conformance
   tools).
-- `R/npz.R` — NPZ output.
+- `R/wisecondorx_npz.R` — WisecondorX NPZ output.
 - `R/aaa.R` — SRA metadata helpers.
 - `R/RcppExports.R` — auto-generated Rcpp R wrappers.
 - `R/zzz_rcpp.R` — roxygen directives for useDynLib + importFrom Rcpp.

@@ -14,6 +14,8 @@ nipter_control_group_from_beds(
   pattern = "*.bed.gz",
   binsize = NULL,
   description = "General control group",
+  sample_sex = NULL,
+  sex_source = NULL,
   con = NULL
 )
 ```
@@ -39,6 +41,16 @@ nipter_control_group_from_beds(
 
   Label for the resulting control group (default
   `"General control group"`).
+
+- sample_sex:
+
+  Optional character vector of known sex labels for the samples in
+  `bed_dir`. Names must match the inferred sample names when supplied as
+  a named vector.
+
+- sex_source:
+
+  Optional string describing the provenance of `sample_sex`.
 
 - con:
 

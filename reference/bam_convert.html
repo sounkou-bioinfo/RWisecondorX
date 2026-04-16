@@ -118,10 +118,13 @@ SeparatedStrands object. Default <code>FALSE</code>.</p></dd>
 </dl></div>
     <div class="section level2">
     <h2 id="value">Value<a class="anchor" aria-label="anchor" href="#value"></a></h2>
-    <p>When <code>separate_strands = FALSE</code> (default): a named list with one
-integer vector per chromosome key (<code>"1"</code>–<code>"22"</code>, <code>"23"</code> for X, <code>"24"</code> for
-Y). Each vector contains per-bin read counts (bin 0 = positions 0 to
-<code>binsize - 1</code>). Chromosomes absent from the BAM are <code>NULL</code>.</p>
+    <p>When <code>separate_strands = FALSE</code> (default): a list-like
+<code>WisecondorXSample</code> S7 object with one integer vector per chromosome key
+(<code>"1"</code>–<code>"22"</code>, <code>"23"</code> for X, <code>"24"</code> for Y). Each vector contains per-bin
+read counts (bin 0 = positions 0 to <code>binsize - 1</code>). Chromosomes present in
+the BAM header are returned as dense vectors padded with trailing zeros up
+to the chromosome span implied by the header and <code>binsize</code>; chromosomes
+absent from the header are <code>NULL</code>.</p>
 <p>When <code>separate_strands = TRUE</code>: a list with two elements, <code>fwd</code> and <code>rev</code>,
 each structured like the default return.</p>
     </div>

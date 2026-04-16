@@ -256,8 +256,13 @@ Python runtime dependency.
 - `R/cohort.R` —
   [`generate_cohort()`](https://sounkou-bioinfo.github.io/RWisecondorX/reference/generate_cohort.md):
   creates synthetic BAMs with “compressed” chromosome lengths (100bp per
-  bin) for testing. Produces ~435KB BAMs per sample. Supports trisomy
-  signal injection. Exports `COMPRESSED_BINSIZE` constant (100L).
+  bin) for testing. Produces ~435KB BAMs per sample. Trisomy simulation
+  uses the Nguyen et al. 2023 fetal fraction model
+  (<doi:10.1101/2023.11.24.568620>): reads are stochastically removed
+  from non-target chromosomes with probability `p = k*f/(1+k*f)` to
+  simulate relative enrichment of the trisomy chromosome, where
+  `k = 0.5` (non-mosaic) or `k = 0.25` (mosaic). Default fetal fraction
+  is 10%. Exports `COMPRESSED_BINSIZE` constant (100L).
 - `inst/scripts/make_cohort.R` — CLI wrapper for batch cohort
   generation.
 

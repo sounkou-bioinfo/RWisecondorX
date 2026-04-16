@@ -83,9 +83,9 @@ rwisecondorx_newref(
 
 ## Value
 
-A list (the reference object) with class `"WisecondorXReference"`,
-containing autosomal and (optionally) gonosomal sub-references. See
-Details for the full structure.
+A list-like `WisecondorXReference` S7 object containing autosomal and
+(optionally) gonosomal sub-references. See Details for the full
+structure.
 
 ## Details
 

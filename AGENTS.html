@@ -102,7 +102,7 @@
 <code>src/Makevars</code>, <code>src/Makevars.win</code> — OpenMP compilation flags.</li>
 </ul><p><strong>Synthetic cohort generator</strong></p>
 <ul><li>
-<code>R/cohort.R</code> — <code><a href="reference/generate_cohort.html">generate_cohort()</a></code>: creates synthetic BAMs with “compressed” chromosome lengths (100bp per bin) for testing. Produces ~435KB BAMs per sample. Supports trisomy signal injection. Exports <code>COMPRESSED_BINSIZE</code> constant (100L).</li>
+<code>R/cohort.R</code> — <code><a href="reference/generate_cohort.html">generate_cohort()</a></code>: creates synthetic BAMs with “compressed” chromosome lengths (100bp per bin) for testing. Produces ~435KB BAMs per sample. Trisomy simulation uses the Nguyen et al. 2023 fetal fraction model (<a href="doi:10.1101/2023.11.24.568620" class="uri">doi:10.1101/2023.11.24.568620</a>): reads are stochastically removed from non-target chromosomes with probability <code>p = k*f/(1+k*f)</code> to simulate relative enrichment of the trisomy chromosome, where <code>k = 0.5</code> (non-mosaic) or <code>k = 0.25</code> (mosaic). Default fetal fraction is 10%. Exports <code>COMPRESSED_BINSIZE</code> constant (100L).</li>
 <li>
 <code>inst/scripts/make_cohort.R</code> — CLI wrapper for batch cohort generation.</li>
 </ul><p><strong>Tests — native WisecondorX and pipeline</strong></p>

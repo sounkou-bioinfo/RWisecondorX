@@ -2,6 +2,71 @@
 
 ## RWisecondorX 0.0.0.9001 (development version)
 
+- The NIPTeR S7 layer has been tightened up around the control-group
+  abstraction. `NIPTControlGroup` objects now carry optional explicit
+  `sample_sex` annotations plus a `sex_source`, and the public
+  [`nipter_as_control_group()`](https://sounkou-bioinfo.github.io/RWisecondorX/reference/nipter_as_control_group.md)
+  /
+  [`nipter_control_group_from_beds()`](https://sounkou-bioinfo.github.io/RWisecondorX/reference/nipter_control_group_from_beds.md)
+  builders accept those labels directly.
+
+- New
+  [`nipter_reference_frame()`](https://sounkou-bioinfo.github.io/RWisecondorX/reference/nipter_reference_frame.md)
+  builds the chromosome-level training table (`NChrReads_*` /
+  `FrChrReads_*`) directly from a control group, with an optional
+  `SampleSex` column. This is the package-level foundation for future
+  gaunosome model building instead of pushing production-specific data
+  munging into the core sample classes.
+
+- The S7 implementation now exposes compatibility accessors for the
+  legacy `autosomal_chromosome_reads`, `sex_chromosome_reads`,
+  `sample_name`, and correction-status fields, and the control-group
+  fraction cache is now a real environment-backed cache instead of a
+  dead placeholder.
+
+- The NIPTeR S7 compatibility layer no longer registers bare `$` methods
+  for upstream `NIPTeR` class names. This fixes a recursive dispatch bug
+  that could overflow the C stack during cross-package conformance
+  tests, while keeping compatibility for `RWisecondorX`’s own namespaced
+  S7 objects.
+
+- Raw NIPTeR bin-count samples now preserve integer storage for
+  uncorrected autosomal and sex matrices. Only corrected matrices are
+  promoted to double, which restores the original count semantics in
+  round-trip and binning tests.
+
+- WisecondorX objects now use a real S7 hierarchy: `WisecondorXSample`,
+  `WisecondorXReference`, `WisecondorXPrediction`, and
+  `WisecondorXReferenceQC` are validated S7 classes that intentionally
+  subclass `list`, so existing list-style code keeps working while the
+  object boundary is now typed and explicit.
+
+- New
+  [`simulate_trisomy_bam()`](https://sounkou-bioinfo.github.io/RWisecondorX/reference/simulate_trisomy_bam.md)
+  creates a BAM-level trisomy simulation from a donor BAM/CRAM by
+  thinning non-target chromosomes with an htslib-backed native
+  implementation. It preserves the donor read layout and sort order,
+  writes a real BAM, and indexes it with `Rduckhts`. New
+  `inst/scripts/simulate_trisomy_bam.R` exposes the same primitive as a
+  CLI.
+
+- New
+  [`simulate_trisomy_cohort()`](https://sounkou-bioinfo.github.io/RWisecondorX/reference/simulate_trisomy_cohort.md)
+  batches that donor-BAM simulator across a donor set and simulation
+  grid, writes a cohort manifest, and reuses one `Rduckhts` indexing
+  session for the whole run. New
+  `inst/scripts/simulate_trisomy_cohort.R` exposes the cohort generator
+  as a
+
+  151. 
+
+- New
+  [`rwisecondorx_ref_qc()`](https://sounkou-bioinfo.github.io/RWisecondorX/reference/rwisecondorx_ref_qc.md)
+  mirrors the upstream Python `ref_qc.py` heuristics for native
+  `WisecondorXReference` objects. It returns a structured PASS/WARN/FAIL
+  report in R and can optionally write the report as JSON for later
+  inspection, without requiring the Python `wisecondorx` package.
+
 - [`wisecondorx_newref()`](https://sounkou-bioinfo.github.io/RWisecondorX/reference/wisecondorx_newref.md)
   now defaults to `cpus = 4L`, matching the native
   [`rwisecondorx_newref()`](https://sounkou-bioinfo.github.io/RWisecondorX/reference/rwisecondorx_newref.md)

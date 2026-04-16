@@ -11,7 +11,12 @@ and
 ## Usage
 
 ``` r
-nipter_as_control_group(samples, description = "General control group")
+nipter_as_control_group(
+  samples,
+  description = "General control group",
+  sample_sex = NULL,
+  sex_source = NULL
+)
 ```
 
 ## Arguments
@@ -23,6 +28,18 @@ nipter_as_control_group(samples, description = "General control group")
 - description:
 
   Label for the group (default `"General control group"`).
+
+- sample_sex:
+
+  Optional character vector of known sex labels for the control samples.
+  Accepted values are `"female"`, `"male"`, `"ambiguous"`, and
+  `"unknown"`. When unnamed, values are matched in sample order; when
+  named, names must match `sample_name`.
+
+- sex_source:
+
+  Optional string describing where `sample_sex` came from, e.g.
+  `"explicit"`, `"consensus_gmm"`, or `"laboratory_lims"`.
 
 ## Value
 

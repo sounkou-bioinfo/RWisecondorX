@@ -49,6 +49,104 @@
 
         <dt>
 
+          <code><a href="CombinedControlGroup.html">CombinedControlGroup()</a></code>
+
+        </dt>
+        <dd>NIPTeR control group for CombinedStrands samples</dd>
+
+        <dt>
+
+          <code><a href="CombinedStrandsSample.html">CombinedStrandsSample()</a></code>
+
+        </dt>
+        <dd>NIPTeR sample with combined forward+reverse read counts</dd>
+
+        <dt>
+
+          <code><a href="NCVTemplate.html">NCVTemplate()</a></code>
+
+        </dt>
+        <dd>Pre-computed NCV denominator template</dd>
+
+        <dt>
+
+          <code><a href="NIPTControlGroup.html">NIPTControlGroup()</a></code>
+
+        </dt>
+        <dd>Abstract base class for NIPTeR control groups</dd>
+
+        <dt>
+
+          <code><a href="NIPTCorrectionRecord.html">NIPTCorrectionRecord()</a></code>
+
+        </dt>
+        <dd>Correction record for a NIPTeR sample</dd>
+
+        <dt>
+
+          <code><a href="NIPTSample.html">NIPTSample()</a></code>
+
+        </dt>
+        <dd>Abstract base class for NIPTeR bin-count samples</dd>
+
+        <dt>
+
+          <code><a href="SeparatedControlGroup.html">SeparatedControlGroup()</a></code>
+
+        </dt>
+        <dd>NIPTeR control group for SeparatedStrands samples</dd>
+
+        <dt>
+
+          <code><a href="SeparatedStrandsSample.html">SeparatedStrandsSample()</a></code>
+
+        </dt>
+        <dd>NIPTeR sample with separate forward and reverse read counts</dd>
+
+        <dt>
+
+          <code><a href="WisecondorXObject.html">WisecondorXObject()</a></code>
+
+        </dt>
+        <dd>Abstract base class for WisecondorX list-like objects</dd>
+
+        <dt>
+
+          <code><a href="WisecondorXPrediction.html">WisecondorXPrediction()</a></code>
+
+        </dt>
+        <dd>WisecondorX prediction result</dd>
+
+        <dt>
+
+          <code><a href="WisecondorXReference.html">WisecondorXReference()</a></code>
+
+        </dt>
+        <dd>WisecondorX reference panel</dd>
+
+        <dt>
+
+          <code><a href="WisecondorXReferenceQC.html">WisecondorXReferenceQC()</a></code>
+
+        </dt>
+        <dd>WisecondorX reference QC report</dd>
+
+        <dt>
+
+          <code><a href="WisecondorXSample.html">WisecondorXSample()</a></code>
+
+        </dt>
+        <dd>WisecondorX binned sample</dd>
+
+        <dt>
+
+          <code><a href="autosomal_matrix.html">autosomal_matrix()</a></code>
+
+        </dt>
+        <dd>Extract the autosomal read-count matrix from a NIPTSample</dd>
+
+        <dt>
+
           <code><a href="bam_convert.html">bam_convert()</a></code>
 
         </dt>
@@ -84,10 +182,45 @@
 
         <dt>
 
+          <code><a href="control_names.html">control_names()</a></code>
+
+        </dt>
+        <dd>Sample names of a control group</dd>
+
+        <dt>
+
+          <code><a href="fractions_auto.html">fractions_auto()</a></code>
+
+        </dt>
+        <dd>Extract collapsed 22 x N autosomal chromosome fractions from a control group</dd>
+
+        <dt>
+
+          <code><a href="fractions_for_regression.html">fractions_for_regression()</a></code>
+
+        </dt>
+        <dd>Extract fractions suitable for regression</dd>
+
+        <dt>
+
           <code><a href="generate_cohort.html">generate_cohort()</a></code>
 
         </dt>
         <dd>Generate a synthetic BAM cohort for testing</dd>
+
+        <dt>
+
+          <code><a href="n_bins.html">n_bins()</a></code>
+
+        </dt>
+        <dd>Number of bins in a NIPTSample</dd>
+
+        <dt>
+
+          <code><a href="n_controls.html">n_controls()</a></code>
+
+        </dt>
+        <dd>Number of samples in a control group</dd>
 
         <dt>
 
@@ -175,6 +308,13 @@
 
         <dt>
 
+          <code><a href="nipter_reference_frame.html">nipter_reference_frame()</a></code>
+
+        </dt>
+        <dd>Build a chromosome-level reference frame from a NIPTeR control group</dd>
+
+        <dt>
+
           <code><a href="nipter_regression.html">nipter_regression()</a></code>
 
         </dt>
@@ -231,6 +371,13 @@
 
         <dt>
 
+          <code><a href="rwisecondorx_ref_qc.html">rwisecondorx_ref_qc()</a></code>
+
+        </dt>
+        <dd>QC a native WisecondorX reference</dd>
+
+        <dt>
+
           <code><a href="scale_sample.html">scale_sample()</a></code>
 
         </dt>
@@ -238,10 +385,38 @@
 
         <dt>
 
+          <code><a href="sex_matrix.html">sex_matrix()</a></code>
+
+        </dt>
+        <dd>Extract the sex-chromosome read-count matrix from a NIPTSample</dd>
+
+        <dt>
+
+          <code><a href="simulate_trisomy_bam.html">simulate_trisomy_bam()</a></code>
+
+        </dt>
+        <dd>Simulate a trisomy BAM by thinning a donor alignment</dd>
+
+        <dt>
+
+          <code><a href="simulate_trisomy_cohort.html">simulate_trisomy_cohort()</a></code>
+
+        </dt>
+        <dd>Simulate a trisomy cohort from donor BAMs/CRAMs</dd>
+
+        <dt>
+
           <code><a href="sra_runinfo.html">sra_runinfo_url()</a></code> <code><a href="sra_runinfo.html">download_sra_runinfo()</a></code> <code><a href="sra_runinfo.html">read_sra_runinfo()</a></code>
 
         </dt>
         <dd>SRA Run Metadata Utilities</dd>
+
+        <dt>
+
+          <code><a href="strand_type.html">strand_type()</a></code>
+
+        </dt>
+        <dd>Return the strand type of a NIPTSample</dd>
 
         <dt>
 

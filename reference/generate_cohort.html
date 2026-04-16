@@ -47,7 +47,15 @@ of the file size (~435KB per BAM).</p>
 
     <div class="section level2">
     <h2 id="ref-usage">Usage<a class="anchor" aria-label="anchor" href="#ref-usage"></a></h2>
-    <div class="sourceCode"><pre class="sourceCode r"><code><span><span class="fu">generate_cohort</span><span class="op">(</span><span class="va">out_dir</span>, n_samples <span class="op">=</span> <span class="fl">50L</span>, verbose <span class="op">=</span> <span class="cn">TRUE</span><span class="op">)</span></span></code></pre></div>
+    <div class="sourceCode"><pre class="sourceCode r"><code><span><span class="fu">generate_cohort</span><span class="op">(</span></span>
+<span>  <span class="va">out_dir</span>,</span>
+<span>  n_samples <span class="op">=</span> <span class="fl">50L</span>,</span>
+<span>  fetal_fraction <span class="op">=</span> <span class="fl">0.1</span>,</span>
+<span>  reads_per_bin <span class="op">=</span> <span class="va">READS_PER_BIN_DEFAULT</span>,</span>
+<span>  gc_bias_strength <span class="op">=</span> <span class="fl">0.3</span>,</span>
+<span>  mosaic <span class="op">=</span> <span class="cn">FALSE</span>,</span>
+<span>  verbose <span class="op">=</span> <span class="cn">TRUE</span></span>
+<span><span class="op">)</span></span></code></pre></div>
     </div>
 
     <div class="section level2">
@@ -63,6 +71,30 @@ of the file size (~435KB per BAM).</p>
 Must be at least 6 (3 trisomy + 1 male + 2 female minimum).</p></dd>
 
 
+<dt id="arg-fetal-fraction">fetal_fraction<a class="anchor" aria-label="anchor" href="#arg-fetal-fraction"></a></dt>
+<dd><p>Fetal DNA fraction for trisomy samples (default 0.10).
+Higher values produce stronger trisomy signal. Typical NIPT range: 0.05-0.20.</p></dd>
+
+
+<dt id="arg-reads-per-bin">reads_per_bin<a class="anchor" aria-label="anchor" href="#arg-reads-per-bin"></a></dt>
+<dd><p>Average reads per bin for euploid autosomes
+(default 3). Higher values produce larger BAMs but better signal-to-noise
+for trisomy detection. At <code>reads_per_bin = 3</code>, BAMs are ~435KB;
+at 10, ~1.3MB; at 30, ~4.4MB.</p></dd>
+
+
+<dt id="arg-gc-bias-strength">gc_bias_strength<a class="anchor" aria-label="anchor" href="#arg-gc-bias-strength"></a></dt>
+<dd><p>Numeric scaling factor for simulated GC bias
+amplitude (default 0.3). Each sample gets a random quadratic GC bias
+curve; higher values produce more between-sample variance. Set to 0
+for uniform coverage (no GC effect).</p></dd>
+
+
+<dt id="arg-mosaic">mosaic<a class="anchor" aria-label="anchor" href="#arg-mosaic"></a></dt>
+<dd><p>Logical; if <code>TRUE</code>, simulate 50% placental mosaicism (halved
+trisomy signal strength). Default <code>FALSE</code>.</p></dd>
+
+
 <dt id="arg-verbose">verbose<a class="anchor" aria-label="anchor" href="#arg-verbose"></a></dt>
 <dd><p>Logical; emit progress messages via <code><a href="https://rdrr.io/r/base/message.html" class="external-link">message()</a></code>.</p></dd>
 
@@ -70,7 +102,7 @@ Must be at least 6 (3 trisomy + 1 male + 2 female minimum).</p></dd>
     <div class="section level2">
     <h2 id="value">Value<a class="anchor" aria-label="anchor" href="#value"></a></h2>
     <p>A data frame (manifest) with columns: <code>sample_id</code>, <code>sex</code>,
-<code>trisomy</code>, <code>n_reads</code>, <code>bam_file</code>.</p>
+<code>trisomy</code>, <code>fetal_fraction</code>, <code>n_reads</code>, <code>bam_file</code>.</p>
     </div>
     <div class="section level2">
     <h2 id="details">Details<a class="anchor" aria-label="anchor" href="#details"></a></h2>
@@ -78,11 +110,21 @@ Must be at least 6 (3 trisomy + 1 male + 2 female minimum).</p></dd>
 and 3 trisomy females (T21, T18, T13). Each sample uses approximately
 3 reads per bin (~91k reads total). Results are deterministic (sample <em>i</em>
 uses <code>set.seed(42 + i)</code>).</p>
+<p>Trisomy simulation follows Nguyen et al. 2023
+(doi:10.1101/2023.11.24.568620): instead of naively multiplying reads
+on the trisomy chromosome, reads are stochastically removed from
+non-target chromosomes so that the relative coverage of the trisomy
+chromosome reflects an extra copy in the fetal genome. The removal
+probability is <code>p = k*f / (1 + k*f)</code> where <code>k = 0.5</code> (non-mosaic) or
+<code>k = 0.25</code> (mosaic).</p>
 <p>The generated BAMs are NIPTeR-compatible (no unmapped reads, unique
 positions per chromosome) and can be used with both the NIPTeR binning
 layer (<code><a href="nipter_bin_bam.html">nipter_bin_bam()</a></code>) and the WisecondorX native pipeline
 (<code><a href="rwisecondorx_newref.html">rwisecondorx_newref()</a></code>, <code><a href="rwisecondorx_predict.html">rwisecondorx_predict()</a></code>) when binned with
 <code>binsize = COMPRESSED_BINSIZE</code> (100).</p>
+<p>These BAMs are structurally valid and fast to generate, but the underlying
+coverage model is still synthetic. Use real negative cohorts for
+calibration, threshold selection, and any real conformance work.</p>
 <p>The manifest is also written to <code>manifest.tsv</code> in <code>out_dir</code>.</p>
     </div>
 

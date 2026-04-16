@@ -82,7 +82,8 @@ bam_convert_bed(
 Coordinates are 0-based half-open intervals matching the BED convention
 (`start = bin_index * binsize`, `end = start + binsize`). Chromosomes
 are written as `1`–`22`, `X`, `Y` (no `chr` prefix) in numeric order.
-All bins are written, including those with a count of zero.
+All header-defined bins are written, including those with a count of
+zero.
 
 bgzip and tabix indexing are performed via
 [`Rduckhts::rduckhts_bgzip()`](https://rgenomicsetl.r-universe.dev/Rduckhts/reference/rduckhts_bgzip.html)

@@ -55,6 +55,8 @@ files are read in one pass.</p>
 <span>  pattern <span class="op">=</span> <span class="st">"*.bed.gz"</span>,</span>
 <span>  binsize <span class="op">=</span> <span class="cn">NULL</span>,</span>
 <span>  description <span class="op">=</span> <span class="st">"General control group"</span>,</span>
+<span>  sample_sex <span class="op">=</span> <span class="cn">NULL</span>,</span>
+<span>  sex_source <span class="op">=</span> <span class="cn">NULL</span>,</span>
 <span>  con <span class="op">=</span> <span class="cn">NULL</span></span>
 <span><span class="op">)</span></span></code></pre></div>
     </div>
@@ -82,6 +84,17 @@ files are read in one pass.</p>
 <dt id="arg-description">description<a class="anchor" aria-label="anchor" href="#arg-description"></a></dt>
 <dd><p>Label for the resulting control group (default
 <code>"General control group"</code>).</p></dd>
+
+
+<dt id="arg-sample-sex">sample_sex<a class="anchor" aria-label="anchor" href="#arg-sample-sex"></a></dt>
+<dd><p>Optional character vector of known sex labels for the
+samples in <code>bed_dir</code>. Names must match the inferred sample names when
+supplied as a named vector.</p></dd>
+
+
+<dt id="arg-sex-source">sex_source<a class="anchor" aria-label="anchor" href="#arg-sex-source"></a></dt>
+<dd><p>Optional string describing the provenance of
+<code>sample_sex</code>.</p></dd>
 
 
 <dt id="arg-con">con<a class="anchor" aria-label="anchor" href="#arg-con"></a></dt>

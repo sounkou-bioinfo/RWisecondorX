@@ -139,6 +139,14 @@ per-read filter stats).</p></dd>
 <code>numpy._core</code>, which older numpy (&lt; 2.0) cannot unpickle.  This function
 patches the pickle bytestream to use <code>numpy.core</code> so the NPZ is readable
 by both numpy 1.x and 2.x.</p>
+<p>Native <code><a href="bam_convert.html">bam_convert()</a></code> returns dense vectors covering the chromosome span in
+the BAM header. Upstream <code>wisecondorx convert</code> has one additional historical
+quirk: it allocates <code>int(length / binsize + 1)</code> bins for every chromosome in
+the header, so chromosomes whose lengths are exact multiples of <code>binsize</code>
+carry one extra trailing all-zero bin. This function pads to that upstream
+NPZ layout during serialisation so Python <code>wisecondorx newref/predict</code>
+remains byte-compatible, while the native R list/BED paths keep the cleaner
+header-span contract.</p>
     </div>
     <div class="section level2">
     <h2 id="see-also">See also<a class="anchor" aria-label="anchor" href="#see-also"></a></h2>

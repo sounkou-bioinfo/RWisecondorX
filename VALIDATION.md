@@ -121,23 +121,29 @@ NIPTER_CONFORMANCE_BAM=/path/to/prefiltered.bam make test
 
 ------------------------------------------------------------------------
 
-### 4. Trisomy detection — synthetic cohort
+### 4. Trisomy detection — synthetic smoke test cohort
 
-**Status**: Validated ✓  
+**Status**: Smoke-tested ✓  
 **Claim**: The native R pipeline (`rwisecondorx_newref` +
-`rwisecondorx_predict`) correctly detects T21, T18, and T13 in synthetic
-BAMs and produces zero false positive aberration calls on euploid
-samples.
+`rwisecondorx_predict`) detects T21, T18, and T13 on the package’s
+synthetic smoke-test cohort and produces zero aberration calls on the
+chosen euploid negative control in that same synthetic setup.
 
 **Data**: 50-sample synthetic cohort from
 [`generate_cohort()`](https://sounkou-bioinfo.github.io/RWisecondorX/reference/generate_cohort.md)
-(compressed coordinates, COMPRESSED_BINSIZE = 100)
+(compressed coordinates, `COMPRESSED_BINSIZE = 100`)
 
 **Key assertions**: - T21 sample: `pred$aberrations` contains at least
 one `chr=="21"` + `type=="gain"` row - T18 sample: at least one
 `chr=="18"` + `type=="gain"` row - T13 sample: at least one
 `chr=="13"` + `type=="gain"` row - First euploid sample:
 `nrow(pred$aberrations) == 0`
+
+**Important limitation**:
+[`generate_cohort()`](https://sounkou-bioinfo.github.io/RWisecondorX/reference/generate_cohort.md)
+is a fast synthetic generator for package testing. It is not a
+calibrated clinical simulator and does not replace real-data conformance
+or performance validation.
 
 **Test files**: - `inst/tinytest/test_cohort_pipeline.R` (Z-score level
 assertions) - `inst/tinytest/test_wisecondorx_e2e.R` (aberration call

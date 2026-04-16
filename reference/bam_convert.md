@@ -77,10 +77,13 @@ bam_convert(
 
 ## Value
 
-When `separate_strands = FALSE` (default): a named list with one integer
-vector per chromosome key (`"1"`–`"22"`, `"23"` for X, `"24"` for Y).
-Each vector contains per-bin read counts (bin 0 = positions 0 to
-`binsize - 1`). Chromosomes absent from the BAM are `NULL`.
+When `separate_strands = FALSE` (default): a list-like
+`WisecondorXSample` S7 object with one integer vector per chromosome key
+(`"1"`–`"22"`, `"23"` for X, `"24"` for Y). Each vector contains per-bin
+read counts (bin 0 = positions 0 to `binsize - 1`). Chromosomes present
+in the BAM header are returned as dense vectors padded with trailing
+zeros up to the chromosome span implied by the header and `binsize`;
+chromosomes absent from the header are `NULL`.
 
 When `separate_strands = TRUE`: a list with two elements, `fwd` and
 `rev`, each structured like the default return.

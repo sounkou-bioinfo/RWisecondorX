@@ -51,8 +51,19 @@
 <span><span class="op">)</span></span></code></pre></div>
     </div>
 
+    <div class="section level2">
+    <h2 id="note">Note<a class="anchor" aria-label="anchor" href="#note"></a></h2>
+    <p><strong>Upstream bug replicated for conformance (last-bin drop).</strong>
+Upstream Python (<code>predict_output.py:210</code>) sets <code>end = bins_per_chr - 1</code>
+when constructing whole-chromosome segments. Combined with <code>get_z_score</code>'s
+<code>array[s:e]</code> slicing (Python half-open), this drops the last bin of every
+chromosome from the whole-chromosome Z-score calculation. We replicate this
+exactly (<code>end = bins_per_chr - 1L</code>) for conformance with Python WisecondorX
+output.</p>
+    </div>
 
-  </main></div>
+  </main><aside class="col-md-3"><nav id="toc" aria-label="Table of contents"><h2>On this page</h2>
+    </nav></aside></div>
 
 
     <footer><div class="pkgdown-footer-left">

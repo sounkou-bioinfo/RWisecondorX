@@ -47,7 +47,12 @@ nipter_chi_correct, and nipter_regression."></head><body>
 
     <div class="section level2">
     <h2 id="ref-usage">Usage<a class="anchor" aria-label="anchor" href="#ref-usage"></a></h2>
-    <div class="sourceCode"><pre class="sourceCode r"><code><span><span class="fu">nipter_as_control_group</span><span class="op">(</span><span class="va">samples</span>, description <span class="op">=</span> <span class="st">"General control group"</span><span class="op">)</span></span></code></pre></div>
+    <div class="sourceCode"><pre class="sourceCode r"><code><span><span class="fu">nipter_as_control_group</span><span class="op">(</span></span>
+<span>  <span class="va">samples</span>,</span>
+<span>  description <span class="op">=</span> <span class="st">"General control group"</span>,</span>
+<span>  sample_sex <span class="op">=</span> <span class="cn">NULL</span>,</span>
+<span>  sex_source <span class="op">=</span> <span class="cn">NULL</span></span>
+<span><span class="op">)</span></span></code></pre></div>
     </div>
 
     <div class="section level2">
@@ -61,6 +66,19 @@ nipter_chi_correct, and nipter_regression."></head><body>
 <dt id="arg-description">description<a class="anchor" aria-label="anchor" href="#arg-description"></a></dt>
 <dd><p>Label for the group (default
 <code>"General control group"</code>).</p></dd>
+
+
+<dt id="arg-sample-sex">sample_sex<a class="anchor" aria-label="anchor" href="#arg-sample-sex"></a></dt>
+<dd><p>Optional character vector of known sex labels for the
+control samples. Accepted values are <code>"female"</code>, <code>"male"</code>,
+<code>"ambiguous"</code>, and <code>"unknown"</code>. When unnamed, values are matched
+in sample order; when named, names must match <code>sample_name</code>.</p></dd>
+
+
+<dt id="arg-sex-source">sex_source<a class="anchor" aria-label="anchor" href="#arg-sex-source"></a></dt>
+<dd><p>Optional string describing where <code>sample_sex</code> came
+from, e.g. <code>"explicit"</code>, <code>"consensus_gmm"</code>, or
+<code>"laboratory_lims"</code>.</p></dd>
 
 </dl></div>
     <div class="section level2">

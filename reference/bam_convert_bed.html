@@ -125,7 +125,7 @@ alongside the bgzipped output.</p></dd>
     <p>Coordinates are 0-based half-open intervals matching the BED convention
 (<code>start = bin_index * binsize</code>, <code>end = start + binsize</code>). Chromosomes are
 written as <code>1</code>–<code>22</code>, <code>X</code>, <code>Y</code> (no <code>chr</code> prefix) in numeric order. All
-bins are written, including those with a count of zero.</p>
+header-defined bins are written, including those with a count of zero.</p>
 <p>bgzip and tabix indexing are performed via <code><a href="https://rgenomicsetl.r-universe.dev/Rduckhts/reference/rduckhts_bgzip.html" class="external-link">Rduckhts::rduckhts_bgzip()</a></code> and
 <code><a href="https://rgenomicsetl.r-universe.dev/Rduckhts/reference/rduckhts_tabix_index.html" class="external-link">Rduckhts::rduckhts_tabix_index()</a></code>, so no external tools are required.</p>
     </div>

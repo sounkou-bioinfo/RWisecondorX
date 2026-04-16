@@ -102,6 +102,17 @@ When the writer's numpy is \>= 2.0 the internal pickle references
 patches the pickle bytestream to use `numpy.core` so the NPZ is readable
 by both numpy 1.x and 2.x.
 
+Native
+[`bam_convert()`](https://sounkou-bioinfo.github.io/RWisecondorX/reference/bam_convert.md)
+returns dense vectors covering the chromosome span in the BAM header.
+Upstream `wisecondorx convert` has one additional historical quirk: it
+allocates `int(length / binsize + 1)` bins for every chromosome in the
+header, so chromosomes whose lengths are exact multiples of `binsize`
+carry one extra trailing all-zero bin. This function pads to that
+upstream NPZ layout during serialisation so Python
+`wisecondorx newref/predict` remains byte-compatible, while the native R
+list/BED paths keep the cleaner header-span contract.
+
 ## See also
 
 [`bam_convert()`](https://sounkou-bioinfo.github.io/RWisecondorX/reference/bam_convert.md),

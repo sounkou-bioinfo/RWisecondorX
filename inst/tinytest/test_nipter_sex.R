@@ -644,6 +644,61 @@ expect_equal(gauno_my$regression_score_selected,
 
 
 # ===================================================================
+# COHORT GAUNOSOME REPORT / OUTPUT
+# ===================================================================
+
+gauno_report <- nipter_gaunosome_report(
+  list(test_female, test_male),
+  ref_model_bundle,
+  y_unique_ratios = c(test_female = 0.00003, test_male = 0.004)
+)
+
+expect_true(S7::S7_inherits(gauno_report, NIPTGaunosomeReport),
+            info = "batch gaunosome report is typed")
+expect_identical(sort(gauno_report$sample_names), c("test_female", "test_male"),
+                 info = "batch gaunosome report records all sample names")
+expect_identical(sort(names(gauno_report$scores)), c("test_female", "test_male"),
+                 info = "batch gaunosome report names score entries by sample")
+expect_identical(nrow(gauno_report$summary), 4L,
+                 info = "batch gaunosome summary has one row per sample/chromosome")
+expect_true(all(c("sample_name", "chromosome", "predicted_sex") %in%
+                  names(gauno_report$summary)),
+            info = "batch gaunosome summary contains the flattened reporting columns")
+
+report_fx <- gauno_report$summary[
+  gauno_report$summary$sample_name == "test_female" &
+    gauno_report$summary$chromosome == "X",
+  ,
+  drop = FALSE
+]
+report_my <- gauno_report$summary[
+  gauno_report$summary$sample_name == "test_male" &
+    gauno_report$summary$chromosome == "Y",
+  ,
+  drop = FALSE
+]
+
+expect_equal(report_fx$ncv_score_selected,
+             gauno_report$scores$test_female$ncv_scores$X$sample_scores[["selected"]],
+             info = "batch report X NCV score matches the stored female component")
+expect_equal(report_my$regression_score_selected,
+             gauno_report$scores$test_male$regression_scores$Y$aggregate_scores[["selected_mean"]],
+             info = "batch report Y regression score matches the stored male component")
+
+gauno_outprefix <- tempfile("gaunosome_report_")
+gauno_out <- write_nipter_gaunosome_output(gauno_report, gauno_outprefix)
+expect_true(file.exists(gauno_out),
+            info = "gaunosome output writer creates the TSV summary file")
+
+gauno_written <- utils::read.delim(gauno_out, stringsAsFactors = FALSE)
+expect_identical(nrow(gauno_written), nrow(gauno_report$summary),
+                 info = "written gaunosome summary has the same row count as the report")
+expect_identical(names(gauno_written), names(gauno_report$summary),
+                 info = "written gaunosome summary preserves the report columns")
+unlink(gauno_out)
+
+
+# ===================================================================
 # nipter_y_unique_ratio — input validation
 # ===================================================================
 

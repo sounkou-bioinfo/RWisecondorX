@@ -824,6 +824,11 @@ NCVTemplate <- S7::new_class(
     S7::S7_inherits(x, NIPTGaunosomeScore)
 }
 
+.is_nipt_gaunosome_report <- function(x) {
+  inherits(x, "NIPTGaunosomeReport") ||
+    S7::S7_inherits(x, NIPTGaunosomeReport)
+}
+
 .validate_reference_model_map <- function(x, predicate, label,
                                           nested_models = FALSE) {
   if (!is.list(x)) {
@@ -1420,6 +1425,63 @@ NIPTGaunosomeScore <- S7::new_class(
   }
 )
 
+#' Aggregate gaunosome cohort report
+#'
+#' Typed package-level report bundling multiple \code{NIPTGaunosomeScore}
+#' objects and their flattened per-sample summary table.
+#'
+#' @param .data Named list payload for the typed constructor.
+#'
+#' @export
+NIPTGaunosomeReport <- S7::new_class(
+  "NIPTGaunosomeReport",
+  parent = .nipt_model_list_class,
+  validator = function(self) {
+    required <- c("scores", "summary", "sample_names", "focus_chromosomes")
+    missing <- setdiff(required, names(self))
+    if (length(missing)) {
+      return(sprintf("NIPTGaunosomeReport is missing required fields: %s",
+                     paste(missing, collapse = ", ")))
+    }
+    if (!is.list(self$scores) || !length(self$scores)) {
+      return("NIPTGaunosomeReport$scores must be a non-empty list.")
+    }
+    if (!all(vapply(self$scores, .is_nipt_gaunosome_score, logical(1L)))) {
+      return("NIPTGaunosomeReport$scores must contain only NIPTGaunosomeScore objects.")
+    }
+    if (is.null(names(self$scores)) || any(!nzchar(names(self$scores)))) {
+      return("NIPTGaunosomeReport$scores must be named by sample.")
+    }
+    if (!is.character(self$sample_names) || !length(self$sample_names)) {
+      return("NIPTGaunosomeReport$sample_names must be a non-empty character vector.")
+    }
+    if (!identical(unname(self$sample_names), unname(names(self$scores)))) {
+      return("NIPTGaunosomeReport$sample_names must align with names(NIPTGaunosomeReport$scores).")
+    }
+    if (!is.character(self$focus_chromosomes) || !length(self$focus_chromosomes) ||
+        !all(self$focus_chromosomes %in% c("X", "Y"))) {
+      return("NIPTGaunosomeReport$focus_chromosomes must contain X and/or Y.")
+    }
+    if (!is.data.frame(self$summary)) {
+      return("NIPTGaunosomeReport$summary must be a data.frame.")
+    }
+    required_cols <- c(
+      "sample_name", "chromosome", "predicted_sex", "z_score", "cv",
+      "ncv_score_female", "ncv_score_male", "ncv_score_selected",
+      "regression_score_female", "regression_score_male",
+      "regression_score_selected"
+    )
+    missing_cols <- setdiff(required_cols, names(self$summary))
+    if (length(missing_cols)) {
+      return(sprintf(
+        "NIPTGaunosomeReport$summary is missing required columns: %s",
+        paste(missing_cols, collapse = ", ")
+      ))
+    }
+    NULL
+  }
+)
+
 .as_nipt_reference_frame <- function(x) {
   if (.is_nipt_reference_frame(x)) x else NIPTReferenceFrame(x)
 }
@@ -1458,6 +1520,10 @@ NIPTGaunosomeScore <- S7::new_class(
 
 .as_nipt_gaunosome_score <- function(x) {
   if (.is_nipt_gaunosome_score(x)) x else NIPTGaunosomeScore(x)
+}
+
+.as_nipt_gaunosome_report <- function(x) {
+  if (.is_nipt_gaunosome_report(x)) x else NIPTGaunosomeReport(x)
 }
 
 

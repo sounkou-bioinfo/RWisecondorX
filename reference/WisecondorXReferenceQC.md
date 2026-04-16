@@ -8,3 +8,9 @@ A structured QC report returned by
 ``` r
 WisecondorXReferenceQC(.data)
 ```
+
+## Arguments
+
+- .data:
+
+  Named list payload for the typed constructor.

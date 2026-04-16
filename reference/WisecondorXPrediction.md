@@ -8,3 +8,9 @@ A list-like S7 object produced by
 ``` r
 WisecondorXPrediction(.data)
 ```
+
+## Arguments
+
+- .data:
+
+  Named list payload for the typed constructor.

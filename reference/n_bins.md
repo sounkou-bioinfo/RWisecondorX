@@ -14,6 +14,10 @@ n_bins(x, ...)
 
   A `NIPTSample` object.
 
+- ...:
+
+  Reserved for S7 method dispatch; currently unused.
+
 ## Value
 
 A positive integer.

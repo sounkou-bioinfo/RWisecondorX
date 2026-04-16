@@ -14,6 +14,10 @@ strand_type(x, ...)
 
   A `NIPTSample` object.
 
+- ...:
+
+  Reserved for S7 method dispatch; currently unused.
+
 ## Value
 
 `"combined"` or `"separated"`.

@@ -10,3 +10,9 @@ It contains the autosomal branch plus optional female (`.F`) and male
 ``` r
 WisecondorXReference(.data)
 ```
+
+## Arguments
+
+- .data:
+
+  Named list payload for the typed constructor.

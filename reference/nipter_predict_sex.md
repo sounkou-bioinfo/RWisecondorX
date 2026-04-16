@@ -18,7 +18,8 @@ nipter_predict_sex(sample, ..., y_unique_ratio = NULL)
 
 - ...:
 
-  One or more `NIPTeRSexModel` objects, or a single list of models.
+  One or more `NIPTeRSexModel` objects, a single list of such models, or
+  one `NIPTReferenceModel` containing pre-built `sex_models`.
 
 - y_unique_ratio:
 
@@ -30,7 +31,7 @@ nipter_predict_sex(sample, ..., y_unique_ratio = NULL)
 
 ## Value
 
-A list of class `"NIPTeRSexPrediction"` with elements:
+A list-like `NIPTeRSexPrediction` S7 object with elements:
 
 - prediction:
 

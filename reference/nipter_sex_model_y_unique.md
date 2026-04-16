@@ -21,7 +21,7 @@ nipter_sex_model_y_unique(ratios)
 
 ## Value
 
-An object of class `"NIPTeRSexModel"` with elements:
+A list-like `NIPTeRSexModel` S7 object with elements:
 
 - model:
 

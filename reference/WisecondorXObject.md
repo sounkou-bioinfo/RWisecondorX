@@ -7,3 +7,9 @@ Abstract base class for WisecondorX list-like objects
 ``` r
 WisecondorXObject(.data)
 ```
+
+## Arguments
+
+- .data:
+
+  Named list payload for the typed constructor.

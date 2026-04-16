@@ -26,6 +26,6 @@ nipter_reference_frame(control_group, sample_sex = NULL)
 
 ## Value
 
-A `data.frame` with one row per sample and columns: `Sample_name`,
-optional `SampleSex`, `NChrReads_*`, and `FrChrReads_*` for chromosomes
-`1:22`, `X`, and `Y`.
+A typed `NIPTReferenceFrame` data frame with one row per sample and
+columns: `Sample_name`, optional `SampleSex`, `NChrReads_*`, and
+`FrChrReads_*` for chromosomes `1:22`, `X`, and `Y`.

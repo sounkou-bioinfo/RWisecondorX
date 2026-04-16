@@ -33,7 +33,7 @@ nipter_sex_model(control_group, method = c("y_fraction", "xy_fraction"))
 
 ## Value
 
-An object of class `"NIPTeRSexModel"` with elements:
+A list-like `NIPTeRSexModel` S7 object with elements:
 
 - model:
 

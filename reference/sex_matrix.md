@@ -15,6 +15,10 @@ sex_matrix(x, ...)
 
   A `NIPTSample` object.
 
+- ...:
+
+  Reserved for S7 method dispatch; currently unused.
+
 ## Value
 
 A 2-row numeric matrix.

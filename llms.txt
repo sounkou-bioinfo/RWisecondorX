@@ -535,8 +535,28 @@ roxygen2 comments, `make fixtures` to rebuild the bundled test data, and
   : Abstract base class for NIPTeR control groups
 - [`NIPTCorrectionRecord()`](https://sounkou-bioinfo.github.io/RWisecondorX/reference/NIPTCorrectionRecord.md)
   : Correction record for a NIPTeR sample
+- [`NIPTGaunosomeScore()`](https://sounkou-bioinfo.github.io/RWisecondorX/reference/NIPTGaunosomeScore.md)
+  : Aggregate gaunosome score report
+- [`NIPTReferenceFrame()`](https://sounkou-bioinfo.github.io/RWisecondorX/reference/NIPTReferenceFrame.md)
+  : Chromosome-level NIPT reference frame
+- [`NIPTReferenceModel()`](https://sounkou-bioinfo.github.io/RWisecondorX/reference/NIPTReferenceModel.md)
+  : Built NIPT reference model
 - [`NIPTSample()`](https://sounkou-bioinfo.github.io/RWisecondorX/reference/NIPTSample.md)
   : Abstract base class for NIPTeR bin-count samples
+- [`NIPTSexNCVModel()`](https://sounkou-bioinfo.github.io/RWisecondorX/reference/NIPTSexNCVModel.md)
+  : Sex-chromosome NCV model
+- [`NIPTSexNCVScore()`](https://sounkou-bioinfo.github.io/RWisecondorX/reference/NIPTSexNCVScore.md)
+  : Sex-chromosome NCV score
+- [`NIPTSexRegressionModel()`](https://sounkou-bioinfo.github.io/RWisecondorX/reference/NIPTSexRegressionModel.md)
+  : Sex-chromosome regression model
+- [`NIPTSexRegressionScore()`](https://sounkou-bioinfo.github.io/RWisecondorX/reference/NIPTSexRegressionScore.md)
+  : Sex-chromosome regression score
+- [`NIPTSexScore()`](https://sounkou-bioinfo.github.io/RWisecondorX/reference/NIPTSexScore.md)
+  : NIPTeR sex-chromosome score
+- [`NIPTeRSexModel()`](https://sounkou-bioinfo.github.io/RWisecondorX/reference/NIPTeRSexModel.md)
+  : NIPTeR sex-prediction model
+- [`NIPTeRSexPrediction()`](https://sounkou-bioinfo.github.io/RWisecondorX/reference/NIPTeRSexPrediction.md)
+  : NIPTeR sex prediction result
 - [`SeparatedControlGroup()`](https://sounkou-bioinfo.github.io/RWisecondorX/reference/SeparatedControlGroup.md)
   : NIPTeR control group for SeparatedStrands samples
 - [`SeparatedStrandsSample()`](https://sounkou-bioinfo.github.io/RWisecondorX/reference/SeparatedStrandsSample.md)
@@ -582,12 +602,22 @@ roxygen2 comments, `make fixtures` to rebuild the bundled test data, and
   : Bin a BAM/CRAM file — NIPTeR style
 - [`nipter_bin_bam_bed()`](https://sounkou-bioinfo.github.io/RWisecondorX/reference/nipter_bin_bam_bed.md)
   : Bin a BAM/CRAM and write NIPTeR-style counts to a bgzipped BED
+- [`nipter_build_gaunosome_models()`](https://sounkou-bioinfo.github.io/RWisecondorX/reference/nipter_build_gaunosome_models.md)
+  : Build both gaunosome model families on a typed reference
+- [`nipter_build_reference()`](https://sounkou-bioinfo.github.io/RWisecondorX/reference/nipter_build_reference.md)
+  : Build a typed NIPT reference model
+- [`nipter_build_sex_ncv_models()`](https://sounkou-bioinfo.github.io/RWisecondorX/reference/nipter_build_sex_ncv_models.md)
+  : Build sex-chromosome NCV models on a typed reference
+- [`nipter_build_sex_regression_models()`](https://sounkou-bioinfo.github.io/RWisecondorX/reference/nipter_build_sex_regression_models.md)
+  : Build sex-chromosome regression models on a typed reference
 - [`nipter_chi_correct()`](https://sounkou-bioinfo.github.io/RWisecondorX/reference/nipter_chi_correct.md)
   : Chi-squared correction for overdispersed bins
 - [`nipter_control_group_from_beds()`](https://sounkou-bioinfo.github.io/RWisecondorX/reference/nipter_control_group_from_beds.md)
   : Load a NIPTeR control group from a directory of TSV.bgz files
 - [`nipter_diagnose_control_group()`](https://sounkou-bioinfo.github.io/RWisecondorX/reference/nipter_diagnose_control_group.md)
   : Diagnose a NIPTeR control group
+- [`nipter_gaunosome_score()`](https://sounkou-bioinfo.github.io/RWisecondorX/reference/nipter_gaunosome_score.md)
+  : Score gaunosomes from a typed reference model
 - [`nipter_gc_correct()`](https://sounkou-bioinfo.github.io/RWisecondorX/reference/nipter_gc_correct.md)
   : GC-correct a NIPTeR sample or control group
 - [`nipter_gc_precompute()`](https://sounkou-bioinfo.github.io/RWisecondorX/reference/nipter_gc_precompute.md)
@@ -598,18 +628,24 @@ roxygen2 comments, `make fixtures` to rebuild the bundled test data, and
   : Compute the full pairwise SSD matrix for a control group
 - [`nipter_ncv_score()`](https://sounkou-bioinfo.github.io/RWisecondorX/reference/nipter_ncv_score.md)
   : Normalised Chromosome Value (NCV) score
+- [`nipter_ncv_sex_score()`](https://sounkou-bioinfo.github.io/RWisecondorX/reference/nipter_ncv_sex_score.md)
+  : Score sex chromosomes with NCV models from a typed reference
 - [`nipter_predict_sex()`](https://sounkou-bioinfo.github.io/RWisecondorX/reference/nipter_predict_sex.md)
   : Predict fetal sex for a NIPTeR sample
 - [`nipter_reference_frame()`](https://sounkou-bioinfo.github.io/RWisecondorX/reference/nipter_reference_frame.md)
   : Build a chromosome-level reference frame from a NIPTeR control group
 - [`nipter_regression()`](https://sounkou-bioinfo.github.io/RWisecondorX/reference/nipter_regression.md)
   : Regression-based Z-score for trisomy prediction
+- [`nipter_regression_sex_score()`](https://sounkou-bioinfo.github.io/RWisecondorX/reference/nipter_regression_sex_score.md)
+  : Score sex chromosomes with regression models from a typed reference
 - [`nipter_sample_to_bed()`](https://sounkou-bioinfo.github.io/RWisecondorX/reference/nipter_sample_to_bed.md)
   : Write an in-memory NIPTeRSample to a bgzipped BED file
 - [`nipter_sex_model()`](https://sounkou-bioinfo.github.io/RWisecondorX/reference/nipter_sex_model.md)
   : Build a sex prediction model from a NIPTeR control group
 - [`nipter_sex_model_y_unique()`](https://sounkou-bioinfo.github.io/RWisecondorX/reference/nipter_sex_model_y_unique.md)
   : Build a sex prediction model from Y-unique ratios
+- [`nipter_sex_score()`](https://sounkou-bioinfo.github.io/RWisecondorX/reference/nipter_sex_score.md)
+  : Score sex chromosomes against a typed NIPT reference model
 - [`nipter_y_unique_ratio()`](https://sounkou-bioinfo.github.io/RWisecondorX/reference/nipter_y_unique_ratio.md)
   : Compute Y-unique region read ratio from a BAM file
 - [`nipter_z_score()`](https://sounkou-bioinfo.github.io/RWisecondorX/reference/nipter_z_score.md)

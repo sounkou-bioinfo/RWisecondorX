@@ -14,6 +14,28 @@ CombinedStrandsSample(
 )
 ```
 
+## Arguments
+
+- sample_name:
+
+  Sample identifier.
+
+- binsize:
+
+  Positive integer bin width in base pairs.
+
+- correction:
+
+  A `NIPTCorrectionRecord` describing the applied corrections.
+
+- auto_matrix:
+
+  22 x n_bins numeric matrix for autosomes.
+
+- sex_matrix\_:
+
+  2 x n_bins numeric matrix for X/Y.
+
 ## Slots
 
 - `auto_matrix`:

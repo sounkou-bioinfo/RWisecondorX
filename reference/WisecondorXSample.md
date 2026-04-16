@@ -8,3 +8,9 @@ element is a numeric vector of bin counts.
 ``` r
 WisecondorXSample(.data)
 ```
+
+## Arguments
+
+- .data:
+
+  Named list payload for the typed constructor.

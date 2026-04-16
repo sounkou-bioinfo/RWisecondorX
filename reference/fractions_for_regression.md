@@ -15,6 +15,10 @@ fractions_for_regression(cg, ...)
 
   A `NIPTControlGroup` object.
 
+- ...:
+
+  Reserved for S7 method dispatch; currently unused.
+
 ## Value
 
 A numeric matrix.

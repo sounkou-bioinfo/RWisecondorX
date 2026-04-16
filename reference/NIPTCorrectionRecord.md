@@ -8,3 +8,15 @@ chromosome matrices of a `NIPTSample` object.
 ``` r
 NIPTCorrectionRecord(autosomal = "Uncorrected", sex = "Uncorrected")
 ```
+
+## Arguments
+
+- autosomal:
+
+  Character vector describing the autosomal correction history. Defaults
+  to `"Uncorrected"`.
+
+- sex:
+
+  Character vector describing the sex-chromosome correction history.
+  Defaults to `"Uncorrected"`.

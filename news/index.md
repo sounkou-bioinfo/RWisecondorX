@@ -18,6 +18,47 @@
   gaunosome model building instead of pushing production-specific data
   munging into the core sample classes.
 
+- The NIPTeR modelling layer now has typed S7 reference/model objects:
+  `NIPTReferenceFrame`, `NIPTeRSexModel`, `NIPTeRSexPrediction`, and
+  `NIPTReferenceModel`. New
+  [`nipter_build_reference()`](https://sounkou-bioinfo.github.io/RWisecondorX/reference/nipter_build_reference.md)
+  packages a control group, reference frame, and built sex models into
+  one validated reference object, and
+  [`nipter_predict_sex()`](https://sounkou-bioinfo.github.io/RWisecondorX/reference/nipter_predict_sex.md)
+  now accepts that reference object directly.
+
+- [`nipter_build_reference()`](https://sounkou-bioinfo.github.io/RWisecondorX/reference/nipter_build_reference.md)
+  now enriches its embedded `NIPTReferenceFrame` with production-style
+  sex-scoring columns (`ConsensusGender`, `RR_X`, `RR_Y`, sex-class
+  leave-one-out z-scores, and `IsRefSexOutlier`) instead of leaving
+  gaunosome bookkeeping to downstream application code. New
+  `NIPTSexScore` /
+  [`nipter_sex_score()`](https://sounkou-bioinfo.github.io/RWisecondorX/reference/nipter_sex_score.md)
+  score X/Y directly against the sex-matched non-outlier reference
+  subset owned by that typed reference object.
+
+- New
+  [`nipter_build_sex_ncv_models()`](https://sounkou-bioinfo.github.io/RWisecondorX/reference/nipter_build_sex_ncv_models.md)
+  /
+  [`nipter_build_sex_regression_models()`](https://sounkou-bioinfo.github.io/RWisecondorX/reference/nipter_build_sex_regression_models.md)
+  attach typed gaunosome NCV and regression models directly to
+  `NIPTReferenceModel`, and
+  [`nipter_ncv_sex_score()`](https://sounkou-bioinfo.github.io/RWisecondorX/reference/nipter_ncv_sex_score.md)
+  /
+  [`nipter_regression_sex_score()`](https://sounkou-bioinfo.github.io/RWisecondorX/reference/nipter_regression_sex_score.md)
+  now score X/Y from that package-owned reference state instead of
+  requiring loose production-script data frames and model lists.
+
+- New
+  [`nipter_build_gaunosome_models()`](https://sounkou-bioinfo.github.io/RWisecondorX/reference/nipter_build_gaunosome_models.md)
+  and
+  [`nipter_gaunosome_score()`](https://sounkou-bioinfo.github.io/RWisecondorX/reference/nipter_gaunosome_score.md)
+  provide the package-level gaunosome API on top of
+  `NIPTReferenceModel`: one precomputation step for X/Y NCV and
+  regression models, and one typed aggregate score object bundling sex
+  z-scores, NCV scores, regression scores, and a compact per-chromosome
+  summary table.
+
 - The S7 implementation now exposes compatibility accessors for the
   legacy `autosomal_chromosome_reads`, `sex_chromosome_reads`,
   `sample_name`, and correction-status fields, and the control-group

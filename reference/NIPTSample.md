@@ -13,3 +13,17 @@ NIPTSample(
   correction = NIPTCorrectionRecord()
 )
 ```
+
+## Arguments
+
+- sample_name:
+
+  Sample identifier.
+
+- binsize:
+
+  Positive integer bin width in base pairs.
+
+- correction:
+
+  A `NIPTCorrectionRecord` describing the applied corrections.

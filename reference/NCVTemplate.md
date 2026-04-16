@@ -18,3 +18,41 @@ NCVTemplate(
   train_sample_names = character(0)
 )
 ```
+
+## Arguments
+
+- focus_chromosome:
+
+  Integer chromosome identifier of the numerator.
+
+- denominators:
+
+  Character vector of denominator chromosome labels.
+
+- ctrl_mean:
+
+  Mean control ratio for the chosen denominator set.
+
+- ctrl_sd:
+
+  Standard deviation of the control ratios.
+
+- ctrl_cv:
+
+  Coefficient of variation of the control ratios.
+
+- shapiro_p:
+
+  Shapiro-Wilk p-value for the control-ratio distribution.
+
+- test_z_scores:
+
+  Numeric vector of held-out control z-scores.
+
+- test_sample_names:
+
+  Names corresponding to `test_z_scores`.
+
+- train_sample_names:
+
+  Control-sample names used to fit the template.

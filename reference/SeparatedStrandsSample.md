@@ -16,6 +16,36 @@ SeparatedStrandsSample(
 )
 ```
 
+## Arguments
+
+- sample_name:
+
+  Sample identifier.
+
+- binsize:
+
+  Positive integer bin width in base pairs.
+
+- correction:
+
+  A `NIPTCorrectionRecord` describing the applied corrections.
+
+- auto_fwd:
+
+  22 x n_bins numeric forward-strand autosomal matrix.
+
+- auto_rev:
+
+  22 x n_bins numeric reverse-strand autosomal matrix.
+
+- sex_fwd:
+
+  2 x n_bins numeric forward-strand X/Y matrix.
+
+- sex_rev:
+
+  2 x n_bins numeric reverse-strand X/Y matrix.
+
 ## Slots
 
 - `auto_fwd`:

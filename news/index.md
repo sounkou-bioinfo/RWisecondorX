@@ -2,6 +2,13 @@
 
 ## RWisecondorX 0.0.0.9001 (development version)
 
+- The package and script-level reference-building CLIs are now aligned
+  more strictly. `build_reference.R` now defaults WisecondorX references
+  to a 100kb target binsize, keeps NIPTeR on its 50kb binsize path, and
+  errors on NIPTeR BED-mode flags (`--ref-binsize`, `--gc-table`,
+  `--fasta`, `--separate-strands`) that were previously accepted but
+  ignored.
+
 - New
   [`nipter_control_group_qc()`](https://sounkou-bioinfo.github.io/RWisecondorX/reference/nipter_control_group_qc.md)
   returns a typed `NIPTControlGroupQC` object for control-cohort

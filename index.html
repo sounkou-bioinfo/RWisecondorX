@@ -66,28 +66,13 @@
 <div class="section level2">
 <h2 id="convert-a-bam-to-bin-counts">Convert A BAM To Bin Counts<a class="anchor" aria-label="anchor" href="#convert-a-bam-to-bin-counts"></a>
 </h2>
-<p>The package ships with a small chromosome 11 BAM fixture for examples and tests.</p>
 <div class="sourceCode" id="cb2"><pre class="downlit sourceCode r">
-<code class="sourceCode R"><span><span class="va">fixture_bam</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/system.file.html" class="external-link">system.file</a></span><span class="op">(</span></span>
-<span>  <span class="st">"extdata"</span>,</span>
-<span>  <span class="st">"hg00106_chr11_fixture.bam"</span>,</span>
-<span>  package <span class="op">=</span> <span class="st">"RWisecondorX"</span></span>
-<span><span class="op">)</span></span>
-<span></span>
-<span><span class="va">bins</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/bam_convert.html">bam_convert</a></span><span class="op">(</span></span>
-<span>  <span class="va">fixture_bam</span>,</span>
-<span>  binsize <span class="op">=</span> <span class="fl">5000L</span>,</span>
+<code class="sourceCode R"><span><span class="va">bins</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/bam_convert.html">bam_convert</a></span><span class="op">(</span></span>
+<span>  <span class="st">"sample.dm.bam"</span>,</span>
+<span>  binsize <span class="op">=</span> <span class="fl">100000L</span>,</span>
+<span>  mapq <span class="op">=</span> <span class="fl">1L</span>,</span>
 <span>  rmdup <span class="op">=</span> <span class="st">"streaming"</span></span>
-<span><span class="op">)</span></span>
-<span></span>
-<span><span class="fu"><a href="https://rdrr.io/r/base/names.html" class="external-link">names</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/funprog.html" class="external-link">Filter</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/funprog.html" class="external-link">Negate</a></span><span class="op">(</span><span class="va">is.null</span><span class="op">)</span>, <span class="va">bins</span><span class="op">)</span><span class="op">)</span></span>
-<span><span class="co">#&gt; [1] "11"</span></span>
-<span></span>
-<span><span class="fu"><a href="https://rdrr.io/r/base/length.html" class="external-link">length</a></span><span class="op">(</span><span class="va">bins</span><span class="op">[[</span><span class="st">"11"</span><span class="op">]</span><span class="op">]</span><span class="op">)</span></span>
-<span><span class="co">#&gt; [1] 1198</span></span>
-<span></span>
-<span><span class="fu"><a href="https://rdrr.io/r/base/sum.html" class="external-link">sum</a></span><span class="op">(</span><span class="va">bins</span><span class="op">[[</span><span class="st">"11"</span><span class="op">]</span><span class="op">]</span><span class="op">)</span></span>
-<span><span class="co">#&gt; [1] 982</span></span></code></pre></div>
+<span><span class="op">)</span></span></code></pre></div>
 <p>The <code>rmdup</code> argument controls duplicate handling. <code>"streaming"</code> exactly replicates the upstream WisecondorX <code>larp</code> / <code>larp2</code> state machine and is the default. <code>"none"</code> skips deduplication entirely, matching <code>wisecondorx convert --normdup</code> for NIPT data where read depth is low. <code>"flag"</code> uses the SAM duplicate flag (<code>0x400</code>) for BAMs already processed by Picard or sambamba.</p>
 </div>
 <div class="section level2">
@@ -95,99 +80,46 @@
 </h2>
 <p><code><a href="reference/bam_convert_bed.html">bam_convert_bed()</a></code> is the language-agnostic output path. It produces a bgzipped BED file (<code>chrom</code>, <code>start</code>, <code>end</code>, <code>count</code>; 0-based coordinates) and a tabix index, using <code>rduckhts_bgzip</code> and <code>rduckhts_tabix_index</code> from <code>Rduckhts</code> — no external tools or Python required.</p>
 <div class="sourceCode" id="cb3"><pre class="downlit sourceCode r">
-<code class="sourceCode R"><span><span class="va">bed_file</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/tempfile.html" class="external-link">tempfile</a></span><span class="op">(</span>fileext <span class="op">=</span> <span class="st">".bed.gz"</span><span class="op">)</span></span>
+<code class="sourceCode R"><span><span class="va">bed_file</span> <span class="op">&lt;-</span> <span class="st">"sample.wisecondorx.bed.gz"</span></span>
 <span></span>
 <span><span class="fu"><a href="reference/bam_convert_bed.html">bam_convert_bed</a></span><span class="op">(</span></span>
-<span>  bam     <span class="op">=</span> <span class="va">fixture_bam</span>,</span>
+<span>  bam     <span class="op">=</span> <span class="st">"sample.dm.bam"</span>,</span>
 <span>  bed     <span class="op">=</span> <span class="va">bed_file</span>,</span>
-<span>  binsize <span class="op">=</span> <span class="fl">5000L</span>,</span>
+<span>  binsize <span class="op">=</span> <span class="fl">100000L</span>,</span>
 <span>  rmdup   <span class="op">=</span> <span class="st">"streaming"</span></span>
 <span><span class="op">)</span></span>
 <span></span>
-<span><span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span></span>
-<span>  bed_created   <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/files.html" class="external-link">file.exists</a></span><span class="op">(</span><span class="va">bed_file</span><span class="op">)</span>,</span>
-<span>  index_created <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/files.html" class="external-link">file.exists</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/paste.html" class="external-link">paste0</a></span><span class="op">(</span><span class="va">bed_file</span>, <span class="st">".tbi"</span><span class="op">)</span><span class="op">)</span>,</span>
-<span>  bed_size_kb   <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/Round.html" class="external-link">round</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/file.info.html" class="external-link">file.info</a></span><span class="op">(</span><span class="va">bed_file</span><span class="op">)</span><span class="op">$</span><span class="va">size</span> <span class="op">/</span> <span class="fl">1024</span>, <span class="fl">1</span><span class="op">)</span></span>
-<span><span class="op">)</span></span>
-<span><span class="co">#&gt;   bed_created index_created   bed_size_kb </span></span>
-<span><span class="co">#&gt;           1.0           1.0           4.3</span></span>
-<span></span>
 <span><span class="co"># Round-trip: reload into the named-list format for rwisecondorx_newref()</span></span>
-<span><span class="va">sample_reloaded</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/bed_to_sample.html">bed_to_sample</a></span><span class="op">(</span><span class="va">bed_file</span>, binsize <span class="op">=</span> <span class="fl">5000L</span><span class="op">)</span></span>
-<span><span class="fu"><a href="https://rdrr.io/r/base/length.html" class="external-link">length</a></span><span class="op">(</span><span class="va">sample_reloaded</span><span class="op">[[</span><span class="st">"11"</span><span class="op">]</span><span class="op">]</span><span class="op">)</span>  <span class="co"># same as bins[["11"]] above</span></span>
-<span><span class="co">#&gt; [1] 1198</span></span></code></pre></div>
+<span><span class="va">sample_reloaded</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/bed_to_sample.html">bed_to_sample</a></span><span class="op">(</span><span class="va">bed_file</span>, binsize <span class="op">=</span> <span class="fl">100000L</span><span class="op">)</span></span></code></pre></div>
 <p><code><a href="reference/bed_to_nipter_sample.html">bed_to_nipter_sample()</a></code> reads a 5-column NIPTeR BED.gz into a <code>NIPTeRSample</code> object compatible with all NIPTeR statistical functions. Column count is auto-detected (5 = CombinedStrands, 9 = SeparatedStrands).</p>
 </div>
 <div class="section level2">
 <h2 id="native-wisecondorx-pipeline-no-python">Native WisecondorX Pipeline (No Python)<a class="anchor" aria-label="anchor" href="#native-wisecondorx-pipeline-no-python"></a>
 </h2>
 <p><code><a href="reference/rwisecondorx_newref.html">rwisecondorx_newref()</a></code> and <code><a href="reference/rwisecondorx_predict.html">rwisecondorx_predict()</a></code> are pure R/Rcpp implementations of the full WisecondorX algorithm — reference building, PCA correction, within-sample normalisation, CBS segmentation, and aberration calling — with no Python dependency. Performance-critical KNN reference-bin finding is compiled via Rcpp with OpenMP parallelisation. CBS segmentation uses DNAcopy (or ParDNAcopy for parallel operation) directly.</p>
-<p>The example below generates a 50-sample synthetic cohort (35 euploid female, 12 euploid male, 1×T21, 1×T18, 1×T13), builds a reference, and verifies that a trisomy sample is correctly detected.</p>
 <div class="sourceCode" id="cb4"><pre class="downlit sourceCode r">
-<code class="sourceCode R"><span><span class="kw"><a href="https://rdrr.io/r/base/library.html" class="external-link">library</a></span><span class="op">(</span><span class="va">DNAcopy</span><span class="op">)</span></span>
-<span></span>
-<span><span class="co"># generate_cohort() uses compressed chromosome lengths (100bp = 1 genomic bin)</span></span>
-<span><span class="co"># so each BAM is ~435KB. Requires samtools on PATH.</span></span>
-<span><span class="va">has_samtools</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/nchar.html" class="external-link">nchar</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/Sys.which.html" class="external-link">Sys.which</a></span><span class="op">(</span><span class="st">"samtools"</span><span class="op">)</span><span class="op">)</span> <span class="op">&gt;</span> <span class="fl">0L</span></span>
-<span><span class="kw">if</span> <span class="op">(</span><span class="op">!</span><span class="va">has_samtools</span><span class="op">)</span> <span class="op">{</span></span>
-<span>  <span class="fu"><a href="https://rdrr.io/r/base/message.html" class="external-link">message</a></span><span class="op">(</span><span class="st">"samtools not found — skipping cohort pipeline example"</span><span class="op">)</span></span>
-<span>  <span class="fu">knitr</span><span class="fu">::</span><span class="va"><a href="https://rdrr.io/pkg/knitr/man/opts_chunk.html" class="external-link">opts_chunk</a></span><span class="op">$</span><span class="fu">set</span><span class="op">(</span>eval <span class="op">=</span> <span class="cn">FALSE</span><span class="op">)</span></span>
-<span><span class="op">}</span></span></code></pre></div>
-<div class="sourceCode" id="cb5"><pre class="downlit sourceCode r">
-<code class="sourceCode R"><span><span class="va">cohort_dir</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/file.path.html" class="external-link">file.path</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/tempfile.html" class="external-link">tempdir</a></span><span class="op">(</span><span class="op">)</span>, <span class="st">"rwx_readme_cohort"</span><span class="op">)</span></span>
-<span><span class="va">manifest</span>   <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/message.html" class="external-link">suppressMessages</a></span><span class="op">(</span><span class="fu"><a href="reference/generate_cohort.html">generate_cohort</a></span><span class="op">(</span><span class="va">cohort_dir</span>, verbose <span class="op">=</span> <span class="cn">FALSE</span><span class="op">)</span><span class="op">)</span></span>
-<span></span>
-<span><span class="co"># Cohort composition</span></span>
-<span><span class="fu"><a href="https://rdrr.io/r/base/table.html" class="external-link">table</a></span><span class="op">(</span><span class="va">manifest</span><span class="op">$</span><span class="va">sex</span>, <span class="va">manifest</span><span class="op">$</span><span class="va">trisomy</span><span class="op">)</span></span>
-<span><span class="co">#&gt;    </span></span>
-<span><span class="co">#&gt;     none T13 T18 T21</span></span>
-<span><span class="co">#&gt;   F   35   1   1   1</span></span>
-<span><span class="co">#&gt;   M   12   0   0   0</span></span></code></pre></div>
-<div class="sourceCode" id="cb6"><pre class="downlit sourceCode r">
-<code class="sourceCode R"><span><span class="co"># Bin all 50 BAMs</span></span>
-<span><span class="va">all_samples</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/lapply.html" class="external-link">lapply</a></span><span class="op">(</span></span>
-<span>  <span class="fu"><a href="https://rdrr.io/r/base/file.path.html" class="external-link">file.path</a></span><span class="op">(</span><span class="va">cohort_dir</span>, <span class="va">manifest</span><span class="op">$</span><span class="va">bam_file</span><span class="op">)</span>,</span>
-<span>  <span class="kw">function</span><span class="op">(</span><span class="va">bam</span><span class="op">)</span> <span class="fu"><a href="https://rdrr.io/r/base/message.html" class="external-link">suppressMessages</a></span><span class="op">(</span></span>
-<span>    <span class="fu"><a href="reference/bam_convert.html">bam_convert</a></span><span class="op">(</span><span class="va">bam</span>, binsize <span class="op">=</span> <span class="va">COMPRESSED_BINSIZE</span>, mapq <span class="op">=</span> <span class="fl">0L</span>, rmdup <span class="op">=</span> <span class="st">"none"</span><span class="op">)</span></span>
-<span>  <span class="op">)</span></span>
+<code class="sourceCode R"><span><span class="va">control_bams</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"ctrl_01.dm.bam"</span>, <span class="st">"ctrl_02.dm.bam"</span>, <span class="st">"ctrl_03.dm.bam"</span><span class="op">)</span></span>
+<span><span class="va">control_samples</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/lapply.html" class="external-link">lapply</a></span><span class="op">(</span></span>
+<span>  <span class="va">control_bams</span>,</span>
+<span>  <span class="kw">function</span><span class="op">(</span><span class="va">bam</span><span class="op">)</span> <span class="fu"><a href="reference/bam_convert.html">bam_convert</a></span><span class="op">(</span><span class="va">bam</span>, binsize <span class="op">=</span> <span class="fl">100000L</span>, mapq <span class="op">=</span> <span class="fl">1L</span>, rmdup <span class="op">=</span> <span class="st">"streaming"</span><span class="op">)</span></span>
 <span><span class="op">)</span></span>
-<span><span class="fu"><a href="https://rdrr.io/r/base/names.html" class="external-link">names</a></span><span class="op">(</span><span class="va">all_samples</span><span class="op">)</span> <span class="op">&lt;-</span> <span class="va">manifest</span><span class="op">$</span><span class="va">sample_id</span></span></code></pre></div>
-<div class="sourceCode" id="cb7"><pre class="downlit sourceCode r">
-<code class="sourceCode R"><span><span class="co"># Build reference (refsize=10 for speed; production uses refsize=300)</span></span>
-<span><span class="va">ref</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/message.html" class="external-link">suppressMessages</a></span><span class="op">(</span></span>
-<span>  <span class="fu"><a href="reference/rwisecondorx_newref.html">rwisecondorx_newref</a></span><span class="op">(</span></span>
-<span>    samples <span class="op">=</span> <span class="va">all_samples</span>,</span>
-<span>    binsize <span class="op">=</span> <span class="va">COMPRESSED_BINSIZE</span>,</span>
-<span>    nipt    <span class="op">=</span> <span class="cn">TRUE</span>,</span>
-<span>    refsize <span class="op">=</span> <span class="fl">10L</span>,</span>
-<span>    cpus    <span class="op">=</span> <span class="fl">1L</span></span>
-<span>  <span class="op">)</span></span>
-<span><span class="op">)</span></span>
-<span><span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span>binsize <span class="op">=</span> <span class="va">ref</span><span class="op">$</span><span class="va">binsize</span>, masked_bins <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/sum.html" class="external-link">sum</a></span><span class="op">(</span><span class="op">!</span><span class="va">ref</span><span class="op">$</span><span class="va">mask</span><span class="op">)</span>, is_nipt <span class="op">=</span> <span class="va">ref</span><span class="op">$</span><span class="va">is_nipt</span><span class="op">)</span></span>
-<span><span class="co">#&gt;     binsize masked_bins     is_nipt </span></span>
-<span><span class="co">#&gt;         100         137           1</span></span></code></pre></div>
-<div class="sourceCode" id="cb8"><pre class="downlit sourceCode r">
-<code class="sourceCode R"><span><span class="co"># Predict on the T21 sample</span></span>
-<span><span class="va">t21_id</span>   <span class="op">&lt;-</span> <span class="va">manifest</span><span class="op">$</span><span class="va">sample_id</span><span class="op">[</span><span class="va">manifest</span><span class="op">$</span><span class="va">trisomy</span> <span class="op">==</span> <span class="st">"T21"</span><span class="op">]</span></span>
-<span><span class="va">pred_t21</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/message.html" class="external-link">suppressMessages</a></span><span class="op">(</span></span>
-<span>  <span class="fu"><a href="reference/rwisecondorx_predict.html">rwisecondorx_predict</a></span><span class="op">(</span></span>
-<span>    sample    <span class="op">=</span> <span class="va">all_samples</span><span class="op">[[</span><span class="va">t21_id</span><span class="op">]</span><span class="op">]</span>,</span>
-<span>    reference <span class="op">=</span> <span class="va">ref</span>,</span>
-<span>    zscore    <span class="op">=</span> <span class="fl">3</span>,</span>
-<span>    alpha     <span class="op">=</span> <span class="fl">1e-4</span>,</span>
-<span>    seed      <span class="op">=</span> <span class="fl">42L</span></span>
-<span>  <span class="op">)</span></span>
+<span><span class="fu"><a href="https://rdrr.io/r/base/names.html" class="external-link">names</a></span><span class="op">(</span><span class="va">control_samples</span><span class="op">)</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/grep.html" class="external-link">sub</a></span><span class="op">(</span><span class="st">"\\.bam$"</span>, <span class="st">""</span>, <span class="fu"><a href="https://rdrr.io/r/base/basename.html" class="external-link">basename</a></span><span class="op">(</span><span class="va">control_bams</span><span class="op">)</span><span class="op">)</span></span>
+<span></span>
+<span><span class="va">ref</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/rwisecondorx_newref.html">rwisecondorx_newref</a></span><span class="op">(</span></span>
+<span>  samples <span class="op">=</span> <span class="va">control_samples</span>,</span>
+<span>  binsize <span class="op">=</span> <span class="fl">100000L</span>,</span>
+<span>  nipt <span class="op">=</span> <span class="cn">TRUE</span>,</span>
+<span>  cpus <span class="op">=</span> <span class="fl">4L</span></span>
 <span><span class="op">)</span></span>
 <span></span>
-<span><span class="co"># Chr21 should show gain</span></span>
-<span><span class="va">pred_t21</span><span class="op">$</span><span class="va">aberrations</span><span class="op">[</span><span class="va">pred_t21</span><span class="op">$</span><span class="va">aberrations</span><span class="op">$</span><span class="va">chr</span> <span class="op">==</span> <span class="st">"21"</span>, <span class="op">]</span></span>
-<span><span class="co">#&gt; [1] chr    start  end    ratio  zscore type  </span></span>
-<span><span class="co">#&gt; &lt;0 rows&gt; (or 0-length row.names)</span></span></code></pre></div>
+<span><span class="va">test_sample</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/bam_convert.html">bam_convert</a></span><span class="op">(</span><span class="st">"test.dm.bam"</span>, binsize <span class="op">=</span> <span class="fl">100000L</span>, mapq <span class="op">=</span> <span class="fl">1L</span>, rmdup <span class="op">=</span> <span class="st">"streaming"</span><span class="op">)</span></span>
+<span><span class="va">pred</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/rwisecondorx_predict.html">rwisecondorx_predict</a></span><span class="op">(</span><span class="va">test_sample</span>, <span class="va">ref</span>, zscore <span class="op">=</span> <span class="fl">5</span>, seed <span class="op">=</span> <span class="fl">42L</span>, cpus <span class="op">=</span> <span class="fl">4L</span><span class="op">)</span></span>
+<span><span class="va">pred</span><span class="op">$</span><span class="va">aberrations</span></span></code></pre></div>
 <div class="section level3">
 <h3 id="multi-file-bed-input-for-reference-building">Multi-File BED Input For Reference Building<a class="anchor" aria-label="anchor" href="#multi-file-bed-input-for-reference-building"></a>
 </h3>
 <p><code><a href="reference/rwisecondorx_newref.html">rwisecondorx_newref()</a></code> also accepts a directory of 4-column BED.gz files produced by <code><a href="reference/bam_convert_bed.html">bam_convert_bed()</a></code> via the <code>bed_dir</code> parameter. All matching files are loaded in a single DuckDB pass — no in-memory sample list needed:</p>
-<div class="sourceCode" id="cb9"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb5"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">ref</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/rwisecondorx_newref.html">rwisecondorx_newref</a></span><span class="op">(</span></span>
 <span>  bed_dir <span class="op">=</span> <span class="st">"bed_counts/"</span>,     <span class="co"># directory of *.bed.gz files</span></span>
 <span>  binsize <span class="op">=</span> <span class="fl">100000L</span>,</span>
@@ -200,33 +132,26 @@
 <h2 id="optional-npz-and-cli-workflow">Optional NPZ And CLI Workflow<a class="anchor" aria-label="anchor" href="#optional-npz-and-cli-workflow"></a>
 </h2>
 <p>When the full upstream WisecondorX pipeline is needed, <code><a href="reference/wisecondorx_convert.html">wisecondorx_convert()</a></code> wraps <code>wisecondorx convert</code> via <code>condathis</code> and produces an <code>.npz</code> through the official Python implementation. All three wrappers handle conda environment creation automatically on first use.</p>
-<div class="sourceCode" id="cb10"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb6"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="fu"><a href="reference/wisecondorx_convert.html">wisecondorx_convert</a></span><span class="op">(</span></span>
 <span>  bam     <span class="op">=</span> <span class="st">"sample.bam"</span>,</span>
 <span>  npz     <span class="op">=</span> <span class="st">"sample.npz"</span>,</span>
-<span>  binsize <span class="op">=</span> <span class="fl">5000L</span>,</span>
+<span>  binsize <span class="op">=</span> <span class="fl">100000L</span>,</span>
 <span>  normdup <span class="op">=</span> <span class="cn">FALSE</span>          <span class="co"># TRUE → --normdup (NIPT)</span></span>
 <span><span class="op">)</span></span></code></pre></div>
-<div class="sourceCode" id="cb11"><pre class="downlit sourceCode r">
-<code class="sourceCode R"><span><span class="va">fixture_npz</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/tempfile.html" class="external-link">tempfile</a></span><span class="op">(</span>fileext <span class="op">=</span> <span class="st">".npz"</span><span class="op">)</span></span>
+<div class="sourceCode" id="cb7"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span><span class="va">fixture_npz</span> <span class="op">&lt;-</span> <span class="st">"sample.npz"</span></span>
 <span><span class="va">np</span> <span class="op">&lt;-</span> <span class="fu">reticulate</span><span class="fu">::</span><span class="fu"><a href="https://rstudio.github.io/reticulate/reference/import.html" class="external-link">import</a></span><span class="op">(</span><span class="st">"numpy"</span>, convert <span class="op">=</span> <span class="cn">FALSE</span><span class="op">)</span></span>
 <span></span>
 <span><span class="fu"><a href="reference/bam_convert_npz.html">bam_convert_npz</a></span><span class="op">(</span></span>
-<span>  bam     <span class="op">=</span> <span class="va">fixture_bam</span>,</span>
+<span>  bam     <span class="op">=</span> <span class="st">"sample.dm.bam"</span>,</span>
 <span>  npz     <span class="op">=</span> <span class="va">fixture_npz</span>,</span>
-<span>  binsize <span class="op">=</span> <span class="fl">5000L</span>,</span>
+<span>  binsize <span class="op">=</span> <span class="fl">100000L</span>,</span>
 <span>  rmdup   <span class="op">=</span> <span class="st">"streaming"</span>,</span>
 <span>  np      <span class="op">=</span> <span class="va">np</span></span>
-<span><span class="op">)</span></span>
-<span></span>
-<span><span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span></span>
-<span>  npz_created <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/files.html" class="external-link">file.exists</a></span><span class="op">(</span><span class="va">fixture_npz</span><span class="op">)</span>,</span>
-<span>  npz_size    <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/file.info.html" class="external-link">file.info</a></span><span class="op">(</span><span class="va">fixture_npz</span><span class="op">)</span><span class="op">$</span><span class="va">size</span></span>
-<span><span class="op">)</span></span>
-<span><span class="co">#&gt; npz_created    npz_size </span></span>
-<span><span class="co">#&gt;           1        4792</span></span></code></pre></div>
+<span><span class="op">)</span></span></code></pre></div>
 <p>The CLI wrappers expose the upstream arguments documented in the WisecondorX README and delegate to the official <code>wisecondorx</code> bioconda package.</p>
-<div class="sourceCode" id="cb12"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb8"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="co"># Requires: condathis installed; wisecondorx bioconda package auto-installed</span></span>
 <span></span>
 <span><span class="va">npz_files</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/list.files.html" class="external-link">list.files</a></span><span class="op">(</span><span class="st">"controls/"</span>, <span class="st">"\\.npz$"</span>, full.names <span class="op">=</span> <span class="cn">TRUE</span><span class="op">)</span></span>
@@ -247,15 +172,32 @@
 <span>  bed           <span class="op">=</span> <span class="cn">TRUE</span>,</span>
 <span>  seed          <span class="op">=</span> <span class="fl">1L</span></span>
 <span><span class="op">)</span></span></code></pre></div>
+<p>For cohort preprocessing and reference building, the package now keeps the native and upstream WisecondorX paths explicit:</p>
+<ul>
+<li>
+<code>inst/scripts/preprocess_cohort.R</code> stages a cohort manifest and writes:
+<ul>
+<li>native <code>rwisecondorx</code> BED.gz files</li>
+<li>optional upstream <code>wisecondorx</code> NPZ files</li>
+<li>NIPTeR BED.gz files</li>
+</ul>
+</li>
+<li>
+<code>inst/scripts/build_reference.R --mode rwisecondorx</code> builds a native RDS reference from BED.gz files</li>
+<li>
+<code>inst/scripts/build_reference.R --mode wisecondorx</code> builds an upstream NPZ reference from NPZ files</li>
+<li>
+<code>inst/scripts/wisecondorx_conformance.R</code> takes those prepared artifacts (<code>bed</code> + <code>npz</code> test cases, plus both references), runs both <code>predict</code> paths, and compares the resulting per-bin <code>_bins.bed</code> outputs</li>
+</ul>
 </div>
 <div class="section level2">
 <h2 id="beta-mode-somatic-cnv">Beta Mode (Somatic CNV)<a class="anchor" aria-label="anchor" href="#beta-mode-somatic-cnv"></a>
 </h2>
 <p><code><a href="reference/rwisecondorx_predict.html">rwisecondorx_predict()</a></code> supports a <code>beta</code> parameter for purity-based aberration calling, appropriate for somatic CNV analysis where tumour purity is known. When <code>beta</code> is supplied, ratio cutoffs replace Z-score thresholds:</p>
-<div class="sourceCode" id="cb13"><pre class="sourceCode R"><code class="sourceCode r"><span id="cb13-1"><a href="#cb13-1" tabindex="-1"></a>gain cutoff<span class="sc">:</span> <span class="fu">log2</span>((ploidy <span class="sc">+</span> beta<span class="sc">/</span><span class="dv">2</span>) <span class="sc">/</span> ploidy)</span>
-<span id="cb13-2"><a href="#cb13-2" tabindex="-1"></a>loss cutoff<span class="sc">:</span> <span class="fu">log2</span>((ploidy <span class="sc">-</span> beta<span class="sc">/</span><span class="dv">2</span>) <span class="sc">/</span> ploidy)</span></code></pre></div>
+<div class="sourceCode" id="cb9"><pre class="sourceCode R"><code class="sourceCode r"><span id="cb9-1"><a href="#cb9-1" tabindex="-1"></a>gain cutoff<span class="sc">:</span> <span class="fu">log2</span>((ploidy <span class="sc">+</span> beta<span class="sc">/</span><span class="dv">2</span>) <span class="sc">/</span> ploidy)</span>
+<span id="cb9-2"><a href="#cb9-2" tabindex="-1"></a>loss cutoff<span class="sc">:</span> <span class="fu">log2</span>((ploidy <span class="sc">-</span> beta<span class="sc">/</span><span class="dv">2</span>) <span class="sc">/</span> ploidy)</span></code></pre></div>
 <p><code>beta</code> is the tumour purity estimate (0–1; 0 = most liberal calling, 1 = most conservative; optimally close to true purity). This mode is <strong>not appropriate for NIPT</strong>, which uses the default Z-score calling.</p>
-<div class="sourceCode" id="cb14"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb10"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="co"># Somatic CNV: 40% purity tumour sample</span></span>
 <span><span class="va">pred_somatic</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/rwisecondorx_predict.html">rwisecondorx_predict</a></span><span class="op">(</span></span>
 <span>  sample    <span class="op">=</span> <span class="va">tumour_sample</span>,</span>
@@ -265,18 +207,6 @@
 <span><span class="op">)</span></span></code></pre></div>
 </div>
 <div class="section level2">
-<h2 id="synthetic-cohort-for-testing">Synthetic Cohort For Testing<a class="anchor" aria-label="anchor" href="#synthetic-cohort-for-testing"></a>
-</h2>
-<p><code><a href="reference/generate_cohort.html">generate_cohort()</a></code> creates a 50-sample synthetic BAM cohort using compressed chromosome lengths (100bp = 1 genomic 100kb bin), so each BAM is ~435KB. The cohort contains euploid females and males plus three trisomy samples (T21, T18, T13). See the native pipeline section above for end-to-end usage.</p>
-<div class="sourceCode" id="cb15"><pre class="downlit sourceCode r">
-<code class="sourceCode R"><span><span class="va">out_dir</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/tempfile.html" class="external-link">tempfile</a></span><span class="op">(</span><span class="st">"cohort_"</span><span class="op">)</span></span>
-<span><span class="va">manifest</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/generate_cohort.html">generate_cohort</a></span><span class="op">(</span><span class="va">out_dir</span><span class="op">)</span></span>
-<span></span>
-<span><span class="co"># Bin with COMPRESSED_BINSIZE (100L) to match synthetic coordinates</span></span>
-<span><span class="va">bams</span>    <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/file.path.html" class="external-link">file.path</a></span><span class="op">(</span><span class="va">out_dir</span>, <span class="va">manifest</span><span class="op">$</span><span class="va">bam_file</span><span class="op">)</span></span>
-<span><span class="va">samples</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/lapply.html" class="external-link">lapply</a></span><span class="op">(</span><span class="va">bams</span>, <span class="va">bam_convert</span>, binsize <span class="op">=</span> <span class="va">COMPRESSED_BINSIZE</span>, rmdup <span class="op">=</span> <span class="st">"none"</span><span class="op">)</span></span></code></pre></div>
-</div>
-<div class="section level2">
 <h2 id="nipter-style-trisomy-prediction">NIPTeR-Style Trisomy Prediction<a class="anchor" aria-label="anchor" href="#nipter-style-trisomy-prediction"></a>
 </h2>
 <p><code>RWisecondorX</code> ports the statistical analysis layer from <a href="https://github.com/molgenis/NIPTeR" class="external-link">NIPTeR</a> (de Weerd et al.), replacing <code>Rsamtools</code> with <code>Rduckhts</code> and bundled <code>sysdata.rda</code> tables with on-the-fly computation via <code>rduckhts_fasta_nuc()</code>. The analysis pipeline follows NIPTeR’s workflow: bin samples, build a control group, correct for GC bias and overdispersion, then compute Z-scores or NCV values for trisomy prediction.</p>
@@ -284,14 +214,14 @@
 <h3 id="binning">Binning<a class="anchor" aria-label="anchor" href="#binning"></a>
 </h3>
 <p><code><a href="reference/nipter_bin_bam.html">nipter_bin_bam()</a></code> produces <code>NIPTeRSample</code> objects compatible with all downstream functions. Pre-filtering flags mirror <code>samtools view -f</code>/<code>-F</code> conventions, so real-world NIPT pipelines that mark duplicates with Picard can pass <code>exclude_flags = 1024L</code> directly.</p>
-<div class="sourceCode" id="cb16"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb11"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">samples</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/lapply.html" class="external-link">lapply</a></span><span class="op">(</span><span class="va">bam_files</span>, <span class="va">nipter_bin_bam</span>, binsize <span class="op">=</span> <span class="fl">50000L</span><span class="op">)</span></span></code></pre></div>
 </div>
 <div class="section level3">
 <h3 id="control-group-construction">Control Group Construction<a class="anchor" aria-label="anchor" href="#control-group-construction"></a>
 </h3>
 <p>A control group is the reference cohort against which test samples are scored. <code><a href="reference/nipter_as_control_group.html">nipter_as_control_group()</a></code> validates and deduplicates the input samples. <code><a href="reference/nipter_diagnose_control_group.html">nipter_diagnose_control_group()</a></code> reports per-chromosome Z-scores and Shapiro-Wilk normality p-values across the group, useful for identifying outlier samples before scoring. When working with a large cohort, <code><a href="reference/nipter_match_control_group.html">nipter_match_control_group()</a></code> selects the closest-matching subset for a given test sample based on chromosomal fraction distance (Rcpp+OpenMP accelerated). <code><a href="reference/nipter_match_matrix.html">nipter_match_matrix()</a></code> computes the full N×N pairwise SSD matrix — useful for QC outlier detection before building the control group.</p>
-<div class="sourceCode" id="cb17"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb12"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">cg</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/nipter_as_control_group.html">nipter_as_control_group</a></span><span class="op">(</span><span class="va">samples</span><span class="op">)</span></span>
 <span><span class="va">diag</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/nipter_diagnose_control_group.html">nipter_diagnose_control_group</a></span><span class="op">(</span><span class="va">cg</span><span class="op">)</span></span>
 <span><span class="va">matched_cg</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/nipter_match_control_group.html">nipter_match_control_group</a></span><span class="op">(</span><span class="va">test_sample</span>, <span class="va">cg</span>, n <span class="op">=</span> <span class="fl">50L</span><span class="op">)</span></span>
@@ -301,7 +231,7 @@
 <h3 id="gc-correction">GC Correction<a class="anchor" aria-label="anchor" href="#gc-correction"></a>
 </h3>
 <p><code><a href="reference/nipter_gc_correct.html">nipter_gc_correct()</a></code> adjusts bin counts for GC-content bias. GC percentages are computed per bin from the reference FASTA via <code>rduckhts_fasta_nuc()</code> rather than from static bundled tables. Two methods are available: LOESS regression (default, matching NIPTeR) and bin-weight normalisation. For cohort workflows, <code><a href="reference/nipter_gc_precompute.html">nipter_gc_precompute()</a></code> pre-computes and saves GC fractions to a TSV.bgz file so the FASTA is only scanned once.</p>
-<div class="sourceCode" id="cb18"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb13"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="co"># Pre-compute GC table (one-time per genome / binsize)</span></span>
 <span><span class="fu"><a href="reference/nipter_gc_precompute.html">nipter_gc_precompute</a></span><span class="op">(</span>fasta <span class="op">=</span> <span class="st">"hg38.fa"</span>, binsize <span class="op">=</span> <span class="fl">50000L</span>,</span>
 <span>                     out <span class="op">=</span> <span class="st">"gc_table.tsv.bgz"</span><span class="op">)</span></span>
@@ -314,7 +244,7 @@
 <h3 id="chi-squared-correction">Chi-Squared Correction<a class="anchor" aria-label="anchor" href="#chi-squared-correction"></a>
 </h3>
 <p><code><a href="reference/nipter_chi_correct.html">nipter_chi_correct()</a></code> identifies overdispersed bins across the control group using a normalised chi-squared test and downweights them. The correction is applied simultaneously to both the test sample and control group, maintaining consistency for downstream scoring.</p>
-<div class="sourceCode" id="cb19"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb14"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">corrected</span>   <span class="op">&lt;-</span> <span class="fu"><a href="reference/nipter_chi_correct.html">nipter_chi_correct</a></span><span class="op">(</span><span class="va">test_sample</span>, <span class="va">cg</span>, chi_cutoff <span class="op">=</span> <span class="fl">3.5</span><span class="op">)</span></span>
 <span><span class="va">test_sample</span> <span class="op">&lt;-</span> <span class="va">corrected</span><span class="op">$</span><span class="va">sample</span></span>
 <span><span class="va">cg</span>          <span class="op">&lt;-</span> <span class="va">corrected</span><span class="op">$</span><span class="va">control_group</span></span></code></pre></div>
@@ -323,17 +253,17 @@
 <h3 id="scoring">Scoring<a class="anchor" aria-label="anchor" href="#scoring"></a>
 </h3>
 <p><code><a href="reference/nipter_z_score.html">nipter_z_score()</a></code> computes the chromosomal fraction Z-score for a focus chromosome. A Z-score above 3 is the conventional threshold for trisomy.</p>
-<div class="sourceCode" id="cb20"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb15"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">z21</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/nipter_z_score.html">nipter_z_score</a></span><span class="op">(</span><span class="va">test_sample</span>, <span class="va">cg</span>, chromo_focus <span class="op">=</span> <span class="fl">21</span><span class="op">)</span></span>
 <span><span class="va">z21</span><span class="op">$</span><span class="va">sample_z_score</span></span>
 <span><span class="va">z21</span><span class="op">$</span><span class="va">control_statistics</span></span></code></pre></div>
 <p><code><a href="reference/nipter_ncv_score.html">nipter_ncv_score()</a></code> computes the normalised chromosome value, searching for the denominator chromosome set that minimises control-group variance before computing the Z-score. More robust than the standard Z-score when the control group is small.</p>
-<div class="sourceCode" id="cb21"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb16"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">ncv21</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/nipter_ncv_score.html">nipter_ncv_score</a></span><span class="op">(</span><span class="va">test_sample</span>, <span class="va">cg</span>, chromo_focus <span class="op">=</span> <span class="fl">21</span><span class="op">)</span></span>
 <span><span class="va">ncv21</span><span class="op">$</span><span class="va">sample_ncv_score</span></span>
 <span><span class="va">ncv21</span><span class="op">$</span><span class="va">denominators</span></span></code></pre></div>
 <p><code><a href="reference/nipter_regression.html">nipter_regression()</a></code> uses forward stepwise linear regression to predict the focus chromosome’s fraction from other chromosomes, then scores the residual.</p>
-<div class="sourceCode" id="cb22"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb17"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">reg21</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/nipter_regression.html">nipter_regression</a></span><span class="op">(</span><span class="va">test_sample</span>, <span class="va">cg</span>, chromo_focus <span class="op">=</span> <span class="fl">21</span><span class="op">)</span></span>
 <span><span class="va">reg21</span><span class="op">$</span><span class="va">models</span><span class="op">[[</span><span class="fl">1</span><span class="op">]</span><span class="op">]</span><span class="op">$</span><span class="va">z_score</span></span>
 <span><span class="va">reg21</span><span class="op">$</span><span class="va">models</span><span class="op">[[</span><span class="fl">1</span><span class="op">]</span><span class="op">]</span><span class="op">$</span><span class="va">predictors</span></span></code></pre></div>
@@ -343,7 +273,7 @@
 <h2 id="sex-prediction">Sex Prediction<a class="anchor" aria-label="anchor" href="#sex-prediction"></a>
 </h2>
 <p><code><a href="reference/nipter_sex_model.html">nipter_sex_model()</a></code> trains a 2-component Gaussian mixture model on chromosome fraction data from a control group for sex prediction. Three model types are available: Y-fraction alone, bivariate X+Y fractions, and Y-unique region read ratios from specific Y-chromosome genes. <code><a href="reference/nipter_predict_sex.html">nipter_predict_sex()</a></code> classifies a test sample using one or more models with majority-vote consensus (ties → female, the conservative choice for NIPT).</p>
-<div class="sourceCode" id="cb23"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb18"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="co"># Requires: mclust package; whole-genome BAMs; FASTA for GC correction</span></span>
 <span><span class="va">cg</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/nipter_as_control_group.html">nipter_as_control_group</a></span><span class="op">(</span><span class="va">samples</span><span class="op">)</span></span>
 <span><span class="va">cg</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/nipter_gc_correct.html">nipter_gc_correct</a></span><span class="op">(</span><span class="va">cg</span>, fasta <span class="op">=</span> <span class="st">"hg38.fa"</span><span class="op">)</span></span>
@@ -358,8 +288,8 @@
 <div class="section level2">
 <h2 id="sra-metadata-helpers">SRA Metadata Helpers<a class="anchor" aria-label="anchor" href="#sra-metadata-helpers"></a>
 </h2>
-<p><code><a href="reference/sra_runinfo.html">sra_runinfo_url()</a></code>, <code><a href="reference/sra_runinfo.html">download_sra_runinfo()</a></code>, and <code><a href="reference/sra_runinfo.html">read_sra_runinfo()</a></code> are small helpers for staging NCBI SRA run metadata used by conformance fixtures.</p>
-<div class="sourceCode" id="cb24"><pre class="downlit sourceCode r">
+<p><code><a href="reference/sra_runinfo.html">sra_runinfo_url()</a></code>, <code><a href="reference/sra_runinfo.html">download_sra_runinfo()</a></code>, and <code><a href="reference/sra_runinfo.html">read_sra_runinfo()</a></code> are small helpers for staging NCBI SRA run metadata.</p>
+<div class="sourceCode" id="cb19"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="fu"><a href="reference/sra_runinfo.html">sra_runinfo_url</a></span><span class="op">(</span><span class="st">"PRJNA400134"</span><span class="op">)</span></span>
 <span><span class="co">#&gt; [1] "https://trace.ncbi.nlm.nih.gov/Traces/sra-db-be/runinfo?acc=PRJNA400134"</span></span></code></pre></div>
 </div>
@@ -372,16 +302,14 @@
 <li>
 <code><a href="reference/bam_convert.html">bam_convert()</a></code>: bin-for-bin identical to Python WisecondorX on <code>HG00106.chrom11</code> (0 mismatches, 25,115 bins).</li>
 <li>NIPTeR statistical layer (Z-score, NCV, chi, regression): formulas verified against inline reference implementations in <code>test_nipter_conformance.R</code>.</li>
-<li>Trisomy detection: T21/T18/T13 all correctly called in <code>test_cohort_pipeline.R</code> and <code>test_wisecondorx_e2e.R</code> using synthetic cohort.</li>
-<li>
-<code>rwisecondorx_newref/predict</code> segment and aberration comparison against upstream Python: <strong>pending real-data run</strong> (run <code>inst/scripts/real_data_conformance.R</code> with your server BAMs).</li>
+<li>Native and upstream WisecondorX conformance is run on prepared real-cohort artifacts via <code>inst/scripts/wisecondorx_conformance.R</code>, comparing the resulting per-bin <code>_bins.bed</code> outputs from both <code>predict</code> implementations.</li>
 <li>Beta mode (purity-based calling): implemented, not yet tested with clinical samples.</li>
 </ul>
 </div>
 <div class="section level2">
 <h2 id="development">Development<a class="anchor" aria-label="anchor" href="#development"></a>
 </h2>
-<p><code>README.Rmd</code> is the editable source for this document. Run <code>make readme</code> to rerender <code>README.md</code>, <code>make rd</code> to regenerate documentation from roxygen2 comments, <code>make fixtures</code> to rebuild the bundled test data, and <code>make conformance</code> to run the end-to-end WisecondorX conformance test.</p>
+<p><code>README.Rmd</code> is the editable source for this document. Run <code>make readme</code> to rerender <code>README.md</code> and <code>make rd</code> to regenerate documentation from roxygen2 comments.</p>
 </div>
 </div>
   </main><aside class="col-md-3"><div class="license">

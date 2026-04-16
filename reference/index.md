@@ -2,8 +2,6 @@
 
 ## All functions
 
-- [`COMPRESSED_BINSIZE`](https://sounkou-bioinfo.github.io/RWisecondorX/reference/COMPRESSED_BINSIZE.md)
-  : Compressed bin size for synthetic cohort BAMs
 - [`CombinedControlGroup()`](https://sounkou-bioinfo.github.io/RWisecondorX/reference/CombinedControlGroup.md)
   : NIPTeR control group for CombinedStrands samples
 - [`CombinedStrandsSample()`](https://sounkou-bioinfo.github.io/RWisecondorX/reference/CombinedStrandsSample.md)
@@ -77,8 +75,6 @@
   control group
 - [`fractions_for_regression()`](https://sounkou-bioinfo.github.io/RWisecondorX/reference/fractions_for_regression.md)
   : Extract fractions suitable for regression
-- [`generate_cohort()`](https://sounkou-bioinfo.github.io/RWisecondorX/reference/generate_cohort.md)
-  : Generate a synthetic BAM cohort for testing
 - [`n_bins()`](https://sounkou-bioinfo.github.io/RWisecondorX/reference/n_bins.md)
   : Number of bins in a NIPTSample
 - [`n_controls()`](https://sounkou-bioinfo.github.io/RWisecondorX/reference/n_controls.md)
@@ -149,12 +145,10 @@
   : QC a native WisecondorX reference
 - [`scale_sample()`](https://sounkou-bioinfo.github.io/RWisecondorX/reference/scale_sample.md)
   : Scale a binned sample to a new bin size
+- [`seqff_predict()`](https://sounkou-bioinfo.github.io/RWisecondorX/reference/seqff_predict.md)
+  : Predict Fetal Fraction with SeqFF
 - [`sex_matrix()`](https://sounkou-bioinfo.github.io/RWisecondorX/reference/sex_matrix.md)
   : Extract the sex-chromosome read-count matrix from a NIPTSample
-- [`simulate_trisomy_bam()`](https://sounkou-bioinfo.github.io/RWisecondorX/reference/simulate_trisomy_bam.md)
-  : Simulate a trisomy BAM by thinning a donor alignment
-- [`simulate_trisomy_cohort()`](https://sounkou-bioinfo.github.io/RWisecondorX/reference/simulate_trisomy_cohort.md)
-  : Simulate a trisomy cohort from donor BAMs/CRAMs
 - [`sra_runinfo_url()`](https://sounkou-bioinfo.github.io/RWisecondorX/reference/sra_runinfo.md)
   [`download_sra_runinfo()`](https://sounkou-bioinfo.github.io/RWisecondorX/reference/sra_runinfo.md)
   [`read_sra_runinfo()`](https://sounkou-bioinfo.github.io/RWisecondorX/reference/sra_runinfo.md)

@@ -7,7 +7,6 @@
 <url><loc>https://sounkou-bioinfo.github.io/RWisecondorX/authors.html</loc></url>
 <url><loc>https://sounkou-bioinfo.github.io/RWisecondorX/index.html</loc></url>
 <url><loc>https://sounkou-bioinfo.github.io/RWisecondorX/news/index.html</loc></url>
-<url><loc>https://sounkou-bioinfo.github.io/RWisecondorX/reference/COMPRESSED_BINSIZE.html</loc></url>
 <url><loc>https://sounkou-bioinfo.github.io/RWisecondorX/reference/CombinedControlGroup.html</loc></url>
 <url><loc>https://sounkou-bioinfo.github.io/RWisecondorX/reference/CombinedStrandsSample.html</loc></url>
 <url><loc>https://sounkou-bioinfo.github.io/RWisecondorX/reference/NCVTemplate.html</loc></url>
@@ -81,7 +80,6 @@
 <url><loc>https://sounkou-bioinfo.github.io/RWisecondorX/reference/dot-write_statistics.html</loc></url>
 <url><loc>https://sounkou-bioinfo.github.io/RWisecondorX/reference/fractions_auto.html</loc></url>
 <url><loc>https://sounkou-bioinfo.github.io/RWisecondorX/reference/fractions_for_regression.html</loc></url>
-<url><loc>https://sounkou-bioinfo.github.io/RWisecondorX/reference/generate_cohort.html</loc></url>
 <url><loc>https://sounkou-bioinfo.github.io/RWisecondorX/reference/index.html</loc></url>
 <url><loc>https://sounkou-bioinfo.github.io/RWisecondorX/reference/n_bins.html</loc></url>
 <url><loc>https://sounkou-bioinfo.github.io/RWisecondorX/reference/n_controls.html</loc></url>
@@ -118,9 +116,8 @@
 <url><loc>https://sounkou-bioinfo.github.io/RWisecondorX/reference/rwisecondorx_predict.html</loc></url>
 <url><loc>https://sounkou-bioinfo.github.io/RWisecondorX/reference/rwisecondorx_ref_qc.html</loc></url>
 <url><loc>https://sounkou-bioinfo.github.io/RWisecondorX/reference/scale_sample.html</loc></url>
+<url><loc>https://sounkou-bioinfo.github.io/RWisecondorX/reference/seqff_predict.html</loc></url>
 <url><loc>https://sounkou-bioinfo.github.io/RWisecondorX/reference/sex_matrix.html</loc></url>
-<url><loc>https://sounkou-bioinfo.github.io/RWisecondorX/reference/simulate_trisomy_bam.html</loc></url>
-<url><loc>https://sounkou-bioinfo.github.io/RWisecondorX/reference/simulate_trisomy_cohort.html</loc></url>
 <url><loc>https://sounkou-bioinfo.github.io/RWisecondorX/reference/sra_runinfo.html</loc></url>
 <url><loc>https://sounkou-bioinfo.github.io/RWisecondorX/reference/strand_type.html</loc></url>
 <url><loc>https://sounkou-bioinfo.github.io/RWisecondorX/reference/wisecondorx_convert.html</loc></url>

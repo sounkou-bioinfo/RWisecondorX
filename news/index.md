@@ -120,20 +120,16 @@
   subclass `list`, so existing list-style code keeps working while the
   object boundary is now typed and explicit.
 
-- New
-  [`simulate_trisomy_bam()`](https://sounkou-bioinfo.github.io/RWisecondorX/reference/simulate_trisomy_bam.md)
-  creates a BAM-level trisomy simulation from a donor BAM/CRAM by
-  thinning non-target chromosomes with an htslib-backed native
-  implementation. It preserves the donor read layout and sort order,
-  writes a real BAM, and indexes it with `Rduckhts`. New
-  `inst/scripts/simulate_trisomy_bam.R` exposes the same primitive as a
-  CLI.
+- New `simulate_trisomy_bam()` creates a BAM-level trisomy simulation
+  from a donor BAM/CRAM by thinning non-target chromosomes with an
+  htslib-backed native implementation. It preserves the donor read
+  layout and sort order, writes a real BAM, and indexes it with
+  `Rduckhts`. New `inst/scripts/simulate_trisomy_bam.R` exposes the same
+  primitive as a CLI.
 
-- New
-  [`simulate_trisomy_cohort()`](https://sounkou-bioinfo.github.io/RWisecondorX/reference/simulate_trisomy_cohort.md)
-  batches that donor-BAM simulator across a donor set and simulation
-  grid, writes a cohort manifest, and reuses one `Rduckhts` indexing
-  session for the whole run. New
+- New `simulate_trisomy_cohort()` batches that donor-BAM simulator
+  across a donor set and simulation grid, writes a cohort manifest, and
+  reuses one `Rduckhts` indexing session for the whole run. New
   `inst/scripts/simulate_trisomy_cohort.R` exposes the cohort generator
   as a
 
@@ -358,11 +354,10 @@
 
 - `R/rwisecondorx_cbs.R` —
   [`.exec_cbs()`](https://sounkou-bioinfo.github.io/RWisecondorX/reference/dot-exec_cbs.md)
-  wrapper around DNAcopy’s
-  [`segment()`](https://rdrr.io/pkg/DNAcopy/man/segment.html) with the
-  upstream WisecondorX conventions (0→NA, 0 weights→1e-99, split
-  segments at large NA gaps, recalculate weighted means). Supports
-  ParDNAcopy for parallel segmentation.
+  wrapper around DNAcopy’s `segment()` with the upstream WisecondorX
+  conventions (0→NA, 0 weights→1e-99, split segments at large NA gaps,
+  recalculate weighted means). Supports ParDNAcopy for parallel
+  segmentation.
 
 ### Rcpp acceleration for KNN reference building
 
@@ -412,12 +407,11 @@
 
 ### Synthetic cohort generator
 
-- New
-  [`generate_cohort()`](https://sounkou-bioinfo.github.io/RWisecondorX/reference/generate_cohort.md)
-  creates synthetic BAM files for testing using “compressed” chromosome
-  lengths (100bp per bin instead of 100kb). Produces identical bin COUNT
-  structure to GRCh37 at 100kb resolution with ~435KB BAMs. Supports
-  injecting trisomy signal (extra reads on target chromosome).
+- New `generate_cohort()` creates synthetic BAM files for testing using
+  “compressed” chromosome lengths (100bp per bin instead of 100kb).
+  Produces identical bin COUNT structure to GRCh37 at 100kb resolution
+  with ~435KB BAMs. Supports injecting trisomy signal (extra reads on
+  target chromosome).
 
 - New `COMPRESSED_BINSIZE` constant (100L) exported for use with
   `bam_convert(binsize = COMPRESSED_BINSIZE)`.

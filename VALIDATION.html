@@ -97,9 +97,9 @@
 <div class="section level3">
 <h3 id="id_4-trisomy-detection--synthetic-smoke-test-cohort">4. Trisomy detection — synthetic smoke test cohort<a class="anchor" aria-label="anchor" href="#id_4-trisomy-detection--synthetic-smoke-test-cohort"></a></h3>
 <p><strong>Status</strong>: Smoke-tested ✓<br><strong>Claim</strong>: The native R pipeline (<code>rwisecondorx_newref</code> + <code>rwisecondorx_predict</code>) detects T21, T18, and T13 on the package’s synthetic smoke-test cohort and produces zero aberration calls on the chosen euploid negative control in that same synthetic setup.</p>
-<p><strong>Data</strong>: 50-sample synthetic cohort from <code><a href="reference/generate_cohort.html">generate_cohort()</a></code> (compressed coordinates, <code>COMPRESSED_BINSIZE = 100</code>)</p>
+<p><strong>Data</strong>: 50-sample synthetic cohort from <code>generate_cohort()</code> (compressed coordinates, <code>COMPRESSED_BINSIZE = 100</code>)</p>
 <p><strong>Key assertions</strong>: - T21 sample: <code>pred$aberrations</code> contains at least one <code>chr=="21"</code> + <code>type=="gain"</code> row - T18 sample: at least one <code>chr=="18"</code> + <code>type=="gain"</code> row - T13 sample: at least one <code>chr=="13"</code> + <code>type=="gain"</code> row - First euploid sample: <code>nrow(pred$aberrations) == 0</code></p>
-<p><strong>Important limitation</strong>: <code><a href="reference/generate_cohort.html">generate_cohort()</a></code> is a fast synthetic generator for package testing. It is not a calibrated clinical simulator and does not replace real-data conformance or performance validation.</p>
+<p><strong>Important limitation</strong>: <code>generate_cohort()</code> is a fast synthetic generator for package testing. It is not a calibrated clinical simulator and does not replace real-data conformance or performance validation.</p>
 <p><strong>Test files</strong>: - <code>inst/tinytest/test_cohort_pipeline.R</code> (Z-score level assertions) - <code>inst/tinytest/test_wisecondorx_e2e.R</code> (aberration call level assertions)</p>
 <p><strong>How to reproduce</strong>:</p>
 <div class="sourceCode" id="cb5"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb5-1"><a href="#cb5-1" tabindex="-1"></a>make conformance</span>

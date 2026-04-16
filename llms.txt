@@ -54,30 +54,13 @@ upstream CLI wrappers. Neither is required for the core convert step.
 
 ## Convert A BAM To Bin Counts
 
-The package ships with a small chromosome 11 BAM fixture for examples
-and tests.
-
 ``` r
-fixture_bam <- system.file(
-  "extdata",
-  "hg00106_chr11_fixture.bam",
-  package = "RWisecondorX"
-)
-
 bins <- bam_convert(
-  fixture_bam,
-  binsize = 5000L,
+  "sample.dm.bam",
+  binsize = 100000L,
+  mapq = 1L,
   rmdup = "streaming"
 )
-
-names(Filter(Negate(is.null), bins))
-#> [1] "11"
-
-length(bins[["11"]])
-#> [1] 1198
-
-sum(bins[["11"]])
-#> [1] 982
 ```
 
 The `rmdup` argument controls duplicate handling. `"streaming"` exactly
@@ -96,27 +79,17 @@ index, using `rduckhts_bgzip` and `rduckhts_tabix_index` from `Rduckhts`
 — no external tools or Python required.
 
 ``` r
-bed_file <- tempfile(fileext = ".bed.gz")
+bed_file <- "sample.wisecondorx.bed.gz"
 
 bam_convert_bed(
-  bam     = fixture_bam,
+  bam     = "sample.dm.bam",
   bed     = bed_file,
-  binsize = 5000L,
+  binsize = 100000L,
   rmdup   = "streaming"
 )
 
-c(
-  bed_created   = file.exists(bed_file),
-  index_created = file.exists(paste0(bed_file, ".tbi")),
-  bed_size_kb   = round(file.info(bed_file)$size / 1024, 1)
-)
-#>   bed_created index_created   bed_size_kb 
-#>           1.0           1.0           4.3
-
 # Round-trip: reload into the named-list format for rwisecondorx_newref()
-sample_reloaded <- bed_to_sample(bed_file, binsize = 5000L)
-length(sample_reloaded[["11"]])  # same as bins[["11"]] above
-#> [1] 1198
+sample_reloaded <- bed_to_sample(bed_file, binsize = 100000L)
 ```
 
 [`bed_to_nipter_sample()`](https://sounkou-bioinfo.github.io/RWisecondorX/reference/bed_to_nipter_sample.md)
@@ -136,78 +109,24 @@ Performance-critical KNN reference-bin finding is compiled via Rcpp with
 OpenMP parallelisation. CBS segmentation uses DNAcopy (or ParDNAcopy for
 parallel operation) directly.
 
-The example below generates a 50-sample synthetic cohort (35 euploid
-female, 12 euploid male, 1×T21, 1×T18, 1×T13), builds a reference, and
-verifies that a trisomy sample is correctly detected.
-
 ``` r
-library(DNAcopy)
-
-# generate_cohort() uses compressed chromosome lengths (100bp = 1 genomic bin)
-# so each BAM is ~435KB. Requires samtools on PATH.
-has_samtools <- nchar(Sys.which("samtools")) > 0L
-if (!has_samtools) {
-  message("samtools not found — skipping cohort pipeline example")
-  knitr::opts_chunk$set(eval = FALSE)
-}
-```
-
-``` r
-cohort_dir <- file.path(tempdir(), "rwx_readme_cohort")
-manifest   <- suppressMessages(generate_cohort(cohort_dir, verbose = FALSE))
-
-# Cohort composition
-table(manifest$sex, manifest$trisomy)
-#>    
-#>     none T13 T18 T21
-#>   F   35   1   1   1
-#>   M   12   0   0   0
-```
-
-``` r
-# Bin all 50 BAMs
-all_samples <- lapply(
-  file.path(cohort_dir, manifest$bam_file),
-  function(bam) suppressMessages(
-    bam_convert(bam, binsize = COMPRESSED_BINSIZE, mapq = 0L, rmdup = "none")
-  )
+control_bams <- c("ctrl_01.dm.bam", "ctrl_02.dm.bam", "ctrl_03.dm.bam")
+control_samples <- lapply(
+  control_bams,
+  function(bam) bam_convert(bam, binsize = 100000L, mapq = 1L, rmdup = "streaming")
 )
-names(all_samples) <- manifest$sample_id
-```
+names(control_samples) <- sub("\\.bam$", "", basename(control_bams))
 
-``` r
-# Build reference (refsize=10 for speed; production uses refsize=300)
-ref <- suppressMessages(
-  rwisecondorx_newref(
-    samples = all_samples,
-    binsize = COMPRESSED_BINSIZE,
-    nipt    = TRUE,
-    refsize = 10L,
-    cpus    = 1L
-  )
-)
-c(binsize = ref$binsize, masked_bins = sum(!ref$mask), is_nipt = ref$is_nipt)
-#>     binsize masked_bins     is_nipt 
-#>         100         137           1
-```
-
-``` r
-# Predict on the T21 sample
-t21_id   <- manifest$sample_id[manifest$trisomy == "T21"]
-pred_t21 <- suppressMessages(
-  rwisecondorx_predict(
-    sample    = all_samples[[t21_id]],
-    reference = ref,
-    zscore    = 3,
-    alpha     = 1e-4,
-    seed      = 42L
-  )
+ref <- rwisecondorx_newref(
+  samples = control_samples,
+  binsize = 100000L,
+  nipt = TRUE,
+  cpus = 4L
 )
 
-# Chr21 should show gain
-pred_t21$aberrations[pred_t21$aberrations$chr == "21", ]
-#> [1] chr    start  end    ratio  zscore type  
-#> <0 rows> (or 0-length row.names)
+test_sample <- bam_convert("test.dm.bam", binsize = 100000L, mapq = 1L, rmdup = "streaming")
+pred <- rwisecondorx_predict(test_sample, ref, zscore = 5, seed = 42L, cpus = 4L)
+pred$aberrations
 ```
 
 ### Multi-File BED Input For Reference Building
@@ -239,29 +158,22 @@ conda environment creation automatically on first use.
 wisecondorx_convert(
   bam     = "sample.bam",
   npz     = "sample.npz",
-  binsize = 5000L,
+  binsize = 100000L,
   normdup = FALSE          # TRUE → --normdup (NIPT)
 )
 ```
 
 ``` r
-fixture_npz <- tempfile(fileext = ".npz")
+fixture_npz <- "sample.npz"
 np <- reticulate::import("numpy", convert = FALSE)
 
 bam_convert_npz(
-  bam     = fixture_bam,
+  bam     = "sample.dm.bam",
   npz     = fixture_npz,
-  binsize = 5000L,
+  binsize = 100000L,
   rmdup   = "streaming",
   np      = np
 )
-
-c(
-  npz_created = file.exists(fixture_npz),
-  npz_size    = file.info(fixture_npz)$size
-)
-#> npz_created    npz_size 
-#>           1        4792
 ```
 
 The CLI wrappers expose the upstream arguments documented in the
@@ -291,6 +203,23 @@ wisecondorx_predict(
 )
 ```
 
+For cohort preprocessing and reference building, the package now keeps
+the native and upstream WisecondorX paths explicit:
+
+- `inst/scripts/preprocess_cohort.R` stages a cohort manifest and
+  writes:
+  - native `rwisecondorx` BED.gz files
+  - optional upstream `wisecondorx` NPZ files
+  - NIPTeR BED.gz files
+- `inst/scripts/build_reference.R --mode rwisecondorx` builds a native
+  RDS reference from BED.gz files
+- `inst/scripts/build_reference.R --mode wisecondorx` builds an upstream
+  NPZ reference from NPZ files
+- `inst/scripts/wisecondorx_conformance.R` takes those prepared
+  artifacts (`bed` + `npz` test cases, plus both references), runs both
+  `predict` paths, and compares the resulting per-bin `_bins.bed`
+  outputs
+
 ## Beta Mode (Somatic CNV)
 
 [`rwisecondorx_predict()`](https://sounkou-bioinfo.github.io/RWisecondorX/reference/rwisecondorx_predict.md)
@@ -315,23 +244,6 @@ pred_somatic <- rwisecondorx_predict(
   beta      = 0.4,   # ~tumour purity
   seed      = 1L
 )
-```
-
-## Synthetic Cohort For Testing
-
-[`generate_cohort()`](https://sounkou-bioinfo.github.io/RWisecondorX/reference/generate_cohort.md)
-creates a 50-sample synthetic BAM cohort using compressed chromosome
-lengths (100bp = 1 genomic 100kb bin), so each BAM is ~435KB. The cohort
-contains euploid females and males plus three trisomy samples (T21, T18,
-T13). See the native pipeline section above for end-to-end usage.
-
-``` r
-out_dir <- tempfile("cohort_")
-manifest <- generate_cohort(out_dir)
-
-# Bin with COMPRESSED_BINSIZE (100L) to match synthetic coordinates
-bams    <- file.path(out_dir, manifest$bam_file)
-samples <- lapply(bams, bam_convert, binsize = COMPRESSED_BINSIZE, rmdup = "none")
 ```
 
 ## NIPTeR-Style Trisomy Prediction
@@ -480,8 +392,7 @@ nipter_predict_sex(test_sample, models = list(model_y, model_xy))
 [`download_sra_runinfo()`](https://sounkou-bioinfo.github.io/RWisecondorX/reference/sra_runinfo.md),
 and
 [`read_sra_runinfo()`](https://sounkou-bioinfo.github.io/RWisecondorX/reference/sra_runinfo.md)
-are small helpers for staging NCBI SRA run metadata used by conformance
-fixtures.
+are small helpers for staging NCBI SRA run metadata.
 
 ``` r
 sra_runinfo_url("PRJNA400134")
@@ -503,28 +414,23 @@ which upstream versions, and what remains unvalidated.
 - NIPTeR statistical layer (Z-score, NCV, chi, regression): formulas
   verified against inline reference implementations in
   `test_nipter_conformance.R`.
-- Trisomy detection: T21/T18/T13 all correctly called in
-  `test_cohort_pipeline.R` and `test_wisecondorx_e2e.R` using synthetic
-  cohort.
-- `rwisecondorx_newref/predict` segment and aberration comparison
-  against upstream Python: **pending real-data run** (run
-  `inst/scripts/real_data_conformance.R` with your server BAMs).
+- Native and upstream WisecondorX conformance is run on prepared
+  real-cohort artifacts via `inst/scripts/wisecondorx_conformance.R`,
+  comparing the resulting per-bin `_bins.bed` outputs from both
+  `predict` implementations.
 - Beta mode (purity-based calling): implemented, not yet tested with
   clinical samples.
 
 ## Development
 
 `README.Rmd` is the editable source for this document. Run `make readme`
-to rerender `README.md`, `make rd` to regenerate documentation from
-roxygen2 comments, `make fixtures` to rebuild the bundled test data, and
-`make conformance` to run the end-to-end WisecondorX conformance test.
+to rerender `README.md` and `make rd` to regenerate documentation from
+roxygen2 comments.
 
 # Package index
 
 ## All functions
 
-- [`COMPRESSED_BINSIZE`](https://sounkou-bioinfo.github.io/RWisecondorX/reference/COMPRESSED_BINSIZE.md)
-  : Compressed bin size for synthetic cohort BAMs
 - [`CombinedControlGroup()`](https://sounkou-bioinfo.github.io/RWisecondorX/reference/CombinedControlGroup.md)
   : NIPTeR control group for CombinedStrands samples
 - [`CombinedStrandsSample()`](https://sounkou-bioinfo.github.io/RWisecondorX/reference/CombinedStrandsSample.md)
@@ -598,8 +504,6 @@ roxygen2 comments, `make fixtures` to rebuild the bundled test data, and
   control group
 - [`fractions_for_regression()`](https://sounkou-bioinfo.github.io/RWisecondorX/reference/fractions_for_regression.md)
   : Extract fractions suitable for regression
-- [`generate_cohort()`](https://sounkou-bioinfo.github.io/RWisecondorX/reference/generate_cohort.md)
-  : Generate a synthetic BAM cohort for testing
 - [`n_bins()`](https://sounkou-bioinfo.github.io/RWisecondorX/reference/n_bins.md)
   : Number of bins in a NIPTSample
 - [`n_controls()`](https://sounkou-bioinfo.github.io/RWisecondorX/reference/n_controls.md)
@@ -670,12 +574,10 @@ roxygen2 comments, `make fixtures` to rebuild the bundled test data, and
   : QC a native WisecondorX reference
 - [`scale_sample()`](https://sounkou-bioinfo.github.io/RWisecondorX/reference/scale_sample.md)
   : Scale a binned sample to a new bin size
+- [`seqff_predict()`](https://sounkou-bioinfo.github.io/RWisecondorX/reference/seqff_predict.md)
+  : Predict Fetal Fraction with SeqFF
 - [`sex_matrix()`](https://sounkou-bioinfo.github.io/RWisecondorX/reference/sex_matrix.md)
   : Extract the sex-chromosome read-count matrix from a NIPTSample
-- [`simulate_trisomy_bam()`](https://sounkou-bioinfo.github.io/RWisecondorX/reference/simulate_trisomy_bam.md)
-  : Simulate a trisomy BAM by thinning a donor alignment
-- [`simulate_trisomy_cohort()`](https://sounkou-bioinfo.github.io/RWisecondorX/reference/simulate_trisomy_cohort.md)
-  : Simulate a trisomy cohort from donor BAMs/CRAMs
 - [`sra_runinfo_url()`](https://sounkou-bioinfo.github.io/RWisecondorX/reference/sra_runinfo.md)
   [`download_sra_runinfo()`](https://sounkou-bioinfo.github.io/RWisecondorX/reference/sra_runinfo.md)
   [`read_sra_runinfo()`](https://sounkou-bioinfo.github.io/RWisecondorX/reference/sra_runinfo.md)

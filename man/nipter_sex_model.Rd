@@ -18,7 +18,7 @@ relative to total autosomal reads.}
 }}
 }
 \value{
-An object of class \code{"NIPTeRSexModel"} with elements:
+A list-like \code{NIPTeRSexModel} S7 object with elements:
 \describe{
 \item{model}{The \code{mclust::Mclust} fitted object.}
 \item{method}{Character; the method used.}

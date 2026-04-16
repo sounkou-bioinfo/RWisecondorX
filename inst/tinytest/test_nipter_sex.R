@@ -107,8 +107,10 @@ sex_cg <- nipter_as_control_group(sex_samples)
 
 model_y <- nipter_sex_model(sex_cg, method = "y_fraction")
 
-expect_true(inherits(model_y, "NIPTeRSexModel"),
-            info = "sex model has correct class")
+expect_true(is.list(model_y),
+            info = "sex model stays list-like")
+expect_true(S7::S7_inherits(model_y, NIPTeRSexModel),
+            info = "sex model uses the typed NIPTeRSexModel S7 class")
 expect_identical(model_y$method, "y_fraction",
                  info = "sex model method is y_fraction")
 expect_true(model_y$male_cluster %in% c(1L, 2L),
@@ -148,8 +150,8 @@ expect_true(mean(male_y) > mean(female_y),
 
 model_xy <- nipter_sex_model(sex_cg, method = "xy_fraction")
 
-expect_true(inherits(model_xy, "NIPTeRSexModel"),
-            info = "XY model has correct class")
+expect_true(S7::S7_inherits(model_xy, NIPTeRSexModel),
+            info = "XY model uses the typed NIPTeRSexModel S7 class")
 expect_identical(model_xy$method, "xy_fraction",
                  info = "sex model method is xy_fraction")
 
@@ -167,8 +169,10 @@ expect_true(accuracy_xy >= 0.80,
 test_female <- .make_sex_sample("test_female", "female", seed = 999L)
 pred_f <- nipter_predict_sex(test_female, model_y)
 
-expect_true(inherits(pred_f, "NIPTeRSexPrediction"),
-            info = "prediction has correct class")
+expect_true(is.list(pred_f),
+            info = "prediction stays list-like")
+expect_true(S7::S7_inherits(pred_f, NIPTeRSexPrediction),
+            info = "prediction uses the typed NIPTeRSexPrediction S7 class")
 expect_true(pred_f$prediction %in% c("male", "female"),
             info = "prediction is male or female")
 expect_identical(pred_f$prediction, "female",
@@ -237,8 +241,8 @@ names(true_sex_yu) <- names(all_ratios)
 
 model_yu <- nipter_sex_model_y_unique(all_ratios)
 
-expect_true(inherits(model_yu, "NIPTeRSexModel"),
-            info = "y_unique model has correct class")
+expect_true(S7::S7_inherits(model_yu, NIPTeRSexModel),
+            info = "y_unique model uses the typed NIPTeRSexModel S7 class")
 expect_identical(model_yu$method, "y_unique",
                  info = "y_unique model method is correct")
 expect_true(model_yu$male_cluster %in% c(1L, 2L),
@@ -309,6 +313,334 @@ expect_true(is.na(pred_skip$model_predictions[["y_unique"]]),
 # With only the y_unique model skipped, consensus defaults to female (tie)
 expect_identical(pred_skip$prediction, "female",
                  info = "consensus defaults to female when only model skipped")
+
+
+# ===================================================================
+# TYPED REFERENCE MODEL
+# ===================================================================
+
+sex_labels <- c(
+  setNames(rep("female", 15L), paste0("female_", seq_len(15L))),
+  setNames(rep("male", 15L), paste0("male_", seq_len(15L)))
+)
+
+ref_model <- nipter_build_reference(
+  sex_cg,
+  sample_sex = sex_labels,
+  sex_source = "synthetic_truth",
+  sex_methods = c("y_fraction", "xy_fraction"),
+  y_unique_ratios = all_ratios,
+  build_params = list(source = "test_nipter_sex")
+)
+
+expect_true(is.list(ref_model),
+            info = "reference model stays list-like")
+expect_true(S7::S7_inherits(ref_model, NIPTReferenceModel),
+            info = "reference model uses the typed NIPTReferenceModel S7 class")
+expect_true(S7::S7_inherits(ref_model$reference_frame, NIPTReferenceFrame),
+            info = "reference model contains a typed reference frame")
+expect_identical(sort(names(ref_model$sex_models)),
+                 c("xy_fraction", "y_fraction", "y_unique"),
+                 info = "reference model stores all requested sex models")
+expect_identical(ref_model$sample_sex_source, "synthetic_truth",
+                 info = "reference model keeps sample-sex provenance")
+expect_identical(ref_model$reference_frame$SampleSex,
+                 unname(sex_labels[ref_model$reference_frame$Sample_name]),
+                 info = "reference model frame carries aligned sample sex labels")
+expect_identical(ref_model$reference_frame$ConsensusGender,
+                 unname(sex_labels[ref_model$reference_frame$Sample_name]),
+                 info = "reference model frame resolves consensus sex labels")
+expect_true(all(c("RR_X", "RR_Y", "RR_X_SexClassMAD", "RR_Y_SexClassMAD",
+                  "IsRefSexOutlier", "YUniqueRatio") %in%
+                  names(ref_model$reference_frame)),
+            info = "reference model frame includes sex-scoring metadata columns")
+expect_equal(ref_model$reference_frame$RR_X,
+             ref_model$reference_frame$FrChrReads_X,
+             info = "RR_X matches X fraction against autosomal totals")
+expect_equal(ref_model$reference_frame$RR_Y,
+             ref_model$reference_frame$FrChrReads_Y,
+             info = "RR_Y matches Y fraction against autosomal totals")
+expect_equal(ref_model$reference_frame$YUniqueRatio,
+             unname(all_ratios[ref_model$reference_frame$Sample_name]),
+             info = "reference model frame aligns Y-unique ratios to samples")
+expect_true(is.logical(ref_model$reference_frame$IsRefSexOutlier),
+            info = "reference model frame stores logical sex-outlier flags")
+
+pred_from_ref <- nipter_predict_sex(test_male, ref_model, y_unique_ratio = 0.004)
+expect_identical(pred_from_ref$prediction, "male",
+                 info = "reference-model dispatch predicts male sample correctly")
+
+
+# ===================================================================
+# TYPED SEX SCORE
+# ===================================================================
+
+score_f <- nipter_sex_score(test_female, ref_model, y_unique_ratio = 0.00003)
+score_m <- nipter_sex_score(test_male, ref_model, y_unique_ratio = 0.004)
+
+expect_true(is.list(score_f),
+            info = "sex score stays list-like")
+expect_true(S7::S7_inherits(score_f, NIPTSexScore),
+            info = "sex score uses the typed NIPTSexScore S7 class")
+expect_identical(score_f$predicted_sex, "female",
+                 info = "female sample scores against female controls")
+expect_identical(score_m$predicted_sex, "male",
+                 info = "male sample scores against male controls")
+expect_identical(score_f$sample_name, "test_female",
+                 info = "sex score preserves sample name")
+expect_identical(score_m$sample_name, "test_male",
+                 info = "sex score preserves sample name for males")
+expect_identical(
+  unname(score_f$z_scores[c("Z_FrChrReads_X", "Z_FrChrReads_Y")]),
+  unname(score_f$z_scores[c("Z_FrChrReads_X_XX", "Z_FrChrReads_Y_XX")]),
+  info = "female selected z-scores reuse the XX reference hypothesis"
+)
+expect_identical(
+  unname(score_m$z_scores[c("Z_FrChrReads_X", "Z_FrChrReads_Y")]),
+  unname(score_m$z_scores[c("Z_FrChrReads_X_XY", "Z_FrChrReads_Y_XY")]),
+  info = "male selected z-scores reuse the XY reference hypothesis"
+)
+
+female_ref <- ref_model$reference_frame[
+  ref_model$reference_frame$ConsensusGender == "female" &
+    !ref_model$reference_frame$IsRefSexOutlier,
+  ,
+  drop = FALSE
+]
+male_ref <- ref_model$reference_frame[
+  ref_model$reference_frame$ConsensusGender == "male" &
+    !ref_model$reference_frame$IsRefSexOutlier,
+  ,
+  drop = FALSE
+]
+
+manual_female_y <- (score_f$sample_metrics[["FrChrReads_Y"]] -
+                      mean(female_ref$FrChrReads_Y)) /
+  stats::sd(female_ref$FrChrReads_Y)
+manual_male_y <- (score_m$sample_metrics[["FrChrReads_Y"]] -
+                    mean(male_ref$FrChrReads_Y)) /
+  stats::sd(male_ref$FrChrReads_Y)
+manual_female_cv_y <- 100 * stats::sd(female_ref$FrChrReads_Y) /
+  mean(female_ref$FrChrReads_Y)
+manual_male_cv_y <- 100 * stats::sd(male_ref$FrChrReads_Y) /
+  mean(male_ref$FrChrReads_Y)
+
+expect_equal(score_f$z_scores[["Z_FrChrReads_Y"]], manual_female_y,
+             info = "female selected Y z-score matches manual reference calculation")
+expect_equal(score_m$z_scores[["Z_FrChrReads_Y"]], manual_male_y,
+             info = "male selected Y z-score matches manual reference calculation")
+expect_equal(score_f$cv[["Z_FrChrReads_CV_Y"]], manual_female_cv_y,
+             info = "female selected Y CV matches manual reference calculation")
+expect_equal(score_m$cv[["Z_FrChrReads_CV_Y"]], manual_male_cv_y,
+             info = "male selected Y CV matches manual reference calculation")
+expect_identical(score_f$reference_sizes[["same_sex"]], nrow(female_ref),
+                 info = "female score reports the filtered same-sex reference size")
+expect_identical(score_m$reference_sizes[["same_sex"]], nrow(male_ref),
+                 info = "male score reports the filtered same-sex reference size")
+expect_true(all(score_f$reference_sample_names %in% female_ref$Sample_name),
+            info = "female score uses only non-outlier female controls")
+expect_true(all(score_m$reference_sample_names %in% male_ref$Sample_name),
+            info = "male score uses only non-outlier male controls")
+
+
+# ===================================================================
+# TYPED SEX NCV / REGRESSION MODELS
+# ===================================================================
+
+small_candidate_pool <- c(1L, 2L, 4L, 5L, 6L, 7L)
+ref_model_models <- nipter_build_sex_ncv_models(
+  ref_model,
+  candidate_chromosomes = small_candidate_pool,
+  min_elements = 2L,
+  max_elements = 3L
+)
+ref_model_models <- nipter_build_sex_regression_models(
+  ref_model_models,
+  candidate_chromosomes = small_candidate_pool,
+  n_models = 2L,
+  n_predictors = 2L,
+  extra_predictors = character()
+)
+
+expect_true(S7::S7_inherits(ref_model_models, NIPTReferenceModel),
+            info = "gaunosome builders keep the typed reference model class")
+expect_true(S7::S7_inherits(ref_model_models$sex_ncv_models$female$X, NIPTSexNCVModel),
+            info = "female X NCV model is typed")
+expect_true(S7::S7_inherits(ref_model_models$sex_ncv_models$male$Y, NIPTSexNCVModel),
+            info = "male Y NCV model is typed")
+expect_true(all(vapply(ref_model_models$sex_regression_models$female$X,
+                       function(x) S7::S7_inherits(x, NIPTSexRegressionModel),
+                       logical(1L))),
+            info = "female X regression models are typed")
+expect_true(all(vapply(ref_model_models$sex_regression_models$male$Y,
+                       function(x) S7::S7_inherits(x, NIPTSexRegressionModel),
+                       logical(1L))),
+            info = "male Y regression models are typed")
+
+sample_rr <- function(sample) {
+  auto_counts <- rowSums(sample$autosomal_chromosome_reads[[1L]])
+  sex_counts <- rowSums(sample$sex_chromosome_reads[[1L]])
+  auto_total <- sum(auto_counts)
+  vals <- c(auto_counts, sex_counts)
+  names(vals) <- c(paste0("RR_", as.character(1:22)), "RR_X", "RR_Y")
+  vals / auto_total
+}
+
+ncv_x_f <- nipter_ncv_sex_score(test_female, ref_model_models,
+                                focus_chromosome = "X",
+                                y_unique_ratio = 0.00003)
+ncv_y_m <- nipter_ncv_sex_score(test_male, ref_model_models,
+                                focus_chromosome = "Y",
+                                y_unique_ratio = 0.004)
+
+expect_true(S7::S7_inherits(ncv_x_f, NIPTSexNCVScore),
+            info = "female X NCV score is typed")
+expect_true(S7::S7_inherits(ncv_y_m, NIPTSexNCVScore),
+            info = "male Y NCV score is typed")
+expect_identical(ncv_x_f$predicted_sex, "female",
+                 info = "female X NCV score uses female reference set")
+expect_identical(ncv_y_m$predicted_sex, "male",
+                 info = "male Y NCV score uses male reference set")
+expect_identical(ncv_x_f$sample_scores[["selected"]],
+                 ncv_x_f$sample_scores[["female"]],
+                 info = "selected NCV score reuses the female score for female samples")
+expect_identical(ncv_y_m$sample_scores[["selected"]],
+                 ncv_y_m$sample_scores[["male"]],
+                 info = "selected NCV score reuses the male score for male samples")
+
+female_x_ncv_model <- ref_model_models$sex_ncv_models$female$X
+male_y_ncv_model <- ref_model_models$sex_ncv_models$male$Y
+test_female_row <- c(rowSums(test_female$autosomal_chromosome_reads[[1L]]),
+                     rowSums(test_female$sex_chromosome_reads[[1L]]))
+names(test_female_row) <- c(paste0("NChrReads_", as.character(1:22)),
+                            "NChrReads_X", "NChrReads_Y")
+test_male_row <- c(rowSums(test_male$autosomal_chromosome_reads[[1L]]),
+                   rowSums(test_male$sex_chromosome_reads[[1L]]))
+names(test_male_row) <- c(paste0("NChrReads_", as.character(1:22)),
+                          "NChrReads_X", "NChrReads_Y")
+
+manual_ncv_f_x <- (test_female_row[["NChrReads_X"]] /
+                     sum(test_female_row[female_x_ncv_model$denominators]) -
+                     female_x_ncv_model$control_statistics[["mean"]]) /
+  female_x_ncv_model$control_statistics[["sd"]]
+manual_ncv_m_y <- (test_male_row[["NChrReads_Y"]] /
+                     sum(test_male_row[male_y_ncv_model$denominators]) -
+                     male_y_ncv_model$control_statistics[["mean"]]) /
+  male_y_ncv_model$control_statistics[["sd"]]
+
+expect_equal(ncv_x_f$sample_scores[["female"]], manual_ncv_f_x,
+             info = "female X NCV score matches manual calculation")
+expect_equal(ncv_y_m$sample_scores[["male"]], manual_ncv_m_y,
+             info = "male Y NCV score matches manual calculation")
+
+reg_x_f <- nipter_regression_sex_score(test_female, ref_model_models,
+                                       focus_chromosome = "X",
+                                       y_unique_ratio = 0.00003)
+reg_y_m <- nipter_regression_sex_score(test_male, ref_model_models,
+                                       focus_chromosome = "Y",
+                                       y_unique_ratio = 0.004)
+
+expect_true(S7::S7_inherits(reg_x_f, NIPTSexRegressionScore),
+            info = "female X regression score is typed")
+expect_true(S7::S7_inherits(reg_y_m, NIPTSexRegressionScore),
+            info = "male Y regression score is typed")
+expect_identical(reg_x_f$predicted_sex, "female",
+                 info = "female regression score uses female models")
+expect_identical(reg_y_m$predicted_sex, "male",
+                 info = "male regression score uses male models")
+expect_equal(reg_x_f$aggregate_scores[["selected_mean"]],
+             reg_x_f$aggregate_scores[["female_mean"]],
+             info = "female selected regression mean matches female model mean")
+expect_equal(reg_y_m$aggregate_scores[["selected_mean"]],
+             reg_y_m$aggregate_scores[["male_mean"]],
+             info = "male selected regression mean matches male model mean")
+
+female_x_reg_model <- ref_model_models$sex_regression_models$female$X[[1L]]
+male_y_reg_model <- ref_model_models$sex_regression_models$male$Y[[1L]]
+test_female_rr <- sample_rr(test_female)
+test_male_rr <- sample_rr(test_male)
+
+female_x_newdata <- as.data.frame(as.list(test_female_rr[c(female_x_reg_model$predictors,
+                                                           female_x_reg_model$response_column)]))
+male_y_newdata <- as.data.frame(as.list(test_male_rr[c(male_y_reg_model$predictors,
+                                                       male_y_reg_model$response_column)]))
+manual_reg_f_x_ratio <- test_female_rr[[female_x_reg_model$response_column]] /
+  as.numeric(stats::predict(female_x_reg_model$fit, newdata = female_x_newdata))
+manual_reg_m_y_ratio <- test_male_rr[[male_y_reg_model$response_column]] /
+  as.numeric(stats::predict(male_y_reg_model$fit, newdata = male_y_newdata))
+manual_reg_f_x <- (manual_reg_f_x_ratio - 1) /
+  female_x_reg_model$control_statistics[["sd_ratio"]]
+manual_reg_m_y <- (manual_reg_m_y_ratio - 1) /
+  male_y_reg_model$control_statistics[["sd_ratio"]]
+
+expect_equal(reg_x_f$scores$female[[1L]], manual_reg_f_x,
+             info = "female X regression score matches manual first-model calculation")
+expect_equal(reg_y_m$scores$male[[1L]], manual_reg_m_y,
+             info = "male Y regression score matches manual first-model calculation")
+
+
+# ===================================================================
+# AGGREGATE GAUNOSOME API
+# ===================================================================
+
+ref_model_bundle <- nipter_build_gaunosome_models(
+  ref_model,
+  candidate_chromosomes = small_candidate_pool,
+  ncv_min_elements = 2L,
+  ncv_max_elements = 3L,
+  regression_n_models = 2L,
+  regression_n_predictors = 2L,
+  regression_extra_predictors = character()
+)
+
+expect_true(S7::S7_inherits(ref_model_bundle, NIPTReferenceModel),
+            info = "aggregate gaunosome builder keeps the typed reference class")
+expect_true("sex_ncv_models" %in% names(ref_model_bundle),
+            info = "aggregate gaunosome builder attaches NCV models")
+expect_true("sex_regression_models" %in% names(ref_model_bundle),
+            info = "aggregate gaunosome builder attaches regression models")
+
+gauno_f <- nipter_gaunosome_score(test_female, ref_model_bundle,
+                                  y_unique_ratio = 0.00003)
+gauno_m <- nipter_gaunosome_score(test_male, ref_model_bundle,
+                                  y_unique_ratio = 0.004)
+
+expect_true(S7::S7_inherits(gauno_f, NIPTGaunosomeScore),
+            info = "aggregate female gaunosome score is typed")
+expect_true(S7::S7_inherits(gauno_m, NIPTGaunosomeScore),
+            info = "aggregate male gaunosome score is typed")
+expect_identical(gauno_f$predicted_sex, "female",
+                 info = "aggregate female gaunosome score preserves predicted sex")
+expect_identical(gauno_m$predicted_sex, "male",
+                 info = "aggregate male gaunosome score preserves predicted sex")
+expect_identical(sort(names(gauno_f$ncv_scores)), c("X", "Y"),
+                 info = "aggregate gaunosome score includes X/Y NCV components")
+expect_identical(sort(names(gauno_f$regression_scores)), c("X", "Y"),
+                 info = "aggregate gaunosome score includes X/Y regression components")
+expect_identical(gauno_f$summary$chromosome, c("X", "Y"),
+                 info = "aggregate summary reports one row per requested gaunosome")
+expect_identical(gauno_m$summary$chromosome, c("X", "Y"),
+                 info = "aggregate male summary reports one row per requested gaunosome")
+
+gauno_fx <- gauno_f$summary[gauno_f$summary$chromosome == "X", , drop = FALSE]
+gauno_my <- gauno_m$summary[gauno_m$summary$chromosome == "Y", , drop = FALSE]
+
+expect_equal(gauno_fx$z_score, gauno_f$sex_score$z_scores[["Z_FrChrReads_X"]],
+             info = "aggregate summary X z-score matches the selected sex score")
+expect_equal(gauno_my$z_score, gauno_m$sex_score$z_scores[["Z_FrChrReads_Y"]],
+             info = "aggregate summary Y z-score matches the selected sex score")
+expect_equal(gauno_fx$ncv_score_selected,
+             gauno_f$ncv_scores$X$sample_scores[["selected"]],
+             info = "aggregate summary X NCV score matches the component score")
+expect_equal(gauno_my$ncv_score_selected,
+             gauno_m$ncv_scores$Y$sample_scores[["selected"]],
+             info = "aggregate summary Y NCV score matches the component score")
+expect_equal(gauno_fx$regression_score_selected,
+             gauno_f$regression_scores$X$aggregate_scores[["selected_mean"]],
+             info = "aggregate summary X regression score matches the component score")
+expect_equal(gauno_my$regression_score_selected,
+             gauno_m$regression_scores$Y$aggregate_scores[["selected_mean"]],
+             info = "aggregate summary Y regression score matches the component score")
 
 
 # ===================================================================

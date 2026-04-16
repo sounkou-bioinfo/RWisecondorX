@@ -16,6 +16,25 @@ NCVTemplate(
   train_sample_names = character(0)
 )
 }
+\arguments{
+\item{focus_chromosome}{Integer chromosome identifier of the numerator.}
+
+\item{denominators}{Character vector of denominator chromosome labels.}
+
+\item{ctrl_mean}{Mean control ratio for the chosen denominator set.}
+
+\item{ctrl_sd}{Standard deviation of the control ratios.}
+
+\item{ctrl_cv}{Coefficient of variation of the control ratios.}
+
+\item{shapiro_p}{Shapiro-Wilk p-value for the control-ratio distribution.}
+
+\item{test_z_scores}{Numeric vector of held-out control z-scores.}
+
+\item{test_sample_names}{Names corresponding to \code{test_z_scores}.}
+
+\item{train_sample_names}{Control-sample names used to fit the template.}
+}
 \description{
 Returned by \code{nipter_prepare_ncv()} and consumed by
 \code{nipter_ncv_score()}.

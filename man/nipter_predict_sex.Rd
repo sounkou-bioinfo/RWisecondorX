@@ -9,8 +9,9 @@ nipter_predict_sex(sample, ..., y_unique_ratio = NULL)
 \arguments{
 \item{sample}{A \code{NIPTeRSample} object.}
 
-\item{...}{One or more \code{NIPTeRSexModel} objects, or a single list
-of models.}
+\item{...}{One or more \code{NIPTeRSexModel} objects, a single list of such
+models, or one \code{NIPTReferenceModel} containing pre-built
+\code{sex_models}.}
 
 \item{y_unique_ratio}{Optional numeric scalar; a pre-computed Y-unique
 ratio (from \code{\link{nipter_y_unique_ratio}}) for the sample. This
@@ -19,7 +20,7 @@ If a \code{"y_unique"} model is present and this argument is
 \code{NULL}, that model is skipped with a warning.}
 }
 \value{
-A list of class \code{"NIPTeRSexPrediction"} with elements:
+A list-like \code{NIPTeRSexPrediction} S7 object with elements:
 \describe{
 \item{prediction}{Character; \code{"male"} or \code{"female"} (consensus
 when multiple models).}

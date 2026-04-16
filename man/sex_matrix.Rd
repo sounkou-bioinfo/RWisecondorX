@@ -8,6 +8,8 @@ sex_matrix(x, ...)
 }
 \arguments{
 \item{x}{A \code{NIPTSample} object.}
+
+\item{...}{Reserved for S7 method dispatch; currently unused.}
 }
 \value{
 A 2-row numeric matrix.

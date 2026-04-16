@@ -18,7 +18,7 @@
 #'     \item{\code{"xy_fraction"}}{Bivariate: X and Y chromosome fractions.}
 #'   }
 #'
-#' @return An object of class \code{"NIPTeRSexModel"} with elements:
+#' @return A list-like \code{NIPTeRSexModel} S7 object with elements:
 #' \describe{
 #'   \item{model}{The \code{mclust::Mclust} fitted object.}
 #'   \item{method}{Character; the method used.}
@@ -111,16 +111,13 @@ nipter_sex_model <- function(control_group,
   labels <- ifelse(gmm$classification == male_cluster, "male", "female")
   names(labels) <- sample_names
 
-  structure(
-    list(
-      model          = gmm,
-      method         = method,
-      male_cluster   = male_cluster,
-      classifications = labels,
-      fractions      = fracs
-    ),
-    class = "NIPTeRSexModel"
-  )
+  .as_nipter_sex_model(list(
+    model           = gmm,
+    method          = method,
+    male_cluster    = male_cluster,
+    classifications = labels,
+    fractions       = fracs
+  ))
 }
 
 
@@ -131,15 +128,16 @@ nipter_sex_model <- function(control_group,
 #' determines the consensus call.
 #'
 #' @param sample A \code{NIPTeRSample} object.
-#' @param ... One or more \code{NIPTeRSexModel} objects, or a single list
-#'   of models.
+#' @param ... One or more \code{NIPTeRSexModel} objects, a single list of such
+#'   models, or one \code{NIPTReferenceModel} containing pre-built
+#'   \code{sex_models}.
 #' @param y_unique_ratio Optional numeric scalar; a pre-computed Y-unique
 #'   ratio (from \code{\link{nipter_y_unique_ratio}}) for the sample. This
 #'   is only used when one of the models has \code{method = "y_unique"}.
 #'   If a \code{"y_unique"} model is present and this argument is
 #'   \code{NULL}, that model is skipped with a warning.
 #'
-#' @return A list of class \code{"NIPTeRSexPrediction"} with elements:
+#' @return A list-like \code{NIPTeRSexPrediction} S7 object with elements:
 #' \describe{
 #'   \item{prediction}{Character; \code{"male"} or \code{"female"} (consensus
 #'     when multiple models).}
@@ -189,8 +187,10 @@ nipter_predict_sex <- function(sample, ..., y_unique_ratio = NULL) {
   models <- list(...)
   # Allow a single list of models
 
-  if (length(models) == 1L && is.list(models[[1L]]) &&
-      !inherits(models[[1L]], "NIPTeRSexModel")) {
+  if (length(models) == 1L && .is_nipt_reference_model(models[[1L]])) {
+    models <- models[[1L]]$sex_models
+  } else if (length(models) == 1L && is.list(models[[1L]]) &&
+             !.is_nipter_sex_model(models[[1L]])) {
     models <- models[[1L]]
   }
 
@@ -199,7 +199,7 @@ nipter_predict_sex <- function(sample, ..., y_unique_ratio = NULL) {
   }
 
   for (i in seq_along(models)) {
-    if (!inherits(models[[i]], "NIPTeRSexModel")) {
+    if (!.is_nipter_sex_model(models[[i]])) {
       stop("All models must be NIPTeRSexModel objects.", call. = FALSE)
     }
   }
@@ -213,7 +213,7 @@ nipter_predict_sex <- function(sample, ..., y_unique_ratio = NULL) {
   sample_fracs <- .sample_sex_fractions(sample)
 
   model_preds <- character(length(models))
-  names(model_preds) <- vapply(models, function(m) m$method, character(1L))
+  names(model_preds) <- make.unique(vapply(models, function(m) m$method, character(1L)))
 
   for (i in seq_along(models)) {
     mdl <- models[[i]]
@@ -248,15 +248,12 @@ nipter_predict_sex <- function(sample, ..., y_unique_ratio = NULL) {
   n_female <- sum(valid_preds == "female")
   consensus <- if (n_male > n_female) "male" else "female"
 
-  structure(
-    list(
-      prediction       = consensus,
-      model_predictions = model_preds,
-      fractions        = sample_fracs,
-      sample_name      = sample$sample_name
-    ),
-    class = "NIPTeRSexPrediction"
-  )
+  .as_nipter_sex_prediction(list(
+    prediction = consensus,
+    model_predictions = model_preds,
+    fractions = sample_fracs,
+    sample_name = .sample_name(sample)
+  ))
 }
 
 
@@ -276,7 +273,7 @@ nipter_predict_sex <- function(sample, ..., y_unique_ratio = NULL) {
 #'   Typically obtained by calling \code{\link{nipter_y_unique_ratio}} on
 #'   each BAM in the control cohort.
 #'
-#' @return An object of class \code{"NIPTeRSexModel"} with elements:
+#' @return A list-like \code{NIPTeRSexModel} S7 object with elements:
 #' \describe{
 #'   \item{model}{The \code{mclust::Mclust} fitted object.}
 #'   \item{method}{\code{"y_unique"}.}
@@ -336,16 +333,13 @@ nipter_sex_model_y_unique <- function(ratios) {
   labels <- ifelse(gmm$classification == male_cluster, "male", "female")
   names(labels) <- names(ratios)
 
-  structure(
-    list(
-      model          = gmm,
-      method         = "y_unique",
-      male_cluster   = male_cluster,
-      classifications = labels,
-      fractions      = ratios
-    ),
-    class = "NIPTeRSexModel"
-  )
+  .as_nipter_sex_model(list(
+    model           = gmm,
+    method          = "y_unique",
+    male_cluster    = male_cluster,
+    classifications = labels,
+    fractions       = ratios
+  ))
 }
 
 

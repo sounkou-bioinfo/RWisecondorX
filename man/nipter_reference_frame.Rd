@@ -14,9 +14,10 @@ on \code{control_group}. Accepted values are \code{"female"},
 \code{"male"}, \code{"ambiguous"}, and \code{"unknown"}.}
 }
 \value{
-A \code{data.frame} with one row per sample and columns:
-\code{Sample_name}, optional \code{SampleSex}, \code{NChrReads_*}, and
-\code{FrChrReads_*} for chromosomes \code{1:22}, \code{X}, and \code{Y}.
+A typed \code{NIPTReferenceFrame} data frame with one row per sample
+and columns: \code{Sample_name}, optional \code{SampleSex},
+\code{NChrReads_*}, and \code{FrChrReads_*} for chromosomes \code{1:22},
+\code{X}, and \code{Y}.
 }
 \description{
 Produces the per-sample count and fraction table that downstream sex-aware

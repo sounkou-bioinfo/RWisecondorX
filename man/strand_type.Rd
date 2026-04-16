@@ -8,6 +8,8 @@ strand_type(x, ...)
 }
 \arguments{
 \item{x}{A \code{NIPTSample} object.}
+
+\item{...}{Reserved for S7 method dispatch; currently unused.}
 }
 \value{
 \code{"combined"} or \code{"separated"}.

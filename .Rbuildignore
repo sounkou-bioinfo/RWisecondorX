@@ -14,8 +14,17 @@
 ^setup\.cfg$
 ^conda\.yml$
 ^README\.WisecondorX\.md$
+^README\.html$
+^VALIDATION\.md$
+^design$
 ^\.pre-commit-config\.yaml$
 ^RWisecondorX\.Rcheck$
 ^RWisecondorX_.*\.tar\.gz$
 ^\.sync$
 ^\.codex$
+^_site$
+^Rduckhts\.llm\.txt$
+^S7\.llm\.txt$
+^review\.md$
+^rwisecondorx_claude_review\.md$
+^simutation\.txt$

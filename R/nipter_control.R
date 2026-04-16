@@ -603,6 +603,24 @@ nipter_control_group_from_beds <- function(bed_dir,
   stats::setNames(rowSums(mat), rownames(mat))
 }
 
+.sample_reference_frame_row <- function(sample) {
+  chroms <- c(as.character(1:22), "X", "Y")
+  auto_counts <- .sample_chr_reads(sample)
+  sex_counts <- stats::setNames(rowSums(sex_matrix(sample)), c("X", "Y"))
+  chr_counts <- c(auto_counts[as.character(1:22)], sex_counts[c("X", "Y")])
+  auto_total <- sum(auto_counts)
+  chr_fracs <- chr_counts / max(auto_total, .Machine$double.eps)
+
+  row <- c(
+    Sample_name = .sample_name(sample),
+    stats::setNames(as.list(as.numeric(chr_counts)),
+                    paste0("NChrReads_", chroms)),
+    stats::setNames(as.list(as.numeric(chr_fracs)),
+                    paste0("FrChrReads_", chroms))
+  )
+  as.data.frame(row, stringsAsFactors = FALSE)
+}
+
 
 #' Build a chromosome-level reference frame from a NIPTeR control group
 #'
@@ -617,9 +635,10 @@ nipter_control_group_from_beds <- function(bed_dir,
 #'   on \code{control_group}. Accepted values are \code{"female"},
 #'   \code{"male"}, \code{"ambiguous"}, and \code{"unknown"}.
 #'
-#' @return A \code{data.frame} with one row per sample and columns:
-#'   \code{Sample_name}, optional \code{SampleSex}, \code{NChrReads_*}, and
-#'   \code{FrChrReads_*} for chromosomes \code{1:22}, \code{X}, and \code{Y}.
+#' @return A typed \code{NIPTReferenceFrame} data frame with one row per sample
+#'   and columns: \code{Sample_name}, optional \code{SampleSex},
+#'   \code{NChrReads_*}, and \code{FrChrReads_*} for chromosomes \code{1:22},
+#'   \code{X}, and \code{Y}.
 #'
 #' @export
 nipter_reference_frame <- function(control_group, sample_sex = NULL) {
@@ -634,22 +653,7 @@ nipter_reference_frame <- function(control_group, sample_sex = NULL) {
   )
 
   chroms <- c(as.character(1:22), "X", "Y")
-  rows <- lapply(samples, function(sample) {
-    auto_counts <- .sample_chr_reads(sample)
-    sex_counts <- stats::setNames(rowSums(sex_matrix(sample)), c("X", "Y"))
-    chr_counts <- c(auto_counts[as.character(1:22)], sex_counts[c("X", "Y")])
-    auto_total <- sum(auto_counts)
-    chr_fracs <- chr_counts / max(auto_total, .Machine$double.eps)
-
-    row <- c(
-      Sample_name = .sample_name(sample),
-      stats::setNames(as.list(as.numeric(chr_counts)),
-                      paste0("NChrReads_", chroms)),
-      stats::setNames(as.list(as.numeric(chr_fracs)),
-                      paste0("FrChrReads_", chroms))
-    )
-    as.data.frame(row, stringsAsFactors = FALSE)
-  })
+  rows <- lapply(samples, .sample_reference_frame_row)
 
   out <- do.call(rbind, rows)
   rownames(out) <- NULL
@@ -667,5 +671,5 @@ nipter_reference_frame <- function(control_group, sample_sex = NULL) {
     out <- out[, c("Sample_name", count_cols, frac_cols), drop = FALSE]
   }
 
-  out
+  .as_nipt_reference_frame(out)
 }

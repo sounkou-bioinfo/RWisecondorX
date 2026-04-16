@@ -6,6 +6,9 @@
 \usage{
 WisecondorXObject(.data)
 }
+\arguments{
+\item{.data}{Named list payload for the typed constructor.}
+}
 \description{
 Abstract base class for WisecondorX list-like objects
 }

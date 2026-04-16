@@ -12,6 +12,18 @@ CombinedStrandsSample(
   sex_matrix_ = NULL
 )
 }
+\arguments{
+\item{sample_name}{Sample identifier.}
+
+\item{binsize}{Positive integer bin width in base pairs.}
+
+\item{correction}{A \code{NIPTCorrectionRecord} describing the applied
+corrections.}
+
+\item{auto_matrix}{22 x n_bins numeric matrix for autosomes.}
+
+\item{sex_matrix_}{2 x n_bins numeric matrix for X/Y.}
+}
 \description{
 NIPTeR sample with combined forward+reverse read counts
 }

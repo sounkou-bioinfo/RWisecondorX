@@ -170,10 +170,4 @@ read_sra_runinfo <- function(
   register_compat_method("[[", "CombinedControlGroup", .nipt_control_group_subset2)
   register_compat_method("[[", "SeparatedControlGroup", .nipt_control_group_subset2)
 
-  register_compat_method("$<-", "NIPTSample", .nipt_sample_dollar_assign)
-  register_compat_method("$<-", "CombinedStrandsSample", .nipt_sample_dollar_assign)
-  register_compat_method("$<-", "SeparatedStrandsSample", .nipt_sample_dollar_assign)
-  register_compat_method("$<-", "NIPTControlGroup", .nipt_control_group_dollar_assign)
-  register_compat_method("$<-", "CombinedControlGroup", .nipt_control_group_dollar_assign)
-  register_compat_method("$<-", "SeparatedControlGroup", .nipt_control_group_dollar_assign)
 }

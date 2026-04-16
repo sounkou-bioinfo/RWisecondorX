@@ -8,6 +8,8 @@ control_names(cg, ...)
 }
 \arguments{
 \item{cg}{A \code{NIPTControlGroup} object.}
+
+\item{...}{Reserved for S7 method dispatch; currently unused.}
 }
 \value{
 A character vector.

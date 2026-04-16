@@ -6,6 +6,9 @@
 \usage{
 WisecondorXReferenceQC(.data)
 }
+\arguments{
+\item{.data}{Named list payload for the typed constructor.}
+}
 \description{
 A structured QC report returned by \code{\link[=rwisecondorx_ref_qc]{rwisecondorx_ref_qc()}}.
 }

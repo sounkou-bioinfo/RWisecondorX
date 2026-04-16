@@ -22,6 +22,8 @@ biocViews:
 Config/WisecondorX/bioconda-package: wisecondorx
 License: GPL (>= 3)
 Encoding: UTF-8
+OS_type: unix
+SystemRequirements: GNU make, zlib, libbz2, liblzma, libdeflate
 Roxygen: list(markdown = TRUE)
 RoxygenNote: 7.3.3
 URL: https://sounkou-bioinfo.github.io/RWisecondorX/

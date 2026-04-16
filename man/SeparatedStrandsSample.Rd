@@ -14,6 +14,22 @@ SeparatedStrandsSample(
   sex_rev = NULL
 )
 }
+\arguments{
+\item{sample_name}{Sample identifier.}
+
+\item{binsize}{Positive integer bin width in base pairs.}
+
+\item{correction}{A \code{NIPTCorrectionRecord} describing the applied
+corrections.}
+
+\item{auto_fwd}{22 x n_bins numeric forward-strand autosomal matrix.}
+
+\item{auto_rev}{22 x n_bins numeric reverse-strand autosomal matrix.}
+
+\item{sex_fwd}{2 x n_bins numeric forward-strand X/Y matrix.}
+
+\item{sex_rev}{2 x n_bins numeric reverse-strand X/Y matrix.}
+}
 \description{
 NIPTeR sample with separate forward and reverse read counts
 }

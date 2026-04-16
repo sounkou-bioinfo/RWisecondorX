@@ -12,6 +12,20 @@ SeparatedControlGroup(
   .cache = new.env(parent = emptyenv())
 )
 }
+\arguments{
+\item{samples}{List of \code{NIPTeRSample} or \code{NIPTSample} objects.}
+
+\item{description}{Human-readable label for the control group.}
+
+\item{sample_sex}{Optional named character vector keyed by sample name with
+values in \code{female}, \code{male}, \code{ambiguous}, or
+\code{unknown}.}
+
+\item{sex_source}{Optional scalar string describing the origin of
+\code{sample_sex}.}
+
+\item{.cache}{Internal environment used for lazy cached summaries.}
+}
 \description{
 NIPTeR control group for SeparatedStrands samples
 }

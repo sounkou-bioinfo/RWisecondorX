@@ -8,6 +8,8 @@ n_bins(x, ...)
 }
 \arguments{
 \item{x}{A \code{NIPTSample} object.}
+
+\item{...}{Reserved for S7 method dispatch; currently unused.}
 }
 \value{
 A positive integer.

@@ -31,6 +31,16 @@
   )
 }
 
+.nipt_model_list_class <- S7::new_S3_class(
+  "list",
+  constructor = function(.data) .data
+)
+
+.nipt_model_df_class <- S7::new_S3_class(
+  "data.frame",
+  constructor = function(.data) .data
+)
+
 
 # ---- Correction record -------------------------------------------------------
 
@@ -38,6 +48,11 @@
 #'
 #' Tracks the sequence of corrections applied to the autosomal and sex
 #' chromosome matrices of a \code{NIPTSample} object.
+#'
+#' @param autosomal Character vector describing the autosomal correction
+#'   history. Defaults to \code{"Uncorrected"}.
+#' @param sex Character vector describing the sex-chromosome correction
+#'   history. Defaults to \code{"Uncorrected"}.
 #'
 #' @export
 NIPTCorrectionRecord <- S7::new_class(
@@ -58,6 +73,11 @@ NIPTCorrectionRecord <- S7::new_class(
 #' Never instantiated directly. Subclasses are \code{CombinedStrandsSample}
 #' (reads are summed across strands) and \code{SeparatedStrandsSample} (forward
 #' and reverse counts stored independently).
+#'
+#' @param sample_name Sample identifier.
+#' @param binsize Positive integer bin width in base pairs.
+#' @param correction A \code{NIPTCorrectionRecord} describing the applied
+#'   corrections.
 #'
 #' @export
 NIPTSample <- S7::new_class(
@@ -88,6 +108,7 @@ NIPTSample <- S7::new_class(
 #' reverse counts are summed.
 #'
 #' @param x A \code{NIPTSample} object.
+#' @param ... Reserved for S7 method dispatch; currently unused.
 #' @return A 22-row numeric matrix.
 #' @export
 autosomal_matrix <- S7::new_generic("autosomal_matrix", "x")
@@ -98,6 +119,7 @@ autosomal_matrix <- S7::new_generic("autosomal_matrix", "x")
 #' For \code{SeparatedStrandsSample}, forward and reverse counts are summed.
 #'
 #' @param x A \code{NIPTSample} object.
+#' @param ... Reserved for S7 method dispatch; currently unused.
 #' @return A 2-row numeric matrix.
 #' @export
 sex_matrix <- S7::new_generic("sex_matrix", "x")
@@ -105,6 +127,7 @@ sex_matrix <- S7::new_generic("sex_matrix", "x")
 #' Return the strand type of a NIPTSample
 #'
 #' @param x A \code{NIPTSample} object.
+#' @param ... Reserved for S7 method dispatch; currently unused.
 #' @return \code{"combined"} or \code{"separated"}.
 #' @export
 strand_type <- S7::new_generic("strand_type", "x")
@@ -112,6 +135,7 @@ strand_type <- S7::new_generic("strand_type", "x")
 #' Number of bins in a NIPTSample
 #'
 #' @param x A \code{NIPTSample} object.
+#' @param ... Reserved for S7 method dispatch; currently unused.
 #' @return A positive integer.
 #' @export
 n_bins <- S7::new_generic("n_bins", "x")
@@ -122,6 +146,10 @@ S7::method(n_bins, NIPTSample) <- function(x) ncol(autosomal_matrix(x))
 # ---- CombinedStrandsSample ---------------------------------------------------
 
 #' NIPTeR sample with combined forward+reverse read counts
+#'
+#' @inheritParams NIPTSample
+#' @param auto_matrix 22 x n_bins numeric matrix for autosomes.
+#' @param sex_matrix_ 2 x n_bins numeric matrix for X/Y.
 #'
 #' @slot auto_matrix  22 x n_bins numeric matrix (rows = chr 1-22).
 #' @slot sex_matrix_  2 x n_bins numeric matrix (row 1 = X, row 2 = Y).
@@ -144,6 +172,12 @@ S7::method(strand_type,      CombinedStrandsSample) <- function(x) "combined"
 # ---- SeparatedStrandsSample --------------------------------------------------
 
 #' NIPTeR sample with separate forward and reverse read counts
+#'
+#' @inheritParams NIPTSample
+#' @param auto_fwd 22 x n_bins numeric forward-strand autosomal matrix.
+#' @param auto_rev 22 x n_bins numeric reverse-strand autosomal matrix.
+#' @param sex_fwd 2 x n_bins numeric forward-strand X/Y matrix.
+#' @param sex_rev 2 x n_bins numeric reverse-strand X/Y matrix.
 #'
 #' @slot auto_fwd  22 x n_bins numeric matrix (forward strand).
 #' @slot auto_rev  22 x n_bins numeric matrix (reverse strand).
@@ -371,6 +405,7 @@ S7::method(n_bins, .s3_NIPTeRSample) <- function(x) {
 #' Extract collapsed 22 x N autosomal chromosome fractions from a control group
 #'
 #' @param cg A \code{NIPTControlGroup} object.
+#' @param ... Reserved for S7 method dispatch; currently unused.
 #' @return A 22 x N numeric matrix of chromosome fractions.
 #' @export
 fractions_auto <- S7::new_generic("fractions_auto", "cg")
@@ -381,24 +416,36 @@ fractions_auto <- S7::new_generic("fractions_auto", "cg")
 #' For \code{SeparatedControlGroup}: 44 x N matrix (rows "1F".."22F","1R".."22R").
 #'
 #' @param cg A \code{NIPTControlGroup} object.
+#' @param ... Reserved for S7 method dispatch; currently unused.
 #' @return A numeric matrix.
 #' @export
 fractions_for_regression <- S7::new_generic("fractions_for_regression", "cg")
 
 #' Number of samples in a control group
 #' @param cg A \code{NIPTControlGroup} object.
+#' @param ... Reserved for S7 method dispatch; currently unused.
 #' @return An integer.
 #' @export
 n_controls <- S7::new_generic("n_controls", "cg")
 
 #' Sample names of a control group
 #' @param cg A \code{NIPTControlGroup} object.
+#' @param ... Reserved for S7 method dispatch; currently unused.
 #' @return A character vector.
 #' @export
 control_names <- S7::new_generic("control_names", "cg")
 
 
 #' Abstract base class for NIPTeR control groups
+#'
+#' @param samples List of \code{NIPTeRSample} or \code{NIPTSample} objects.
+#' @param description Human-readable label for the control group.
+#' @param sample_sex Optional named character vector keyed by sample name with
+#'   values in \code{female}, \code{male}, \code{ambiguous}, or
+#'   \code{unknown}.
+#' @param sex_source Optional scalar string describing the origin of
+#'   \code{sample_sex}.
+#' @param .cache Internal environment used for lazy cached summaries.
 #'
 #' @export
 NIPTControlGroup <- S7::new_class(
@@ -494,6 +541,8 @@ S7::method(control_names, NIPTControlGroup) <- function(cg)
 
 
 #' NIPTeR control group for CombinedStrands samples
+#'
+#' @inheritParams NIPTControlGroup
 #' @export
 CombinedControlGroup <- S7::new_class(
   "CombinedControlGroup",
@@ -501,6 +550,8 @@ CombinedControlGroup <- S7::new_class(
 )
 
 #' NIPTeR control group for SeparatedStrands samples
+#'
+#' @inheritParams NIPTControlGroup
 #' @export
 SeparatedControlGroup <- S7::new_class(
   "SeparatedControlGroup",
@@ -697,6 +748,16 @@ S7::method(fractions_for_regression, .s3_NIPTeRControlGroup) <- function(cg) {
 #' Returned by \code{nipter_prepare_ncv()} and consumed by
 #' \code{nipter_ncv_score()}.
 #'
+#' @param focus_chromosome Integer chromosome identifier of the numerator.
+#' @param denominators Character vector of denominator chromosome labels.
+#' @param ctrl_mean Mean control ratio for the chosen denominator set.
+#' @param ctrl_sd Standard deviation of the control ratios.
+#' @param ctrl_cv Coefficient of variation of the control ratios.
+#' @param shapiro_p Shapiro-Wilk p-value for the control-ratio distribution.
+#' @param test_z_scores Numeric vector of held-out control z-scores.
+#' @param test_sample_names Names corresponding to \code{test_z_scores}.
+#' @param train_sample_names Control-sample names used to fit the template.
+#'
 #' @export
 NCVTemplate <- S7::new_class(
   "NCVTemplate",
@@ -712,6 +773,692 @@ NCVTemplate <- S7::new_class(
     train_sample_names = S7::class_character
   )
 )
+
+
+# ---- Reference/model objects -------------------------------------------------
+
+.nipt_reference_chroms <- c(as.character(1:22), "X", "Y")
+.nipt_reference_count_cols <- paste0("NChrReads_", .nipt_reference_chroms)
+.nipt_reference_frac_cols <- paste0("FrChrReads_", .nipt_reference_chroms)
+
+.is_nipter_sex_model <- function(x) {
+  inherits(x, "NIPTeRSexModel") || S7::S7_inherits(x, NIPTeRSexModel)
+}
+
+.is_nipter_sex_prediction <- function(x) {
+  inherits(x, "NIPTeRSexPrediction") || S7::S7_inherits(x, NIPTeRSexPrediction)
+}
+
+.is_nipt_reference_frame <- function(x) {
+  inherits(x, "NIPTReferenceFrame") || S7::S7_inherits(x, NIPTReferenceFrame)
+}
+
+.is_nipt_reference_model <- function(x) {
+  inherits(x, "NIPTReferenceModel") || S7::S7_inherits(x, NIPTReferenceModel)
+}
+
+.is_nipt_sex_score <- function(x) {
+  inherits(x, "NIPTSexScore") || S7::S7_inherits(x, NIPTSexScore)
+}
+
+.is_nipt_sex_ncv_model <- function(x) {
+  inherits(x, "NIPTSexNCVModel") || S7::S7_inherits(x, NIPTSexNCVModel)
+}
+
+.is_nipt_sex_regression_model <- function(x) {
+  inherits(x, "NIPTSexRegressionModel") ||
+    S7::S7_inherits(x, NIPTSexRegressionModel)
+}
+
+.is_nipt_sex_ncv_score <- function(x) {
+  inherits(x, "NIPTSexNCVScore") || S7::S7_inherits(x, NIPTSexNCVScore)
+}
+
+.is_nipt_sex_regression_score <- function(x) {
+  inherits(x, "NIPTSexRegressionScore") ||
+    S7::S7_inherits(x, NIPTSexRegressionScore)
+}
+
+.is_nipt_gaunosome_score <- function(x) {
+  inherits(x, "NIPTGaunosomeScore") ||
+    S7::S7_inherits(x, NIPTGaunosomeScore)
+}
+
+.validate_reference_model_map <- function(x, predicate, label,
+                                          nested_models = FALSE) {
+  if (!is.list(x)) {
+    return(sprintf("%s must be a list.", label))
+  }
+  sexes <- c("female", "male")
+  focuses <- c("X", "Y")
+  if (!all(sexes %in% names(x))) {
+    return(sprintf("%s must contain female and male entries.", label))
+  }
+  for (sex in sexes) {
+    if (!is.list(x[[sex]])) {
+      return(sprintf("%s[['%s']] must be a list.", label, sex))
+    }
+    present_focuses <- intersect(focuses, names(x[[sex]]))
+    if (!length(present_focuses)) {
+      return(sprintf("%s[['%s']] must contain at least one of X or Y.", label, sex))
+    }
+    for (focus in present_focuses) {
+      entry <- x[[sex]][[focus]]
+      if (nested_models) {
+        if (!is.list(entry) || !length(entry) ||
+            !all(vapply(entry, predicate, logical(1L)))) {
+          return(sprintf(
+            "%s[['%s']][['%s']] must be a non-empty list of typed model objects.",
+            label, sex, focus
+          ))
+        }
+      } else {
+        if (!predicate(entry)) {
+          return(sprintf(
+            "%s[['%s']][['%s']] must be a typed model object.",
+            label, sex, focus
+          ))
+        }
+      }
+    }
+  }
+  NULL
+}
+
+.validate_reference_frame_df <- function(x) {
+  if (!is.data.frame(x)) {
+    return("NIPTReferenceFrame must be a data.frame.")
+  }
+  required <- c("Sample_name", .nipt_reference_count_cols, .nipt_reference_frac_cols)
+  missing <- setdiff(required, names(x))
+  if (length(missing)) {
+    return(sprintf(
+      "NIPTReferenceFrame is missing required columns: %s",
+      paste(missing, collapse = ", ")
+    ))
+  }
+  if (!is.character(x$Sample_name) || anyNA(x$Sample_name) || anyDuplicated(x$Sample_name)) {
+    return("NIPTReferenceFrame$Sample_name must be a unique character vector.")
+  }
+  if ("SampleSex" %in% names(x)) {
+    allowed <- c("female", "male", "ambiguous", "unknown")
+    if (!is.character(x$SampleSex) || anyNA(x$SampleSex) ||
+        !all(x$SampleSex %in% allowed)) {
+      return("NIPTReferenceFrame$SampleSex must contain only female, male, ambiguous, or unknown.")
+    }
+  }
+  if ("ConsensusGender" %in% names(x)) {
+    if (!is.character(x$ConsensusGender) || anyNA(x$ConsensusGender) ||
+        !all(x$ConsensusGender %in% c("female", "male"))) {
+      return("NIPTReferenceFrame$ConsensusGender must contain only female or male.")
+    }
+  }
+  for (col in .nipt_reference_count_cols) {
+    if (!is.numeric(x[[col]])) {
+      return(sprintf("NIPTReferenceFrame column '%s' must be numeric.", col))
+    }
+  }
+  for (col in .nipt_reference_frac_cols) {
+    if (!is.numeric(x[[col]])) {
+      return(sprintf("NIPTReferenceFrame column '%s' must be numeric.", col))
+    }
+  }
+  optional_numeric <- c("RR_X", "RR_Y", "RR_X_SexClassMAD", "RR_Y_SexClassMAD",
+                        "YUniqueRatio")
+  for (col in optional_numeric) {
+    if (col %in% names(x) && !is.numeric(x[[col]])) {
+      return(sprintf("NIPTReferenceFrame column '%s' must be numeric.", col))
+    }
+  }
+  if ("IsRefSexOutlier" %in% names(x) &&
+      (!is.logical(x$IsRefSexOutlier) || anyNA(x$IsRefSexOutlier))) {
+    return("NIPTReferenceFrame$IsRefSexOutlier must be a logical vector without NA values.")
+  }
+  NULL
+}
+
+#' Chromosome-level NIPT reference frame
+#'
+#' A typed tabular training frame derived from a \code{NIPTControlGroup}. Each
+#' row corresponds to one reference sample and includes chromosome-level read
+#' counts and fractions for chromosomes \code{1:22}, \code{X}, and \code{Y}.
+#'
+#' @param .data Data frame payload for the typed reference frame constructor.
+#'
+#' @export
+NIPTReferenceFrame <- S7::new_class(
+  "NIPTReferenceFrame",
+  parent = .nipt_model_df_class,
+  validator = function(self) {
+    .validate_reference_frame_df(self)
+  }
+)
+
+#' NIPTeR sex-prediction model
+#'
+#' A list-like S7 object wrapping one trained sex-classification model.
+#'
+#' @param .data Named list payload for the typed constructor.
+#'
+#' @export
+NIPTeRSexModel <- S7::new_class(
+  "NIPTeRSexModel",
+  parent = .nipt_model_list_class,
+  validator = function(self) {
+    required <- c("model", "method", "male_cluster", "classifications", "fractions")
+    missing <- setdiff(required, names(self))
+    if (length(missing)) {
+      return(sprintf("NIPTeRSexModel is missing required fields: %s",
+                     paste(missing, collapse = ", ")))
+    }
+    if (!is.character(self$method) || length(self$method) != 1L ||
+        !(self$method %in% c("y_fraction", "xy_fraction", "y_unique"))) {
+      return("NIPTeRSexModel$method must be one of y_fraction, xy_fraction, or y_unique.")
+    }
+    if (!is.numeric(self$male_cluster) || length(self$male_cluster) != 1L ||
+        !(as.integer(self$male_cluster) %in% c(1L, 2L))) {
+      return("NIPTeRSexModel$male_cluster must be 1 or 2.")
+    }
+    if (!is.character(self$classifications) || !length(self$classifications) ||
+        is.null(names(self$classifications)) ||
+        !all(self$classifications %in% c("male", "female"))) {
+      return("NIPTeRSexModel$classifications must be a named male/female character vector.")
+    }
+    if (identical(self$method, "y_unique")) {
+      if (!is.numeric(self$fractions) || !length(self$fractions)) {
+        return("Y-unique NIPTeRSexModel$fractions must be a numeric vector.")
+      }
+      if (is.null(names(self$fractions))) {
+        return("Y-unique NIPTeRSexModel$fractions must be named by sample.")
+      }
+    } else {
+      if (!is.matrix(self$fractions) || !is.numeric(self$fractions) ||
+          !identical(colnames(self$fractions), c("x_fraction", "y_fraction"))) {
+        return("Fraction-based NIPTeRSexModel$fractions must be a numeric matrix with x_fraction and y_fraction columns.")
+      }
+      if (is.null(rownames(self$fractions))) {
+        return("Fraction-based NIPTeRSexModel$fractions must have sample row names.")
+      }
+    }
+    NULL
+  }
+)
+
+#' NIPTeR sex prediction result
+#'
+#' A list-like S7 object containing the consensus sex call for one sample.
+#'
+#' @param .data Named list payload for the typed constructor.
+#'
+#' @export
+NIPTeRSexPrediction <- S7::new_class(
+  "NIPTeRSexPrediction",
+  parent = .nipt_model_list_class,
+  validator = function(self) {
+    required <- c("prediction", "model_predictions", "fractions", "sample_name")
+    missing <- setdiff(required, names(self))
+    if (length(missing)) {
+      return(sprintf("NIPTeRSexPrediction is missing required fields: %s",
+                     paste(missing, collapse = ", ")))
+    }
+    if (!is.character(self$prediction) || length(self$prediction) != 1L ||
+        !(self$prediction %in% c("male", "female"))) {
+      return("NIPTeRSexPrediction$prediction must be male or female.")
+    }
+    if (!is.character(self$model_predictions) || !length(self$model_predictions) ||
+        is.null(names(self$model_predictions))) {
+      return("NIPTeRSexPrediction$model_predictions must be a named character vector.")
+    }
+    valid_preds <- stats::na.omit(self$model_predictions)
+    if (length(valid_preds) && !all(valid_preds %in% c("male", "female"))) {
+      return("NIPTeRSexPrediction$model_predictions must contain male, female, or NA values.")
+    }
+    if (!is.numeric(self$fractions) ||
+        !identical(names(self$fractions), c("x_fraction", "y_fraction"))) {
+      return("NIPTeRSexPrediction$fractions must be a named numeric vector with x_fraction and y_fraction.")
+    }
+    if (!is.character(self$sample_name) || length(self$sample_name) != 1L || !nzchar(self$sample_name)) {
+      return("NIPTeRSexPrediction$sample_name must be a non-empty string.")
+    }
+    NULL
+  }
+)
+
+#' Built NIPT reference model
+#'
+#' A validated, serialisable package-level reference object that bundles the
+#' control group, chromosome-level reference frame, and sex-prediction models.
+#'
+#' @param .data Named list payload for the typed constructor.
+#'
+#' @export
+NIPTReferenceModel <- S7::new_class(
+  "NIPTReferenceModel",
+  parent = .nipt_model_list_class,
+  validator = function(self) {
+    required <- c("control_group", "reference_frame", "sex_models",
+                  "sample_sex_source", "build_date", "build_params")
+    missing <- setdiff(required, names(self))
+    if (length(missing)) {
+      return(sprintf("NIPTReferenceModel is missing required fields: %s",
+                     paste(missing, collapse = ", ")))
+    }
+    if (!(inherits(self$control_group, "NIPTeRControlGroup") ||
+          S7::S7_inherits(self$control_group, NIPTControlGroup))) {
+      return("NIPTReferenceModel$control_group must be a NIPTControlGroup.")
+    }
+    if (!.is_nipt_reference_frame(self$reference_frame)) {
+      return("NIPTReferenceModel$reference_frame must be a NIPTReferenceFrame.")
+    }
+    if (!is.list(self$sex_models)) {
+      return("NIPTReferenceModel$sex_models must be a list.")
+    }
+    if (length(self$sex_models) &&
+        !all(vapply(self$sex_models, .is_nipter_sex_model, logical(1L)))) {
+      return("NIPTReferenceModel$sex_models must contain only NIPTeRSexModel objects.")
+    }
+    if (!is.null(self$sample_sex_source) &&
+        (!is.character(self$sample_sex_source) || length(self$sample_sex_source) != 1L)) {
+      return("NIPTReferenceModel$sample_sex_source must be NULL or a scalar character string.")
+    }
+    if (!is.character(self$build_date) || length(self$build_date) != 1L || !nzchar(self$build_date)) {
+      return("NIPTReferenceModel$build_date must be a non-empty string.")
+    }
+    if (!is.list(self$build_params)) {
+      return("NIPTReferenceModel$build_params must be a list.")
+    }
+    if ("sex_ncv_models" %in% names(self)) {
+      msg <- .validate_reference_model_map(
+        self$sex_ncv_models,
+        predicate = .is_nipt_sex_ncv_model,
+        label = "NIPTReferenceModel$sex_ncv_models"
+      )
+      if (!is.null(msg)) {
+        return(msg)
+      }
+    }
+    if ("sex_regression_models" %in% names(self)) {
+      msg <- .validate_reference_model_map(
+        self$sex_regression_models,
+        predicate = .is_nipt_sex_regression_model,
+        label = "NIPTReferenceModel$sex_regression_models",
+        nested_models = TRUE
+      )
+      if (!is.null(msg)) {
+        return(msg)
+      }
+    }
+    NULL
+  }
+)
+
+#' NIPTeR sex-chromosome score
+#'
+#' A list-like S7 object containing sex-matched X/Y z-scores and related
+#' reference statistics for one sample.
+#'
+#' @param .data Named list payload for the typed constructor.
+#'
+#' @export
+NIPTSexScore <- S7::new_class(
+  "NIPTSexScore",
+  parent = .nipt_model_list_class,
+  validator = function(self) {
+    required <- c("sample_name", "predicted_sex", "sex_prediction",
+                  "sample_metrics", "z_scores", "cv",
+                  "reference_sizes", "reference_sample_names")
+    missing <- setdiff(required, names(self))
+    if (length(missing)) {
+      return(sprintf("NIPTSexScore is missing required fields: %s",
+                     paste(missing, collapse = ", ")))
+    }
+    if (!is.character(self$sample_name) || length(self$sample_name) != 1L ||
+        !nzchar(self$sample_name)) {
+      return("NIPTSexScore$sample_name must be a non-empty string.")
+    }
+    if (!is.character(self$predicted_sex) || length(self$predicted_sex) != 1L ||
+        !(self$predicted_sex %in% c("female", "male"))) {
+      return("NIPTSexScore$predicted_sex must be female or male.")
+    }
+    if (!.is_nipter_sex_prediction(self$sex_prediction)) {
+      return("NIPTSexScore$sex_prediction must be a NIPTeRSexPrediction.")
+    }
+    if (!is.numeric(self$sample_metrics) ||
+        !identical(names(self$sample_metrics),
+                   c("FrChrReads_X", "FrChrReads_Y", "RR_X", "RR_Y"))) {
+      return("NIPTSexScore$sample_metrics must be a named numeric vector with FrChrReads_X, FrChrReads_Y, RR_X, and RR_Y.")
+    }
+    expected_z <- c("Z_FrChrReads_X", "Z_FrChrReads_Y",
+                    "Z_FrChrReads_X_XX", "Z_FrChrReads_Y_XX",
+                    "Z_FrChrReads_X_XY", "Z_FrChrReads_Y_XY")
+    if (!is.numeric(self$z_scores) || !identical(names(self$z_scores), expected_z)) {
+      return("NIPTSexScore$z_scores must be a named numeric vector of the selected, XX, and XY sex-chromosome z-scores.")
+    }
+    expected_cv <- c("Z_FrChrReads_CV_X", "Z_FrChrReads_CV_Y",
+                     "Z_FrChrReads_CV_X_XX", "Z_FrChrReads_CV_Y_XX",
+                     "Z_FrChrReads_CV_X_XY", "Z_FrChrReads_CV_Y_XY")
+    if (!is.numeric(self$cv) || !identical(names(self$cv), expected_cv)) {
+      return("NIPTSexScore$cv must be a named numeric vector of the selected, XX, and XY coefficient-of-variation values.")
+    }
+    if (!is.numeric(self$reference_sizes) ||
+        !identical(names(self$reference_sizes),
+                   c("female", "male", "same_sex"))) {
+      return("NIPTSexScore$reference_sizes must be a named numeric vector with female, male, and same_sex counts.")
+    }
+    if (!is.character(self$reference_sample_names)) {
+      return("NIPTSexScore$reference_sample_names must be a character vector.")
+    }
+    NULL
+  }
+)
+
+#' Sex-chromosome NCV model
+#'
+#' Typed denominator template for X/Y NCV scoring against a sex-matched
+#' reference subset.
+#'
+#' @param .data Named list payload for the typed constructor.
+#'
+#' @export
+NIPTSexNCVModel <- S7::new_class(
+  "NIPTSexNCVModel",
+  parent = .nipt_model_list_class,
+  validator = function(self) {
+    required <- c("focus_chromosome", "reference_sex", "denominators",
+                  "control_statistics", "reference_sample_names")
+    missing <- setdiff(required, names(self))
+    if (length(missing)) {
+      return(sprintf("NIPTSexNCVModel is missing required fields: %s",
+                     paste(missing, collapse = ", ")))
+    }
+    if (!is.character(self$focus_chromosome) || length(self$focus_chromosome) != 1L ||
+        !(self$focus_chromosome %in% c("X", "Y"))) {
+      return("NIPTSexNCVModel$focus_chromosome must be X or Y.")
+    }
+    if (!is.character(self$reference_sex) || length(self$reference_sex) != 1L ||
+        !(self$reference_sex %in% c("female", "male"))) {
+      return("NIPTSexNCVModel$reference_sex must be female or male.")
+    }
+    if (!is.character(self$denominators) || !length(self$denominators)) {
+      return("NIPTSexNCVModel$denominators must be a non-empty character vector.")
+    }
+    expected_stats <- c("mean", "sd", "cv", "shapiro_p_value")
+    if (!is.numeric(self$control_statistics) ||
+        !identical(names(self$control_statistics), expected_stats)) {
+      return("NIPTSexNCVModel$control_statistics must be a named numeric vector with mean, sd, cv, and shapiro_p_value.")
+    }
+    if (!is.character(self$reference_sample_names) || !length(self$reference_sample_names)) {
+      return("NIPTSexNCVModel$reference_sample_names must be a non-empty character vector.")
+    }
+    NULL
+  }
+)
+
+#' Sex-chromosome regression model
+#'
+#' Typed sex-matched ratio model for X/Y regression-based scoring.
+#'
+#' @param .data Named list payload for the typed constructor.
+#'
+#' @export
+NIPTSexRegressionModel <- S7::new_class(
+  "NIPTSexRegressionModel",
+  parent = .nipt_model_list_class,
+  validator = function(self) {
+    required <- c("fit", "focus_chromosome", "reference_sex", "response_column",
+                  "predictors", "control_statistics", "reference_sample_names")
+    missing <- setdiff(required, names(self))
+    if (length(missing)) {
+      return(sprintf("NIPTSexRegressionModel is missing required fields: %s",
+                     paste(missing, collapse = ", ")))
+    }
+    if (!inherits(self$fit, "lm")) {
+      return("NIPTSexRegressionModel$fit must be an lm object.")
+    }
+    if (!is.character(self$focus_chromosome) || length(self$focus_chromosome) != 1L ||
+        !(self$focus_chromosome %in% c("X", "Y"))) {
+      return("NIPTSexRegressionModel$focus_chromosome must be X or Y.")
+    }
+    if (!is.character(self$reference_sex) || length(self$reference_sex) != 1L ||
+        !(self$reference_sex %in% c("female", "male"))) {
+      return("NIPTSexRegressionModel$reference_sex must be female or male.")
+    }
+    if (!is.character(self$response_column) || length(self$response_column) != 1L ||
+        !nzchar(self$response_column)) {
+      return("NIPTSexRegressionModel$response_column must be a non-empty string.")
+    }
+    if (!is.character(self$predictors) || !length(self$predictors)) {
+      return("NIPTSexRegressionModel$predictors must be a non-empty character vector.")
+    }
+    expected_stats <- c("mean_ratio", "sd_ratio", "cv",
+                        "shapiro_p_value", "adj_r_squared")
+    if (!is.numeric(self$control_statistics) ||
+        !identical(names(self$control_statistics), expected_stats)) {
+      return("NIPTSexRegressionModel$control_statistics must be a named numeric vector with mean_ratio, sd_ratio, cv, shapiro_p_value, and adj_r_squared.")
+    }
+    if (!is.character(self$reference_sample_names) || !length(self$reference_sample_names)) {
+      return("NIPTSexRegressionModel$reference_sample_names must be a non-empty character vector.")
+    }
+    NULL
+  }
+)
+
+#' Sex-chromosome NCV score
+#'
+#' Typed result for X/Y NCV scoring across male and female reference models.
+#'
+#' @param .data Named list payload for the typed constructor.
+#'
+#' @export
+NIPTSexNCVScore <- S7::new_class(
+  "NIPTSexNCVScore",
+  parent = .nipt_model_list_class,
+  validator = function(self) {
+    required <- c("sample_name", "focus_chromosome", "predicted_sex",
+                  "sex_prediction", "sample_scores", "denominators",
+                  "control_statistics", "reference_sizes")
+    missing <- setdiff(required, names(self))
+    if (length(missing)) {
+      return(sprintf("NIPTSexNCVScore is missing required fields: %s",
+                     paste(missing, collapse = ", ")))
+    }
+    if (!is.character(self$sample_name) || length(self$sample_name) != 1L || !nzchar(self$sample_name)) {
+      return("NIPTSexNCVScore$sample_name must be a non-empty string.")
+    }
+    if (!is.character(self$focus_chromosome) || length(self$focus_chromosome) != 1L ||
+        !(self$focus_chromosome %in% c("X", "Y"))) {
+      return("NIPTSexNCVScore$focus_chromosome must be X or Y.")
+    }
+    if (!is.character(self$predicted_sex) || length(self$predicted_sex) != 1L ||
+        !(self$predicted_sex %in% c("female", "male"))) {
+      return("NIPTSexNCVScore$predicted_sex must be female or male.")
+    }
+    if (!.is_nipter_sex_prediction(self$sex_prediction)) {
+      return("NIPTSexNCVScore$sex_prediction must be a NIPTeRSexPrediction.")
+    }
+    if (!is.numeric(self$sample_scores) ||
+        !identical(names(self$sample_scores), c("female", "male", "selected"))) {
+      return("NIPTSexNCVScore$sample_scores must be a named numeric vector with female, male, and selected scores.")
+    }
+    if (!is.list(self$denominators) ||
+        !identical(sort(names(self$denominators)), c("female", "male"))) {
+      return("NIPTSexNCVScore$denominators must be a list with female and male entries.")
+    }
+    if (!is.list(self$control_statistics) ||
+        !identical(sort(names(self$control_statistics)), c("female", "male"))) {
+      return("NIPTSexNCVScore$control_statistics must be a list with female and male entries.")
+    }
+    if (!is.numeric(self$reference_sizes) ||
+        !identical(names(self$reference_sizes), c("female", "male", "same_sex"))) {
+      return("NIPTSexNCVScore$reference_sizes must be a named numeric vector with female, male, and same_sex counts.")
+    }
+    NULL
+  }
+)
+
+#' Sex-chromosome regression score
+#'
+#' Typed result for X/Y regression-based scoring across male and female
+#' reference models.
+#'
+#' @param .data Named list payload for the typed constructor.
+#'
+#' @export
+NIPTSexRegressionScore <- S7::new_class(
+  "NIPTSexRegressionScore",
+  parent = .nipt_model_list_class,
+  validator = function(self) {
+    required <- c("sample_name", "focus_chromosome", "predicted_sex",
+                  "sex_prediction", "scores", "ratios", "predictors",
+                  "aggregate_scores", "reference_sizes")
+    missing <- setdiff(required, names(self))
+    if (length(missing)) {
+      return(sprintf("NIPTSexRegressionScore is missing required fields: %s",
+                     paste(missing, collapse = ", ")))
+    }
+    if (!is.character(self$sample_name) || length(self$sample_name) != 1L || !nzchar(self$sample_name)) {
+      return("NIPTSexRegressionScore$sample_name must be a non-empty string.")
+    }
+    if (!is.character(self$focus_chromosome) || length(self$focus_chromosome) != 1L ||
+        !(self$focus_chromosome %in% c("X", "Y"))) {
+      return("NIPTSexRegressionScore$focus_chromosome must be X or Y.")
+    }
+    if (!is.character(self$predicted_sex) || length(self$predicted_sex) != 1L ||
+        !(self$predicted_sex %in% c("female", "male"))) {
+      return("NIPTSexRegressionScore$predicted_sex must be female or male.")
+    }
+    if (!.is_nipter_sex_prediction(self$sex_prediction)) {
+      return("NIPTSexRegressionScore$sex_prediction must be a NIPTeRSexPrediction.")
+    }
+    expected_scores <- c("female", "male")
+    if (!is.list(self$scores) || !identical(sort(names(self$scores)), expected_scores)) {
+      return("NIPTSexRegressionScore$scores must be a list with female and male entries.")
+    }
+    if (!is.list(self$ratios) || !identical(sort(names(self$ratios)), expected_scores)) {
+      return("NIPTSexRegressionScore$ratios must be a list with female and male entries.")
+    }
+    if (!is.list(self$predictors) || !identical(sort(names(self$predictors)), expected_scores)) {
+      return("NIPTSexRegressionScore$predictors must be a list with female and male entries.")
+    }
+    if (!is.numeric(self$aggregate_scores) ||
+        !identical(names(self$aggregate_scores), c("female_mean", "male_mean", "selected_mean"))) {
+      return("NIPTSexRegressionScore$aggregate_scores must be a named numeric vector with female_mean, male_mean, and selected_mean.")
+    }
+    if (!is.numeric(self$reference_sizes) ||
+        !identical(names(self$reference_sizes), c("female", "male", "same_sex"))) {
+      return("NIPTSexRegressionScore$reference_sizes must be a named numeric vector with female, male, and same_sex counts.")
+    }
+    NULL
+  }
+)
+
+#' Aggregate gaunosome score report
+#'
+#' Typed package-level report bundling sex, NCV, and regression-based X/Y
+#' scoring against a built \code{NIPTReferenceModel}.
+#'
+#' @param .data Named list payload for the typed constructor.
+#'
+#' @export
+NIPTGaunosomeScore <- S7::new_class(
+  "NIPTGaunosomeScore",
+  parent = .nipt_model_list_class,
+  validator = function(self) {
+    required <- c("sample_name", "predicted_sex", "sex_prediction",
+                  "sex_score", "ncv_scores", "regression_scores",
+                  "summary")
+    missing <- setdiff(required, names(self))
+    if (length(missing)) {
+      return(sprintf("NIPTGaunosomeScore is missing required fields: %s",
+                     paste(missing, collapse = ", ")))
+    }
+    if (!is.character(self$sample_name) || length(self$sample_name) != 1L ||
+        !nzchar(self$sample_name)) {
+      return("NIPTGaunosomeScore$sample_name must be a non-empty string.")
+    }
+    if (!is.character(self$predicted_sex) || length(self$predicted_sex) != 1L ||
+        !(self$predicted_sex %in% c("female", "male"))) {
+      return("NIPTGaunosomeScore$predicted_sex must be female or male.")
+    }
+    if (!.is_nipter_sex_prediction(self$sex_prediction)) {
+      return("NIPTGaunosomeScore$sex_prediction must be a NIPTeRSexPrediction.")
+    }
+    if (!.is_nipt_sex_score(self$sex_score)) {
+      return("NIPTGaunosomeScore$sex_score must be a NIPTSexScore.")
+    }
+    if (!is.list(self$ncv_scores)) {
+      return("NIPTGaunosomeScore$ncv_scores must be a list.")
+    }
+    if (length(self$ncv_scores) &&
+        !all(vapply(self$ncv_scores, .is_nipt_sex_ncv_score, logical(1L)))) {
+      return("NIPTGaunosomeScore$ncv_scores must contain only NIPTSexNCVScore objects.")
+    }
+    if (!is.list(self$regression_scores)) {
+      return("NIPTGaunosomeScore$regression_scores must be a list.")
+    }
+    if (length(self$regression_scores) &&
+        !all(vapply(self$regression_scores, .is_nipt_sex_regression_score, logical(1L)))) {
+      return("NIPTGaunosomeScore$regression_scores must contain only NIPTSexRegressionScore objects.")
+    }
+    if (!is.data.frame(self$summary)) {
+      return("NIPTGaunosomeScore$summary must be a data.frame.")
+    }
+    required_cols <- c(
+      "chromosome", "predicted_sex", "z_score", "cv",
+      "ncv_score_female", "ncv_score_male", "ncv_score_selected",
+      "regression_score_female", "regression_score_male",
+      "regression_score_selected"
+    )
+    missing_cols <- setdiff(required_cols, names(self$summary))
+    if (length(missing_cols)) {
+      return(sprintf(
+        "NIPTGaunosomeScore$summary is missing required columns: %s",
+        paste(missing_cols, collapse = ", ")
+      ))
+    }
+    NULL
+  }
+)
+
+.as_nipt_reference_frame <- function(x) {
+  if (.is_nipt_reference_frame(x)) x else NIPTReferenceFrame(x)
+}
+
+.as_nipter_sex_model <- function(x) {
+  if (.is_nipter_sex_model(x)) x else NIPTeRSexModel(x)
+}
+
+.as_nipter_sex_prediction <- function(x) {
+  if (.is_nipter_sex_prediction(x)) x else NIPTeRSexPrediction(x)
+}
+
+.as_nipt_reference_model <- function(x) {
+  if (.is_nipt_reference_model(x)) x else NIPTReferenceModel(x)
+}
+
+.as_nipt_sex_score <- function(x) {
+  if (.is_nipt_sex_score(x)) x else NIPTSexScore(x)
+}
+
+.as_nipt_sex_ncv_model <- function(x) {
+  if (.is_nipt_sex_ncv_model(x)) x else NIPTSexNCVModel(x)
+}
+
+.as_nipt_sex_regression_model <- function(x) {
+  if (.is_nipt_sex_regression_model(x)) x else NIPTSexRegressionModel(x)
+}
+
+.as_nipt_sex_ncv_score <- function(x) {
+  if (.is_nipt_sex_ncv_score(x)) x else NIPTSexNCVScore(x)
+}
+
+.as_nipt_sex_regression_score <- function(x) {
+  if (.is_nipt_sex_regression_score(x)) x else NIPTSexRegressionScore(x)
+}
+
+.as_nipt_gaunosome_score <- function(x) {
+  if (.is_nipt_gaunosome_score(x)) x else NIPTGaunosomeScore(x)
+}
 
 
 # ---- S7 <-> S3 conversion helpers -------------------------------------------

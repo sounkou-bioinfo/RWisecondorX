@@ -32,6 +32,8 @@ ref <- nipter_reference_frame(cg)
 
 expect_true(is.data.frame(ref),
             info = "reference frame returns a data.frame")
+expect_true(S7::S7_inherits(ref, NIPTReferenceFrame),
+            info = "reference frame returns the typed NIPTReferenceFrame S7 class")
 expect_identical(nrow(ref), 4L,
                  info = "reference frame has one row per control")
 expect_true(all(c("Sample_name", "SampleSex", "NChrReads_X", "NChrReads_Y",

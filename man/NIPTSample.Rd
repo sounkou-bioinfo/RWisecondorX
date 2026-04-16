@@ -10,6 +10,14 @@ NIPTSample(
   correction = NIPTCorrectionRecord()
 )
 }
+\arguments{
+\item{sample_name}{Sample identifier.}
+
+\item{binsize}{Positive integer bin width in base pairs.}
+
+\item{correction}{A \code{NIPTCorrectionRecord} describing the applied
+corrections.}
+}
 \description{
 Never instantiated directly. Subclasses are \code{CombinedStrandsSample}
 (reads are summed across strands) and \code{SeparatedStrandsSample} (forward

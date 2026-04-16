@@ -6,6 +6,9 @@
 \usage{
 WisecondorXReference(.data)
 }
+\arguments{
+\item{.data}{Named list payload for the typed constructor.}
+}
 \description{
 A list-like S7 object produced by \code{\link[=rwisecondorx_newref]{rwisecondorx_newref()}}. It contains the
 autosomal branch plus optional female (\code{.F}) and male (\code{.M}) gonosomal

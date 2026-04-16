@@ -6,6 +6,9 @@
 \usage{
 WisecondorXSample(.data)
 }
+\arguments{
+\item{.data}{Named list payload for the typed constructor.}
+}
 \description{
 A list-like S7 object keyed by chromosome \code{"1"}–\code{"24"}, where each element
 is a numeric vector of bin counts.

@@ -12,7 +12,7 @@ Typically obtained by calling \code{\link{nipter_y_unique_ratio}} on
 each BAM in the control cohort.}
 }
 \value{
-An object of class \code{"NIPTeRSexModel"} with elements:
+A list-like \code{NIPTeRSexModel} S7 object with elements:
 \describe{
 \item{model}{The \code{mclust::Mclust} fitted object.}
 \item{method}{\code{"y_unique"}.}

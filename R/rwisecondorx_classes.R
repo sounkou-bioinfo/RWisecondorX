@@ -112,6 +112,8 @@
 
 #' Abstract base class for WisecondorX list-like objects
 #'
+#' @param .data Named list payload for the typed constructor.
+#'
 #' @export
 WisecondorXObject <- S7::new_class(
   "WisecondorXObject",
@@ -122,6 +124,8 @@ WisecondorXObject <- S7::new_class(
 #'
 #' A list-like S7 object keyed by chromosome `"1"`–`"24"`, where each element
 #' is a numeric vector of bin counts.
+#'
+#' @param .data Named list payload for the typed constructor.
 #'
 #' @export
 WisecondorXSample <- S7::new_class(
@@ -137,6 +141,8 @@ WisecondorXSample <- S7::new_class(
 #' A list-like S7 object produced by [rwisecondorx_newref()]. It contains the
 #' autosomal branch plus optional female (`.F`) and male (`.M`) gonosomal
 #' branches.
+#'
+#' @param .data Named list payload for the typed constructor.
 #'
 #' @export
 WisecondorXReference <- S7::new_class(
@@ -185,6 +191,8 @@ WisecondorXReference <- S7::new_class(
 #'
 #' A list-like S7 object produced by [rwisecondorx_predict()].
 #'
+#' @param .data Named list payload for the typed constructor.
+#'
 #' @export
 WisecondorXPrediction <- S7::new_class(
   "WisecondorXPrediction",
@@ -230,6 +238,8 @@ WisecondorXPrediction <- S7::new_class(
 #' WisecondorX reference QC report
 #'
 #' A structured QC report returned by [rwisecondorx_ref_qc()].
+#'
+#' @param .data Named list payload for the typed constructor.
 #'
 #' @export
 WisecondorXReferenceQC <- S7::new_class(

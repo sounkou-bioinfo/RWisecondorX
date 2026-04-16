@@ -6,6 +6,9 @@
 \usage{
 WisecondorXPrediction(.data)
 }
+\arguments{
+\item{.data}{Named list payload for the typed constructor.}
+}
 \description{
 A list-like S7 object produced by \code{\link[=rwisecondorx_predict]{rwisecondorx_predict()}}.
 }

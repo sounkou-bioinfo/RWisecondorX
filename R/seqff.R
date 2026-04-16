@@ -3,26 +3,33 @@
 #' @param input BAM path, SAM path, counts path, or a data frame with `binName`
 #'   and `counts` columns.
 #' @param input_type One of `bam`, `sam`, or `counts`.
-#' @param samtools_bin Samtools executable to use for BAM input.
-#' @param samtools_exclude_flags Optional integer flag passed to `samtools view -F`.
-#' @param samtools_min_mapq Optional integer mapping-quality threshold passed to
-#'   `samtools view -q`.
+#' @param mapq Optional integer mapping-quality threshold for BAM input.
+#' @param require_flags Optional integer bitmask; only reads with all bits set
+#'   are kept for BAM input.
+#' @param exclude_flags Optional integer bitmask; reads with any bit set are
+#'   dropped for BAM input.
+#' @param con Optional open DBI connection with duckhts already loaded.
+#' @param reference Optional FASTA reference path for CRAM input.
 #'
 #' @return Named numeric vector with `SeqFF`, `Enet`, and `WRSC`.
 #' @export
 seqff_predict <- function(input,
                           input_type = c("bam", "sam", "counts"),
-                          samtools_bin = "samtools",
-                          samtools_exclude_flags = NULL,
-                          samtools_min_mapq = NULL) {
+                          mapq = NULL,
+                          require_flags = NULL,
+                          exclude_flags = NULL,
+                          con = NULL,
+                          reference = NULL) {
   input_type <- match.arg(input_type)
   support <- seqff_load_support_data()
   counts <- seqff_prepare_counts(
     input = input,
     input_type = input_type,
-    samtools_bin = samtools_bin,
-    samtools_exclude_flags = samtools_exclude_flags,
-    samtools_min_mapq = samtools_min_mapq
+    mapq = mapq,
+    require_flags = require_flags,
+    exclude_flags = exclude_flags,
+    con = con,
+    reference = reference
   )
 
   seqff_predict_from_counts(
@@ -34,9 +41,11 @@ seqff_predict <- function(input,
 
 seqff_prepare_counts <- function(input,
                                  input_type,
-                                 samtools_bin,
-                                 samtools_exclude_flags,
-                                 samtools_min_mapq) {
+                                 mapq,
+                                 require_flags,
+                                 exclude_flags,
+                                 con,
+                                 reference) {
   if (input_type == "counts") {
     if (is.data.frame(input)) {
       counts <- input
@@ -54,9 +63,11 @@ seqff_prepare_counts <- function(input,
   positions <- seqff_read_positions(
     input = input,
     input_type = input_type,
-    samtools_bin = samtools_bin,
-    samtools_exclude_flags = samtools_exclude_flags,
-    samtools_min_mapq = samtools_min_mapq
+    mapq = mapq,
+    require_flags = require_flags,
+    exclude_flags = exclude_flags,
+    con = con,
+    reference = reference
   )
 
   seqff_bin_counts(positions)
@@ -64,28 +75,22 @@ seqff_prepare_counts <- function(input,
 
 seqff_read_positions <- function(input,
                                  input_type,
-                                 samtools_bin,
-                                 samtools_exclude_flags,
-                                 samtools_min_mapq) {
-  command <- switch(
+                                 mapq,
+                                 require_flags,
+                                 exclude_flags,
+                                 con,
+                                 reference) {
+  positions <- switch(
     input_type,
-    bam = seqff_samtools_view_command(
+    bam = seqff_read_positions_bam(
       bam = input,
-      samtools_bin = samtools_bin,
-      samtools_exclude_flags = samtools_exclude_flags,
-      samtools_min_mapq = samtools_min_mapq
+      mapq = mapq,
+      require_flags = require_flags,
+      exclude_flags = exclude_flags,
+      con = con,
+      reference = reference
     ),
-    sam = sprintf("cut -f3,4 %s", shQuote(normalizePath(input, winslash = "/", mustWork = TRUE)))
-  )
-
-  positions <- data.table::fread(
-    cmd = command,
-    sep = "\t",
-    header = FALSE,
-    select = 1:2,
-    col.names = c("refChr", "begin"),
-    colClasses = c("character", "integer"),
-    data.table = FALSE
+    sam = seqff_read_positions_sam(input)
   )
 
   if (nrow(positions) == 0L) {
@@ -97,21 +102,68 @@ seqff_read_positions <- function(input,
   positions[!mitochondrial, , drop = FALSE]
 }
 
-seqff_samtools_view_command <- function(bam,
-                                        samtools_bin,
-                                        samtools_exclude_flags,
-                                        samtools_min_mapq) {
-  args <- c("view")
-
-  if (!is.null(samtools_exclude_flags)) {
-    args <- c(args, "-F", as.character(samtools_exclude_flags))
+seqff_read_positions_bam <- function(bam,
+                                     mapq,
+                                     require_flags,
+                                     exclude_flags,
+                                     con,
+                                     reference) {
+  stopifnot(is.character(bam), length(bam) == 1L, nzchar(bam))
+  stopifnot(file.exists(bam))
+  if (!is.null(reference)) {
+    stopifnot(is.character(reference), length(reference) == 1L, nzchar(reference))
+    stopifnot(file.exists(reference))
   }
-  if (!is.null(samtools_min_mapq)) {
-    args <- c(args, "-q", as.character(samtools_min_mapq))
+
+  mapq <- if (is.null(mapq)) 0L else as.integer(mapq)
+  require_flags <- if (is.null(require_flags)) 0L else as.integer(require_flags)
+  exclude_flags <- if (is.null(exclude_flags)) 0L else as.integer(exclude_flags)
+
+  own_con <- is.null(con)
+  if (own_con) {
+    drv <- duckdb::duckdb(config = list(allow_unsigned_extensions = "true"))
+    con <- DBI::dbConnect(drv)
+    Rduckhts::rduckhts_load(con)
+    on.exit(DBI::dbDisconnect(con, shutdown = TRUE), add = TRUE)
   }
 
-  args <- c(args, shQuote(normalizePath(bam, winslash = "/", mustWork = TRUE)))
-  paste(shQuote(samtools_bin), paste(args, collapse = " "), "| cut -f3,4")
+  rows <- Rduckhts::rduckhts_bam_bin_counts(
+    con,
+    path = bam,
+    bin_width = 50000L,
+    reference = reference,
+    mapq = mapq,
+    require_flags = require_flags,
+    exclude_flags = exclude_flags,
+    rmdup = "none"
+  )
+
+  if (!nrow(rows)) {
+    return(data.frame(refChr = character(0), begin = integer(0), stringsAsFactors = FALSE))
+  }
+
+  chrom_col <- grep("^chrom$", names(rows), ignore.case = TRUE, value = TRUE)
+  if (!length(chrom_col)) {
+    stop("SeqFF BAM bin counts missing chrom column.", call. = FALSE)
+  }
+
+  data.frame(
+    refChr = rows[[chrom_col[[1L]]]],
+    begin = as.integer(rows$bin_id) * 50000L + 1L,
+    stringsAsFactors = FALSE
+  )
+}
+
+seqff_read_positions_sam <- function(input) {
+  data.table::fread(
+    cmd = sprintf("cut -f3,4 %s", shQuote(normalizePath(input, winslash = "/", mustWork = TRUE))),
+    sep = "\t",
+    header = FALSE,
+    select = 1:2,
+    col.names = c("refChr", "begin"),
+    colClasses = c("character", "integer"),
+    data.table = FALSE
+  )
 }
 
 seqff_normalize_chr_names <- function(ref_chr) {
@@ -214,26 +266,5 @@ seqff_support_path <- function(filename) {
   if (nzchar(installed_path)) {
     return(installed_path)
   }
-
-  root <- .seqff_find_package_root()
-  path <- file.path(root, "inst", "extdata", "seqff", filename)
-  if (!file.exists(path)) {
-    stop("SeqFF support file not found: ", filename, call. = FALSE)
-  }
-  path
-}
-
-.seqff_find_package_root <- function() {
-  current <- normalizePath(getwd(), winslash = "/", mustWork = TRUE)
-
-  repeat {
-    if (file.exists(file.path(current, "DESCRIPTION"))) {
-      return(current)
-    }
-    parent <- dirname(current)
-    if (identical(parent, current)) {
-      stop("Could not locate package root for SeqFF support files.", call. = FALSE)
-    }
-    current <- parent
-  }
+  stop("SeqFF support file not found in installed package: ", filename, call. = FALSE)
 }

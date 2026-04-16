@@ -6,8 +6,8 @@
 #   1. stages a BAM manifest under --out-root/manifests
 #   2. precomputes a NIPTeR GC table once
 #   3. optionally computes SeqFF fetal-fraction estimates from BAMs
-#   4. converts every BAM to WisecondorX BED.gz
-#   5. optionally writes WisecondorX NPZ files for later upstream conformance
+#   4. converts every BAM to native RWisecondorX BED.gz
+#   5. optionally writes upstream WisecondorX NPZ files via the Python CLI
 #   6. converts every BAM to NIPTeR BED.gz with separated strands and GC-corrected columns
 #
 # It intentionally does not build references or score samples.
@@ -63,6 +63,12 @@ library(optparse)
   force(expr)
 }
 
+.log_sample <- function(i, n, label, stem) {
+  cat(sprintf("[%s] [%d/%d] %s %s\n",
+              format(Sys.time(), "%Y-%m-%d %H:%M:%S"),
+              i, n, label, stem))
+}
+
 option_list <- list(
   make_option("--bam-list", type = "character", default = NULL,
               help = "Text file with one BAM/CRAM path per line [required]"),
@@ -87,7 +93,7 @@ option_list <- list(
   make_option("--seqff-samtools-bin", type = "character", default = "samtools",
               help = "Samtools executable used by SeqFF [default: %default]"),
   make_option("--wcx-write-npz", action = "store_true", default = FALSE,
-              help = "Also write WisecondorX NPZ files for later upstream conformance [default: %default]"),
+              help = "Also write upstream WisecondorX NPZ files via the Python CLI [default: %default]"),
   make_option("--overwrite", action = "store_true", default = FALSE,
               help = "Overwrite existing outputs [default: %default]")
 )
@@ -115,8 +121,8 @@ dirs <- list(
   manifests = .ensure_dir(file.path(out_root, "manifests")),
   gc = .ensure_dir(file.path(out_root, "gc")),
   seqff = .ensure_dir(file.path(out_root, "seqff")),
-  wcx_beds = .ensure_dir(file.path(out_root, "wcx_beds")),
-  wcx_npz = .ensure_dir(file.path(out_root, "wcx_npz")),
+  rwcx_beds = .ensure_dir(file.path(out_root, "rwcx_beds")),
+  wisecondorx_npz = .ensure_dir(file.path(out_root, "wisecondorx_npz")),
   nipter_beds = .ensure_dir(file.path(out_root, "nipter_beds")),
   logs = .ensure_dir(file.path(out_root, "logs"))
 )
@@ -159,7 +165,7 @@ if (isTRUE(opts$seqff)) {
         )
         next
       }
-      cat(sprintf("  [%d/%d] SeqFF %s\n", i, length(bams), stem))
+      .log_sample(i, length(bams), "SeqFF", stem)
       ff <- seqff_predict(
         input = bam,
         input_type = "bam",
@@ -201,11 +207,11 @@ if (isTRUE(opts$seqff)) {
   for (i in seq_along(bams)) {
     bam <- bams[[i]]
     stem <- sub("\\.(bam|cram)$", "", basename(bam), ignore.case = TRUE)
-    out_bed <- file.path(dirs$wcx_beds, paste0(stem, ".bed.gz"))
+    out_bed <- file.path(dirs$rwcx_beds, paste0(stem, ".bed.gz"))
     if (file.exists(out_bed) && !isTRUE(opts$overwrite)) {
       next
     }
-    cat(sprintf("  [%d/%d] WisecondorX BED %s\n", i, length(bams), stem))
+    .log_sample(i, length(bams), "RWisecondorX BED", stem)
     bam_convert_bed(
       bam = bam,
       bed = out_bed,
@@ -214,27 +220,26 @@ if (isTRUE(opts$seqff)) {
       rmdup = "streaming"
     )
   }
-}, sprintf("Convert %d BAMs to WisecondorX BED.gz", length(bams)))
+}, sprintf("Convert %d BAMs to native RWisecondorX BED.gz", length(bams)))
 
 if (isTRUE(opts$`wcx-write-npz`)) {
   .run_one({
     for (i in seq_along(bams)) {
       bam <- bams[[i]]
       stem <- sub("\\.(bam|cram)$", "", basename(bam), ignore.case = TRUE)
-      out_npz <- file.path(dirs$wcx_npz, paste0(stem, ".npz"))
+      out_npz <- file.path(dirs$wisecondorx_npz, paste0(stem, ".npz"))
       if (file.exists(out_npz) && !isTRUE(opts$overwrite)) {
         next
       }
-      cat(sprintf("  [%d/%d] WisecondorX NPZ %s\n", i, length(bams), stem))
-      bam_convert_npz(
+      .log_sample(i, length(bams), "WisecondorX CLI NPZ", stem)
+      wisecondorx_convert(
         bam = bam,
         npz = out_npz,
         binsize = as.integer(opts$`wcx-binsize`),
-        mapq = 1L,
-        rmdup = "streaming"
+        normdup = FALSE
       )
     }
-  }, sprintf("Convert %d BAMs to WisecondorX NPZ", length(bams)))
+  }, sprintf("Convert %d BAMs to upstream WisecondorX NPZ via Python CLI", length(bams)))
 }
 
 .run_one({
@@ -245,7 +250,7 @@ if (isTRUE(opts$`wcx-write-npz`)) {
     if (file.exists(out_bed) && !isTRUE(opts$overwrite)) {
       next
     }
-    cat(sprintf("  [%d/%d] NIPTeR BED %s\n", i, length(bams), stem))
+    .log_sample(i, length(bams), "NIPTeR BED", stem)
     raw_sample <- nipter_bin_bam(
       bam = bam,
       binsize = as.integer(opts$`nipter-binsize`),
@@ -272,6 +277,6 @@ cat("  out_root:    ", out_root, "\n", sep = "")
 cat("  manifest:    ", staged_manifest, "\n", sep = "")
 cat("  gc_table:    ", gc_table, "\n", sep = "")
 cat("  seqff:       ", dirs$seqff, "\n", sep = "")
-cat("  wcx_beds:    ", dirs$wcx_beds, "\n", sep = "")
-cat("  wcx_npz:     ", dirs$wcx_npz, "\n", sep = "")
+cat("  rwcx_beds:   ", dirs$rwcx_beds, "\n", sep = "")
+cat("  wisecondorx_npz: ", dirs$wisecondorx_npz, "\n", sep = "")
 cat("  nipter_beds: ", dirs$nipter_beds, "\n", sep = "")

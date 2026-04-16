@@ -163,6 +163,9 @@ make test-seqff
   scoring in one script
 - the same preprocessing script now emits SeqFF fetal-fraction estimates as a
   cohort-side preprocessing artifact
+- native WisecondorX-prepared artifacts are written to `rwcx_beds/`
+- upstream WisecondorX-prepared artifacts are written to `wisecondorx_npz/`
+  through the Python CLI wrapper
 
 This is structural validation of the workflow boundary, not numeric
 cross-implementation equivalence by itself.
@@ -288,12 +291,12 @@ Rscript inst/scripts/preprocess_cohort.R \
 # 2. build the native and upstream references from prepared artifacts
 Rscript inst/scripts/build_reference.R \
   --mode rwisecondorx \
-  --bed-dir /path/to/workdir/wcx_beds \
+  --bed-dir /path/to/workdir/rwcx_beds \
   --out /path/to/workdir/refs/rwisecondorx_reference.rds
 
 Rscript inst/scripts/build_reference.R \
   --mode wisecondorx \
-  --npz-dir /path/to/workdir/wcx_npz \
+  --npz-dir /path/to/workdir/wisecondorx_npz \
   --out /path/to/workdir/refs/wisecondorx_reference.npz
 
 # 3. compare both predict paths on prepared test cases

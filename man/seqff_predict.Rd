@@ -7,9 +7,11 @@
 seqff_predict(
   input,
   input_type = c("bam", "sam", "counts"),
-  samtools_bin = "samtools",
-  samtools_exclude_flags = NULL,
-  samtools_min_mapq = NULL
+  mapq = NULL,
+  require_flags = NULL,
+  exclude_flags = NULL,
+  con = NULL,
+  reference = NULL
 )
 }
 \arguments{
@@ -18,12 +20,17 @@ and \code{counts} columns.}
 
 \item{input_type}{One of \code{bam}, \code{sam}, or \code{counts}.}
 
-\item{samtools_bin}{Samtools executable to use for BAM input.}
+\item{mapq}{Optional integer mapping-quality threshold for BAM input.}
 
-\item{samtools_exclude_flags}{Optional integer flag passed to \verb{samtools view -F}.}
+\item{require_flags}{Optional integer bitmask; only reads with all bits set
+are kept for BAM input.}
 
-\item{samtools_min_mapq}{Optional integer mapping-quality threshold passed to
-\verb{samtools view -q}.}
+\item{exclude_flags}{Optional integer bitmask; reads with any bit set are
+dropped for BAM input.}
+
+\item{con}{Optional open DBI connection with duckhts already loaded.}
+
+\item{reference}{Optional FASTA reference path for CRAM input.}
 }
 \value{
 Named numeric vector with \code{SeqFF}, \code{Enet}, and \code{WRSC}.

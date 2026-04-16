@@ -59,6 +59,15 @@
   z-scores, NCV scores, regression scores, and a compact per-chromosome
   summary table.
 
+- New
+  [`nipter_gaunosome_report()`](https://sounkou-bioinfo.github.io/RWisecondorX/reference/nipter_gaunosome_report.md)
+  and
+  [`write_nipter_gaunosome_output()`](https://sounkou-bioinfo.github.io/RWisecondorX/reference/write_nipter_gaunosome_output.md)
+  provide the cohort/reporting layer on top of the typed gaunosome API:
+  batch sample scoring now returns one validated report object with a
+  flattened summary table, and that summary can be written directly as a
+  tab-separated output file without rebuilding downstream script logic.
+
 - The S7 implementation now exposes compatibility accessors for the
   legacy `autosomal_chromosome_reads`, `sex_chromosome_reads`,
   `sample_name`, and correction-status fields, and the control-group

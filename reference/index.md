@@ -14,6 +14,8 @@
   : Abstract base class for NIPTeR control groups
 - [`NIPTCorrectionRecord()`](https://sounkou-bioinfo.github.io/RWisecondorX/reference/NIPTCorrectionRecord.md)
   : Correction record for a NIPTeR sample
+- [`NIPTGaunosomeReport()`](https://sounkou-bioinfo.github.io/RWisecondorX/reference/NIPTGaunosomeReport.md)
+  : Aggregate gaunosome cohort report
 - [`NIPTGaunosomeScore()`](https://sounkou-bioinfo.github.io/RWisecondorX/reference/NIPTGaunosomeScore.md)
   : Aggregate gaunosome score report
 - [`NIPTReferenceFrame()`](https://sounkou-bioinfo.github.io/RWisecondorX/reference/NIPTReferenceFrame.md)
@@ -95,6 +97,8 @@
   : Load a NIPTeR control group from a directory of TSV.bgz files
 - [`nipter_diagnose_control_group()`](https://sounkou-bioinfo.github.io/RWisecondorX/reference/nipter_diagnose_control_group.md)
   : Diagnose a NIPTeR control group
+- [`nipter_gaunosome_report()`](https://sounkou-bioinfo.github.io/RWisecondorX/reference/nipter_gaunosome_report.md)
+  : Score multiple samples against a typed gaunosome reference
 - [`nipter_gaunosome_score()`](https://sounkou-bioinfo.github.io/RWisecondorX/reference/nipter_gaunosome_score.md)
   : Score gaunosomes from a typed reference model
 - [`nipter_gc_correct()`](https://sounkou-bioinfo.github.io/RWisecondorX/reference/nipter_gc_correct.md)
@@ -155,5 +159,7 @@
   : Build a WisecondorX reference panel
 - [`wisecondorx_predict()`](https://sounkou-bioinfo.github.io/RWisecondorX/reference/wisecondorx_predict.md)
   : Predict copy-number aberrations with WisecondorX
+- [`write_nipter_gaunosome_output()`](https://sounkou-bioinfo.github.io/RWisecondorX/reference/write_nipter_gaunosome_output.md)
+  : Write gaunosome summary output
 - [`write_wisecondorx_output()`](https://sounkou-bioinfo.github.io/RWisecondorX/reference/write_wisecondorx_output.md)
   : Write prediction output files

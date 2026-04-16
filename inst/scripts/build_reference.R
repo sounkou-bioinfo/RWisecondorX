@@ -50,7 +50,9 @@ option_list <- list(
                             "50000 (nipter) [default: mode-dependent]")),
   make_option("--ref-binsize", type = "integer", default = NULL,
               help = paste0("Reference binsize for wisecondorx newref (rescale target). ",
-                            "Ignored in nipter mode [default: same as --binsize]")),
+                            "Defaults to 100000 in wisecondorx mode. ",
+                            "Not used in nipter mode, where the sample/reference binsize ",
+                            "is typically 50000.")),
   make_option("--mapq", type = "integer", default = NULL,
               help = "Minimum MAPQ for binning [default: 1 wisecondorx, 0 nipter]"),
   make_option("--rmdup", type = "character", default = NULL,
@@ -170,6 +172,26 @@ if (!is.null(opts$fasta) && mode != "nipter") {
   stop("--fasta GC correction is only valid in nipter mode", call. = FALSE)
 }
 
+if (!is.null(opts$`ref-binsize`) && mode == "nipter") {
+  stop("--ref-binsize is not used in nipter mode; use --binsize (default 50000) instead",
+       call. = FALSE)
+}
+
+if (mode == "nipter" && has_bed_input && !is.null(opts$`gc-table`)) {
+  stop("--gc-table cannot be used with --bed-dir/--bed-list in nipter mode; BED inputs are loaded as-is",
+       call. = FALSE)
+}
+
+if (mode == "nipter" && has_bed_input && !is.null(opts$fasta)) {
+  stop("--fasta cannot be used with --bed-dir/--bed-list in nipter mode; BED inputs are loaded as-is",
+       call. = FALSE)
+}
+
+if (mode == "nipter" && has_bed_input && isTRUE(opts$`separate-strands`)) {
+  stop("--separate-strands cannot be used with --bed-dir/--bed-list in nipter mode; strand layout is read from the BED columns",
+       call. = FALSE)
+}
+
 # ---------------------------------------------------------------------------
 # Resolve file lists
 # ---------------------------------------------------------------------------
@@ -227,15 +249,21 @@ if (mode == "wisecondorx") {
   binsize <- if (is.null(opts$binsize)) 5000L else opts$binsize
   mapq    <- if (is.null(opts$mapq)) 1L else opts$mapq
   rmdup   <- if (is.null(opts$rmdup)) "streaming" else opts$rmdup
+  ref_binsize <- if (is.null(opts$`ref-binsize`)) 100000L else opts$`ref-binsize`
 } else {
   binsize <- if (is.null(opts$binsize)) 50000L else opts$binsize
   mapq    <- if (is.null(opts$mapq)) 0L else opts$mapq
   rmdup   <- if (is.null(opts$rmdup)) "none" else opts$rmdup
+  ref_binsize <- binsize
 }
 
-ref_binsize <- opts$`ref-binsize`
 gc_table    <- opts$`gc-table`
 gc_fasta    <- opts$fasta
+
+if (mode == "wisecondorx" && ref_binsize %% binsize != 0L) {
+  stop("--ref-binsize must be a multiple of --binsize in wisecondorx mode",
+       call. = FALSE)
+}
 
 library(RWisecondorX)
 
@@ -354,7 +382,7 @@ if (mode == "wisecondorx") {
 
   ref <- rwisecondorx_newref(
     samples     = samples,
-    binsize     = if (is.null(ref_binsize)) binsize else ref_binsize,
+    binsize     = ref_binsize,
     nipt        = opts$nipt,
     refsize     = opts$refsize,
     cpus        = opts$cpus

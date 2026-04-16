@@ -114,6 +114,12 @@ expect_identical(
   info = "wisecondorx_newref defaults to 4 CPUs"
 )
 
+expect_identical(
+  formals(wisecondorx_newref)$ref_binsize,
+  100000L,
+  info = "wisecondorx_newref defaults to a 100kb reference binsize"
+)
+
 .with_deleted_wd <- function(code) {
   old_wd <- getwd()
   doomed_wd <- tempfile(tmpdir = tempdir())

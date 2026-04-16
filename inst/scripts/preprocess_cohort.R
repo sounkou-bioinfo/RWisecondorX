@@ -9,6 +9,8 @@
 #   4. converts every BAM to native RWisecondorX BED.gz
 #   5. optionally writes upstream WisecondorX NPZ files via the Python CLI
 #   6. converts every BAM to NIPTeR BED.gz with separated strands and GC-corrected columns
+#   7. writes native mosdepth-compatible 50 kb coverage outputs for raw-style
+#      and filtered-style NIPT coverage
 #
 # It intentionally does not build references or score samples.
 
@@ -86,6 +88,20 @@ library(optparse)
   lapply(seq_along(bams), function(i) worker(i, bams[[i]]))
 }
 
+.with_duckhts_con <- function(expr) {
+  drv <- duckdb::duckdb(config = list(allow_unsigned_extensions = "true"))
+  con <- DBI::dbConnect(drv)
+  Rduckhts::rduckhts_load(con)
+  on.exit(DBI::dbDisconnect(con, shutdown = TRUE), add = TRUE)
+  eval(substitute(expr), envir = environment())
+}
+
+.per_worker_threads <- function(total_threads, jobs) {
+  total_threads <- as.integer(total_threads)
+  jobs <- as.integer(jobs)
+  max(1L, total_threads %/% max(1L, jobs))
+}
+
 option_list <- list(
   make_option("--bam-list", type = "character", default = NULL,
               help = "Text file with one BAM/CRAM path per line [required]"),
@@ -144,6 +160,8 @@ dirs <- list(
   rwcx_beds = .ensure_dir(file.path(out_root, "rwcx_beds")),
   wisecondorx_npz = .ensure_dir(file.path(out_root, "wisecondorx_npz")),
   nipter_beds = .ensure_dir(file.path(out_root, "nipter_beds")),
+  mosdepth_raw_50k = .ensure_dir(file.path(out_root, "mosdepth_raw_50k")),
+  mosdepth_filtered_50k = .ensure_dir(file.path(out_root, "mosdepth_filtered_50k")),
   logs = .ensure_dir(file.path(out_root, "logs"))
 )
 
@@ -292,6 +310,61 @@ if (isTRUE(opts$`wcx-write-npz`)) {
   })
 }, sprintf("Convert %d BAMs to NIPTeR BED.gz", length(bams)))
 
+.run_one({
+  worker_threads <- .per_worker_threads(opts$threads, opts$jobs)
+  .run_stage_samples(bams, opts$jobs, function(i, bam) {
+    stem <- sub("\\.(bam|cram)$", "", basename(bam), ignore.case = TRUE)
+
+    raw_prefix <- file.path(dirs$mosdepth_raw_50k, stem)
+    raw_summary <- paste0(raw_prefix, ".mosdepth.summary.txt")
+    if (!file.exists(raw_summary) || isTRUE(opts$overwrite)) {
+      .log_sample(i, length(bams), "Mosdepth raw 50k", stem)
+      .with_duckhts_con({
+        Rduckhts::rduckhts_mosdepth(
+          con = con,
+          prefix = raw_prefix,
+          path = bam,
+          by = "50000",
+          fasta = opts$fasta,
+          no_per_base = TRUE,
+          threads = worker_threads,
+          processing_threads = worker_threads,
+          flag = 1796L,
+          include_flag = 0L,
+          fast_mode = TRUE,
+          mapq = 0L,
+          overwrite = isTRUE(opts$overwrite)
+        )
+      })
+    }
+
+    filtered_prefix <- file.path(dirs$mosdepth_filtered_50k, stem)
+    filtered_summary <- paste0(filtered_prefix, ".mosdepth.summary.txt")
+    if (!file.exists(filtered_summary) || isTRUE(opts$overwrite)) {
+      .log_sample(i, length(bams), "Mosdepth filtered 50k", stem)
+      .with_duckhts_con({
+        Rduckhts::rduckhts_mosdepth(
+          con = con,
+          prefix = filtered_prefix,
+          path = bam,
+          by = "50000",
+          fasta = opts$fasta,
+          no_per_base = TRUE,
+          threads = worker_threads,
+          processing_threads = worker_threads,
+          flag = bitwOr(1796L, 1024L),
+          include_flag = 0L,
+          fast_mode = TRUE,
+          mapq = as.integer(opts$`nipter-mapq`),
+          overwrite = isTRUE(opts$overwrite)
+        )
+      })
+    }
+
+    invisible(NULL)
+  })
+}, sprintf("Write native mosdepth-compatible 50 kb outputs for %d BAMs", length(bams)))
+
 cat("\nPreprocessing layout ready under:\n")
 cat("  out_root:    ", out_root, "\n", sep = "")
 cat("  manifest:    ", staged_manifest, "\n", sep = "")
@@ -301,3 +374,5 @@ cat("  seqff:       ", dirs$seqff, "\n", sep = "")
 cat("  rwcx_beds:   ", dirs$rwcx_beds, "\n", sep = "")
 cat("  wisecondorx_npz: ", dirs$wisecondorx_npz, "\n", sep = "")
 cat("  nipter_beds: ", dirs$nipter_beds, "\n", sep = "")
+cat("  mosdepth_raw_50k: ", dirs$mosdepth_raw_50k, "\n", sep = "")
+cat("  mosdepth_filtered_50k: ", dirs$mosdepth_filtered_50k, "\n", sep = "")

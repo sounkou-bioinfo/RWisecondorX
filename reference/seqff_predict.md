@@ -8,9 +8,11 @@ Predict Fetal Fraction with SeqFF
 seqff_predict(
   input,
   input_type = c("bam", "sam", "counts"),
-  samtools_bin = "samtools",
-  samtools_exclude_flags = NULL,
-  samtools_min_mapq = NULL
+  mapq = NULL,
+  require_flags = NULL,
+  exclude_flags = NULL,
+  con = NULL,
+  reference = NULL
 )
 ```
 
@@ -25,18 +27,27 @@ seqff_predict(
 
   One of `bam`, `sam`, or `counts`.
 
-- samtools_bin:
+- mapq:
 
-  Samtools executable to use for BAM input.
+  Optional integer mapping-quality threshold for BAM input.
 
-- samtools_exclude_flags:
+- require_flags:
 
-  Optional integer flag passed to `samtools view -F`.
+  Optional integer bitmask; only reads with all bits set are kept for
+  BAM input.
 
-- samtools_min_mapq:
+- exclude_flags:
 
-  Optional integer mapping-quality threshold passed to
-  `samtools view -q`.
+  Optional integer bitmask; reads with any bit set are dropped for BAM
+  input.
+
+- con:
+
+  Optional open DBI connection with duckhts already loaded.
+
+- reference:
+
+  Optional FASTA reference path for CRAM input.
 
 ## Value
 

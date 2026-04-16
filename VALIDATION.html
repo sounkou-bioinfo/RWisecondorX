@@ -158,6 +158,9 @@ sample2 /path/to/native/sample2.bed.gz  /path/to/upstream/sample2.npz</code></pr
 <li>
 <code>inst/scripts/preprocess_cohort.R</code> stages real cohorts into reusable artifact directories instead of mixing conversion, reference building, and scoring in one script</li>
 <li>the same preprocessing script now emits SeqFF fetal-fraction estimates as a cohort-side preprocessing artifact</li>
+<li>native WisecondorX-prepared artifacts are written to <code>rwcx_beds/</code>
+</li>
+<li>upstream WisecondorX-prepared artifacts are written to <code>wisecondorx_npz/</code> through the Python CLI wrapper</li>
 </ul><p>This is structural validation of the workflow boundary, not numeric cross-implementation equivalence by itself.</p>
 <hr></div>
 </div>
@@ -247,12 +250,12 @@ sample2 /path/to/native/sample2.bed.gz  /path/to/upstream/sample2.npz</code></pr
 <span id="cb8-8"><a href="#cb8-8" tabindex="-1"></a><span class="co"># 2. build the native and upstream references from prepared artifacts</span></span>
 <span id="cb8-9"><a href="#cb8-9" tabindex="-1"></a><span class="ex">Rscript</span> inst/scripts/build_reference.R <span class="dt">\</span></span>
 <span id="cb8-10"><a href="#cb8-10" tabindex="-1"></a>  <span class="at">--mode</span> rwisecondorx <span class="dt">\</span></span>
-<span id="cb8-11"><a href="#cb8-11" tabindex="-1"></a>  <span class="at">--bed-dir</span> /path/to/workdir/wcx_beds <span class="dt">\</span></span>
+<span id="cb8-11"><a href="#cb8-11" tabindex="-1"></a>  <span class="at">--bed-dir</span> /path/to/workdir/rwcx_beds <span class="dt">\</span></span>
 <span id="cb8-12"><a href="#cb8-12" tabindex="-1"></a>  <span class="at">--out</span> /path/to/workdir/refs/rwisecondorx_reference.rds</span>
 <span id="cb8-13"><a href="#cb8-13" tabindex="-1"></a></span>
 <span id="cb8-14"><a href="#cb8-14" tabindex="-1"></a><span class="ex">Rscript</span> inst/scripts/build_reference.R <span class="dt">\</span></span>
 <span id="cb8-15"><a href="#cb8-15" tabindex="-1"></a>  <span class="at">--mode</span> wisecondorx <span class="dt">\</span></span>
-<span id="cb8-16"><a href="#cb8-16" tabindex="-1"></a>  <span class="at">--npz-dir</span> /path/to/workdir/wcx_npz <span class="dt">\</span></span>
+<span id="cb8-16"><a href="#cb8-16" tabindex="-1"></a>  <span class="at">--npz-dir</span> /path/to/workdir/wisecondorx_npz <span class="dt">\</span></span>
 <span id="cb8-17"><a href="#cb8-17" tabindex="-1"></a>  <span class="at">--out</span> /path/to/workdir/refs/wisecondorx_reference.npz</span>
 <span id="cb8-18"><a href="#cb8-18" tabindex="-1"></a></span>
 <span id="cb8-19"><a href="#cb8-19" tabindex="-1"></a><span class="co"># 3. compare both predict paths on prepared test cases</span></span>

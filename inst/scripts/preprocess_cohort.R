@@ -69,6 +69,23 @@ library(optparse)
               i, n, label, stem))
 }
 
+.run_stage_samples <- function(bams, jobs, worker) {
+  jobs <- as.integer(jobs)
+  stopifnot(length(jobs) == 1L, jobs >= 1L)
+  if (length(bams) == 0L) {
+    return(list())
+  }
+  if (.Platform$OS.type == "unix" && jobs > 1L) {
+    return(parallel::mclapply(
+      X = seq_along(bams),
+      FUN = function(i) worker(i, bams[[i]]),
+      mc.cores = jobs,
+      mc.preschedule = FALSE
+    ))
+  }
+  lapply(seq_along(bams), function(i) worker(i, bams[[i]]))
+}
+
 option_list <- list(
   make_option("--bam-list", type = "character", default = NULL,
               help = "Text file with one BAM/CRAM path per line [required]"),
@@ -78,6 +95,8 @@ option_list <- list(
               help = "Indexed reference FASTA for GC precompute [required]"),
   make_option("--threads", type = "integer", default = 20L,
               help = "Reserved thread budget for downstream work [default: %default]"),
+  make_option("--jobs", type = "integer", default = 4L,
+              help = "Number of samples to process in parallel per stage [default: %default]"),
   make_option("--wcx-binsize", type = "integer", default = 100000L,
               help = "WisecondorX convert binsize [default: %default]"),
   make_option("--nipter-binsize", type = "integer", default = 50000L,
@@ -90,8 +109,6 @@ option_list <- list(
               help = "Write NIPTeR 9-column separated-strand BEDs [default: %default]"),
   make_option("--seqff", action = "store_true", default = TRUE,
               help = "Compute SeqFF fetal-fraction estimates from BAMs [default: %default]"),
-  make_option("--seqff-samtools-bin", type = "character", default = "samtools",
-              help = "Samtools executable used by SeqFF [default: %default]"),
   make_option("--wcx-write-npz", action = "store_true", default = FALSE,
               help = "Also write upstream WisecondorX NPZ files via the Python CLI [default: %default]"),
   make_option("--overwrite", action = "store_true", default = FALSE,
@@ -112,6 +129,9 @@ if (is.null(opts$`out-root`) || !nzchar(opts$`out-root`)) {
 }
 if (is.null(opts$fasta) || !file.exists(opts$fasta)) {
   stop("--fasta is required and must exist.", call. = FALSE)
+}
+if (is.na(opts$jobs) || as.integer(opts$jobs) < 1L) {
+  stop("--jobs must be >= 1.", call. = FALSE)
 }
 
 bams <- .read_file_list(opts$`bam-list`)
@@ -151,27 +171,24 @@ library(RWisecondorX)
 
 if (isTRUE(opts$seqff)) {
   .run_one({
-    seqff_rows <- vector("list", length(bams))
-    for (i in seq_along(bams)) {
-      bam <- bams[[i]]
+    seqff_rows <- .run_stage_samples(bams, opts$jobs, function(i, bam) {
       stem <- sub("\\.(bam|cram)$", "", basename(bam), ignore.case = TRUE)
       out_tsv <- file.path(dirs$seqff, paste0(stem, ".seqff.tsv"))
       if (file.exists(out_tsv) && !isTRUE(opts$overwrite)) {
-        seqff_rows[[i]] <- utils::read.delim(
+        return(utils::read.delim(
           out_tsv,
           sep = "\t",
           header = TRUE,
           stringsAsFactors = FALSE
-        )
-        next
+        ))
       }
       .log_sample(i, length(bams), "SeqFF", stem)
       ff <- seqff_predict(
         input = bam,
         input_type = "bam",
-        samtools_bin = opts$`seqff-samtools-bin`,
-        samtools_exclude_flags = as.integer(opts$`nipter-exclude-flags`),
-        samtools_min_mapq = as.integer(opts$`nipter-mapq`)
+        mapq = as.integer(opts$`nipter-mapq`),
+        exclude_flags = as.integer(opts$`nipter-exclude-flags`),
+        reference = opts$fasta
       )
       row <- data.frame(
         sample = stem,
@@ -189,8 +206,8 @@ if (isTRUE(opts$seqff)) {
         col.names = TRUE,
         quote = FALSE
       )
-      seqff_rows[[i]] <- row
-    }
+      row
+    })
     seqff_summary <- do.call(rbind, seqff_rows)
     utils::write.table(
       seqff_summary,
@@ -204,12 +221,11 @@ if (isTRUE(opts$seqff)) {
 }
 
 .run_one({
-  for (i in seq_along(bams)) {
-    bam <- bams[[i]]
+  .run_stage_samples(bams, opts$jobs, function(i, bam) {
     stem <- sub("\\.(bam|cram)$", "", basename(bam), ignore.case = TRUE)
     out_bed <- file.path(dirs$rwcx_beds, paste0(stem, ".bed.gz"))
     if (file.exists(out_bed) && !isTRUE(opts$overwrite)) {
-      next
+      return(invisible(NULL))
     }
     .log_sample(i, length(bams), "RWisecondorX BED", stem)
     bam_convert_bed(
@@ -217,38 +233,40 @@ if (isTRUE(opts$seqff)) {
       bed = out_bed,
       binsize = as.integer(opts$`wcx-binsize`),
       mapq = 1L,
-      rmdup = "streaming"
+      rmdup = "streaming",
+      reference = opts$fasta
     )
-  }
+    invisible(NULL)
+  })
 }, sprintf("Convert %d BAMs to native RWisecondorX BED.gz", length(bams)))
 
 if (isTRUE(opts$`wcx-write-npz`)) {
   .run_one({
-    for (i in seq_along(bams)) {
-      bam <- bams[[i]]
+    .run_stage_samples(bams, opts$jobs, function(i, bam) {
       stem <- sub("\\.(bam|cram)$", "", basename(bam), ignore.case = TRUE)
       out_npz <- file.path(dirs$wisecondorx_npz, paste0(stem, ".npz"))
       if (file.exists(out_npz) && !isTRUE(opts$overwrite)) {
-        next
+        return(invisible(NULL))
       }
       .log_sample(i, length(bams), "WisecondorX CLI NPZ", stem)
       wisecondorx_convert(
         bam = bam,
         npz = out_npz,
         binsize = as.integer(opts$`wcx-binsize`),
+        reference = opts$fasta,
         normdup = FALSE
       )
-    }
+      invisible(NULL)
+    })
   }, sprintf("Convert %d BAMs to upstream WisecondorX NPZ via Python CLI", length(bams)))
 }
 
 .run_one({
-  for (i in seq_along(bams)) {
-    bam <- bams[[i]]
+  .run_stage_samples(bams, opts$jobs, function(i, bam) {
     stem <- sub("\\.(bam|cram)$", "", basename(bam), ignore.case = TRUE)
     out_bed <- file.path(dirs$nipter_beds, paste0(stem, ".bed.gz"))
     if (file.exists(out_bed) && !isTRUE(opts$overwrite)) {
-      next
+      return(invisible(NULL))
     }
     .log_sample(i, length(bams), "NIPTeR BED", stem)
     raw_sample <- nipter_bin_bam(
@@ -257,7 +275,8 @@ if (isTRUE(opts$`wcx-write-npz`)) {
       mapq = as.integer(opts$`nipter-mapq`),
       exclude_flags = as.integer(opts$`nipter-exclude-flags`),
       rmdup = "none",
-      separate_strands = isTRUE(opts$`nipter-separate-strands`)
+      separate_strands = isTRUE(opts$`nipter-separate-strands`),
+      reference = opts$fasta
     )
     corrected_sample <- nipter_gc_correct(
       raw_sample,
@@ -269,12 +288,14 @@ if (isTRUE(opts$`wcx-write-npz`)) {
       bed = out_bed,
       binsize = as.integer(opts$`nipter-binsize`)
     )
-  }
+    invisible(NULL)
+  })
 }, sprintf("Convert %d BAMs to NIPTeR BED.gz", length(bams)))
 
 cat("\nPreprocessing layout ready under:\n")
 cat("  out_root:    ", out_root, "\n", sep = "")
 cat("  manifest:    ", staged_manifest, "\n", sep = "")
+cat("  jobs:        ", as.integer(opts$jobs), "\n", sep = "")
 cat("  gc_table:    ", gc_table, "\n", sep = "")
 cat("  seqff:       ", dirs$seqff, "\n", sep = "")
 cat("  rwcx_beds:   ", dirs$rwcx_beds, "\n", sep = "")

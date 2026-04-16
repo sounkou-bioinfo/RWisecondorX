@@ -1,2 +1,9 @@
+RDUCKHTS_DIR = $(shell "${R_HOME}/bin${R_ARCH_BIN}/Rscript" -e "cat(normalizePath(system.file(package = 'Rduckhts'), winslash = '/', mustWork = TRUE))")
+RDUCKHTS_HTSLIB_DIR = $(RDUCKHTS_DIR)/duckhts_extension/htslib
+
 PKG_CXXFLAGS = $(SHLIB_OPENMP_CXXFLAGS)
-PKG_LIBS = $(SHLIB_OPENMP_CXXFLAGS) $(LAPACK_LIBS) $(BLAS_LIBS) $(FLIBS)
+PKG_CPPFLAGS = -I"$(RDUCKHTS_HTSLIB_DIR)/include"
+PKG_LIBS = $(SHLIB_OPENMP_CXXFLAGS) \
+	"$(RDUCKHTS_HTSLIB_DIR)/lib/libhts.a" \
+	-lz -lbz2 -llzma -lpthread \
+	$(LAPACK_LIBS) $(BLAS_LIBS) $(FLIBS)

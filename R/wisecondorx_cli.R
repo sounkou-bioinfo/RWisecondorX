@@ -347,15 +347,9 @@ wisecondorx_predict <- function(npz,
   cache_home <- file.path(tempdir(), "rwisecondorx-condathis-home")
   cache_dir <- file.path(cache_home, ".cache")
   dir.create(cache_dir, recursive = TRUE, showWarnings = FALSE)
-  Sys.setenv(
-    HOME = cache_home,
-    XDG_CACHE_HOME = cache_dir,
-    XDG_DATA_HOME = resolved_xdg_data,
-    XDG_CONFIG_HOME = resolved_xdg_config
-  )
-  if (is.na(old_wd) || !identical(old_wd, safe_wd)) {
-    setwd(safe_wd)
-  }
+
+  # Register cleanup BEFORE mutating state, so an interrupt between Sys.setenv
+  # and on.exit does not permanently corrupt the process environment.
   on.exit(
     {
       if (is.na(old_home)) Sys.unsetenv("HOME") else Sys.setenv(HOME = old_home)
@@ -368,6 +362,16 @@ wisecondorx_predict <- function(npz,
     },
     add = TRUE
   )
+
+  Sys.setenv(
+    HOME = cache_home,
+    XDG_CACHE_HOME = cache_dir,
+    XDG_DATA_HOME = resolved_xdg_data,
+    XDG_CONFIG_HOME = resolved_xdg_config
+  )
+  if (is.na(old_wd) || !identical(old_wd, safe_wd)) {
+    setwd(safe_wd)
+  }
   force(expr)
 }
 

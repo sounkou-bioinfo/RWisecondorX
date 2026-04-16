@@ -22,6 +22,15 @@
 library(tinytest)
 library(RWisecondorX)
 
+.is_nipter_sample <- function(x) {
+  inherits(x, "NIPTSample") || inherits(x, "NIPTeRSample") ||
+    S7::S7_inherits(x, NIPTSample)
+}
+
+.is_nipter_control_group <- function(x) {
+  inherits(x, "NIPTeRControlGroup") || S7::S7_inherits(x, NIPTControlGroup)
+}
+
 
 # ---------------------------------------------------------------------------
 # Helpers — intentionally self-contained; NOT shared via helper_nipter.R.
@@ -170,10 +179,10 @@ if (length(overdispersed) > 0L) {
 
 corrected <- nipter_chi_correct(test_sample, cg, chi_cutoff = chi_cutoff)
 
-expect_true(inherits(corrected$sample, "NIPTeRSample"),
-            info = "chi_correct returns NIPTeRSample")
-expect_true(inherits(corrected$control_group, "NIPTeRControlGroup"),
-            info = "chi_correct returns NIPTeRControlGroup")
+expect_true(.is_nipter_sample(corrected$sample),
+            info = "chi_correct returns an NIPTSample")
+expect_true(.is_nipter_control_group(corrected$control_group),
+            info = "chi_correct returns an NIPTControlGroup")
 
 # Verify that the correction factor is applied correctly to the FIRST control
 # sample: corrected_bin = original_bin * correction_factor
@@ -243,6 +252,34 @@ expect_equal(our_ncv21$denominators, as.integer(best_den),
 # The numeric score must agree
 expect_equal(our_ncv21$sample_score, ref_ncv_z, tolerance = 1e-10,
              info = "NCV score matches inline formula for best single denominator")
+
+
+# --- 3b. NCV C++ search stays finite for large near-constant cohorts ---------
+# Stress the denominator-search kernel with a large control cohort whose ratios
+# are intentionally almost constant. The previous one-pass variance formula can
+# lose precision here; the stable implementation should stay finite and match a
+# two-pass reference CV.
+
+n_ctrl_big <- 2000L
+ctrl_big <- matrix(1e12, nrow = 22L, ncol = n_ctrl_big)
+ratio_big <- 0.05 + seq_len(n_ctrl_big) * 1e-14
+ctrl_big[21L, ] <- ctrl_big[1L, ] * ratio_big
+
+big_res <- RWisecondorX:::nipter_ncv_search_cpp(
+  ctrl_reads  = ctrl_big,
+  candidates  = 0L,
+  focus_row   = 20L,  # 0-based chr21
+  max_elements = 1L
+)
+
+ref_mean_big <- mean(ratio_big)
+ref_sd_big <- sqrt(sum((ratio_big - ref_mean_big)^2) / (length(ratio_big) - 1L))
+ref_cv_big <- ref_sd_big / abs(ref_mean_big)
+
+expect_true(is.finite(big_res$best_cv) && big_res$best_cv >= 0,
+            info = "NCV C++ search returns a finite CV for a large near-constant cohort")
+expect_true(abs(as.numeric(big_res$best_cv) - ref_cv_big) < 1e-12,
+            info = "NCV C++ search matches the two-pass reference CV on the stress case")
 
 
 # --- 4. Regression Z-score — numeric verification ----------------------------
@@ -444,7 +481,7 @@ if (length(missing_nipter_exports) > 0L) {
 }
 
 .make_real_control_variants <- function(sample, prefix, n = 12L) {
-  stopifnot(inherits(sample, "NIPTSample") || inherits(sample, "NIPTeRSample"))
+  stopifnot(.is_nipter_sample(sample))
   stopifnot(length(sample$autosomal_chromosome_reads) == 1L)
   lapply(seq_len(n), function(i) {
     s <- sample
@@ -548,8 +585,8 @@ our_gc <- tryCatch(
   error = function(e) NULL
 )
 if (!is.null(our_gc) && !is.na(Sys.getenv("RWXCONF_FASTA", unset = NA_character_))) {
-  expect_true(inherits(our_gc, "NIPTeRSample"),
-              info = "gc_correct returns NIPTeRSample (structural check)")
+  expect_true(.is_nipter_sample(our_gc),
+              info = "gc_correct returns an NIPTSample (structural check)")
   # NIPTeR GC correction
   nipter_gc <- tryCatch(
     NIPTeR::gc_correct(nipter_s_real),

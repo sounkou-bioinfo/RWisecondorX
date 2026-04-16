@@ -8,6 +8,25 @@
 # Original WisecondorX authors: Lennart Raman, Roy Straver, Wim Audenaert.
 # DNAcopy: Adam B. Olshen, E. S. Venkatraman, et al.
 # ParDNAcopy: Alex Krasnitz, Guoli Sun.
+#
+# CBS Coordinate Convention
+# -------------------------
+# .exec_cbs() returns segments with:
+#   start = DNAcopy_loc.start - 1  (0-based inclusive)
+#   end   = DNAcopy_loc.end        (0-based exclusive; equivalently 1-based inclusive)
+#
+# This forms a half-open [start, end) interval in 0-based terms, matching
+# Python's array[start:end] slicing semantics.
+#
+# R consumers must use (start + 1):end for 1-based indexing.
+# Segment length in bins is end - start.
+#
+# Upstream bugs intentionally replicated for conformance:
+# - CPA overcounts by 1 bin per segment (overall_tools.py:146 uses
+#   segment[2] - segment[1] + 1 instead of segment[2] - segment[1]).
+# - Whole-chromosome Z-scores drop the last bin (predict_output.py:210
+#   sets end = bins_per_chr - 1 instead of bins_per_chr).
+# Both are documented in @note sections on the affected functions.
 
 
 #' Execute CBS on WisecondorX results
@@ -299,7 +318,10 @@
     }
 
     null_mean <- mean(finite_null)
-    null_sd   <- stats::sd(finite_null)
+    # Upstream uses np.ma.std() which defaults to ddof=0 (population SD).
+    # R's sd() uses ddof=1 (sample SD). Use population SD for conformance.
+    n_fn <- length(finite_null)
+    null_sd <- sqrt(sum((finite_null - null_mean)^2) / n_fn)
 
     if (is.na(null_mean) || is.na(null_sd) || null_sd == 0) {
       zscores[i] <- NaN
@@ -316,6 +338,15 @@
 #' Compute per-chromosome statistics
 #'
 #' Mirrors `predict_output._generate_chr_statistics_file()`.
+#'
+#' @note **Upstream bug replicated for conformance (last-bin drop).**
+#' Upstream Python (`predict_output.py:210`) sets `end = bins_per_chr - 1`
+#' when constructing whole-chromosome segments. Combined with `get_z_score`'s
+#' `array[s:e]` slicing (Python half-open), this drops the last bin of every
+#' chromosome from the whole-chromosome Z-score calculation. We replicate this
+#' exactly (`end = bins_per_chr - 1L`) for conformance with Python WisecondorX
+#' output.
+#'
 #' @keywords internal
 .compute_statistics <- function(results_r, results_w, results_c, results_nr,
                                 bins_per_chr, binsize, ref_gender, gender,
@@ -341,6 +372,10 @@
   chr_segments <- data.frame(
     chr   = seq_len(n_chr),
     start = rep(0L, n_chr),
+    # NOTE: upstream Python uses `bins_per_chr - 1` here, which combined with
+    # get_z_score's `array[s:e]` slicing drops the last bin per chromosome.
+    # This is a known upstream bug (predict_output.py:210) but we replicate it
+    # for exact conformance with Python WisecondorX output.
     end   = bins_per_chr - 1L,
     ratio = chr_ratio_means,
     stringsAsFactors = FALSE
@@ -393,11 +428,22 @@
 
 
 #' Copy number profile abnormality (CPA)
+#'
+#' @note **Upstream bug replicated for conformance (CPA +1 overcount).**
+#' Upstream Python (`overall_tools.py:146`) computes segment length as
+#' `segment[2] - segment[1] + 1`. Given that CBS returns half-open
+#' `[start, end)` intervals, the correct length is `end - start`, so the
+#' `+ 1` overcounts by one bin per segment. We replicate this exactly
+#' (`end - start + 1L`) for conformance with Python WisecondorX output.
+#'
 #' @keywords internal
 .get_cpa <- function(results_c, binsize) {
   if (nrow(results_c) == 0L) return(NA_real_)
   x <- 0
   for (i in seq_len(nrow(results_c))) {
+    # NOTE: upstream Python uses `segment[2] - segment[1] + 1` (overall_tools.py:146).
+    # Given the half-open CBS convention, this overcounts by 1 bin per segment.
+    # We replicate this for exact conformance with Python WisecondorX output.
     x <- x + (results_c$end[i] - results_c$start[i] + 1L) * binsize * abs(results_c$ratio[i])
   }
   round(x / nrow(results_c) * 1e-8, 5)

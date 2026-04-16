@@ -9,6 +9,8 @@ nipter_control_group_from_beds(
   pattern = "*.bed.gz",
   binsize = NULL,
   description = "General control group",
+  sample_sex = NULL,
+  sex_source = NULL,
   con = NULL
 )
 }
@@ -25,6 +27,13 @@ nipter_control_group_from_beds(
 
 \item{description}{Label for the resulting control group (default
 \code{"General control group"}).}
+
+\item{sample_sex}{Optional character vector of known sex labels for the
+samples in \code{bed_dir}. Names must match the inferred sample names when
+supplied as a named vector.}
+
+\item{sex_source}{Optional string describing the provenance of
+\code{sample_sex}.}
 
 \item{con}{Optional open DBI connection with duckhts loaded.}
 }

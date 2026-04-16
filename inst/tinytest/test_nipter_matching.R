@@ -17,6 +17,24 @@ if (nzchar(.helper_nipter)) {
   sys.source("inst/tinytest/helper_nipter.R", envir = environment())
 }
 
+.is_nipter_sample <- function(x) {
+  inherits(x, "NIPTeRSample") || S7::S7_inherits(x, NIPTSample)
+}
+
+.is_nipter_control_group <- function(x) {
+  inherits(x, "NIPTeRControlGroup") || S7::S7_inherits(x, NIPTControlGroup)
+}
+
+.is_combined_sample <- function(x) {
+  inherits(x, "CombinedStrands") || S7::S7_inherits(x, CombinedStrandsSample)
+}
+
+.is_separated_sample <- function(x) {
+  inherits(x, "SeparatedStrands") || S7::S7_inherits(x, SeparatedStrandsSample)
+}
+
+.sample_name_of <- function(x) x$sample_name
+
 
 # ---------------------------------------------------------------------------
 # 1. nipter_ssd_scores_cpp — known inputs
@@ -93,7 +111,7 @@ expect_equal(dim(mm), c(5L, 5L),
              info = "nipter_match_matrix returns 5×5 for 5-sample group")
 expect_equal(rownames(mm), colnames(mm),
              info = "nipter_match_matrix rownames == colnames")
-sample_names_cg5 <- vapply(cg5$samples, `[[`, character(1L), "sample_name")
+sample_names_cg5 <- vapply(cg5$samples, .sample_name_of, character(1L))
 expect_equal(rownames(mm), sample_names_cg5,
              info = "nipter_match_matrix rownames match control sample names")
 expect_equal(unname(diag(mm)), rep(0.0, 5L),
@@ -186,28 +204,28 @@ expect_true(all(file.exists(paste0(bed_paths, ".tbi"))),
 # Load via multi-reader
 cg_from_beds <- nipter_control_group_from_beds(bed_dir, binsize = 50000L)
 
-expect_true(inherits(cg_from_beds, "NIPTeRControlGroup"),
-            info = "nipter_control_group_from_beds returns NIPTeRControlGroup")
+expect_true(.is_nipter_control_group(cg_from_beds),
+            info = "nipter_control_group_from_beds returns an NIPTControlGroup")
 expect_equal(length(cg_from_beds$samples), 3L,
              info = "3 samples loaded (one per BED file)")
 
 # Sample names derived from filenames (strip extension)
-loaded_names <- sort(vapply(cg_from_beds$samples, `[[`, character(1L), "sample_name"))
+loaded_names <- sort(vapply(cg_from_beds$samples, .sample_name_of, character(1L)))
 expect_equal(loaded_names, paste0("ctrl_", 1:3),
              info = "sample names derived from filenames without extension")
 
 # Each sample is CombinedStrands NIPTeRSample
 for (s in cg_from_beds$samples) {
-  expect_true(inherits(s, "NIPTeRSample"),
-              info = paste("sample", s$sample_name, "inherits NIPTeRSample"))
-  expect_true(inherits(s, "CombinedStrands"),
-              info = paste("sample", s$sample_name, "inherits CombinedStrands"))
+  expect_true(.is_nipter_sample(s),
+              info = paste("sample", s$sample_name, "inherits NIPTSample"))
+  expect_true(.is_combined_sample(s),
+              info = paste("sample", s$sample_name, "inherits CombinedStrandsSample"))
 }
 
 # Compare chr11 read counts against a direct bed_to_nipter_sample() load
 single <- bed_to_nipter_sample(bed_paths[1L])
 multi_s1 <- cg_from_beds$samples[[
-  which(vapply(cg_from_beds$samples, `[[`, character(1L), "sample_name") == "ctrl_1")
+  which(vapply(cg_from_beds$samples, .sample_name_of, character(1L)) == "ctrl_1")
 ]]
 
 # Chr11 counts should match exactly between single and multi reads
@@ -264,23 +282,22 @@ if (length(ss_lines) > 0L) {
 cg_ss_beds <- nipter_control_group_from_beds(ss_bed_dir, pattern = "*.bed.gz",
                                               binsize = 50000L)
 
-expect_true(inherits(cg_ss_beds, "NIPTeRControlGroup"),
-            info = "SS from_beds returns NIPTeRControlGroup")
-expect_true(inherits(cg_ss_beds, "SeparatedStrands"),
-            info = "SS from_beds returns SeparatedStrands control group")
+expect_true(.is_nipter_control_group(cg_ss_beds),
+            info = "SS from_beds returns an NIPTControlGroup")
+expect_true(S7::S7_inherits(cg_ss_beds, SeparatedControlGroup),
+            info = "SS from_beds returns a SeparatedControlGroup")
 expect_equal(length(cg_ss_beds$samples), 3L,
              info = "3 SeparatedStrands samples loaded")
 
-ss_names_loaded <- sort(vapply(cg_ss_beds$samples, `[[`, character(1L),
-                               "sample_name"))
+ss_names_loaded <- sort(vapply(cg_ss_beds$samples, .sample_name_of, character(1L)))
 expect_equal(ss_names_loaded, paste0("ss_ctrl_", 1:3),
              info = "SS sample names derived from filenames")
 
 for (s in cg_ss_beds$samples) {
-  expect_true(inherits(s, "NIPTeRSample"),
-              info = paste("SS sample", s$sample_name, "inherits NIPTeRSample"))
-  expect_true(inherits(s, "SeparatedStrands"),
-              info = paste("SS sample", s$sample_name, "inherits SeparatedStrands"))
+  expect_true(.is_nipter_sample(s),
+              info = paste("SS sample", s$sample_name, "inherits NIPTSample"))
+  expect_true(.is_separated_sample(s),
+              info = paste("SS sample", s$sample_name, "inherits SeparatedStrandsSample"))
   expect_identical(length(s$autosomal_chromosome_reads), 2L,
                    info = paste("SS sample", s$sample_name, "has 2 auto matrices"))
   expect_true(all(grepl("F$", rownames(s$autosomal_chromosome_reads[[1L]]))),
@@ -303,7 +320,7 @@ expect_true(length(unique(lapply(ss_dims, `[[`, 1L))) == 1L,
 # fwd + rev reads per chr should match raw bin count from single-file load
 ss_single <- bed_to_nipter_sample(ss_bed_paths[1L])
 ss_multi_s1 <- cg_ss_beds$samples[[
-  which(vapply(cg_ss_beds$samples, `[[`, character(1L), "sample_name") == "ss_ctrl_1")
+  which(vapply(cg_ss_beds$samples, .sample_name_of, character(1L)) == "ss_ctrl_1")
 ]]
 chr11_fwd_single <- ss_single$autosomal_chromosome_reads[[1L]]["11F", ]
 chr11_fwd_multi  <- ss_multi_s1$autosomal_chromosome_reads[[1L]]["11F", ]
@@ -354,8 +371,8 @@ corrected_path <- suppressWarnings(
   nipter_gc_correct(sample_for_gc, gc_table = gc_out, binsize = 50000L)
 )
 
-expect_true(inherits(corrected_path, "NIPTeRSample"),
-            info = "nipter_gc_correct(gc_table=path) returns NIPTeRSample")
+expect_true(.is_nipter_sample(corrected_path),
+            info = "nipter_gc_correct(gc_table=path) returns an NIPTSample")
 expect_true(corrected_path$correction_status_autosomal %in%
               c("Uncorrected", "GC Corrected"),
             info = "correction_status_autosomal is a known value after gc_table= call")
@@ -379,3 +396,128 @@ expect_equal(corrected_path$autosomal_chromosome_reads[[1L]],
              corrected_path2$autosomal_chromosome_reads[[1L]],
              tolerance = 1e-10,
              info = "repeated gc_table=path calls produce identical results")
+
+
+# ---------------------------------------------------------------------------
+# 7. Real GC correction test — synthetic sample with GC bias
+#
+# Construct a NIPTeRSample with 22 chromosomes × 50 bins where read counts
+# are systematically biased by GC content: high-GC bins get more reads.
+# Verify that nipter_gc_correct() reduces this bias for both LOESS and
+# bin-weight methods.
+# ---------------------------------------------------------------------------
+
+n_gc_bins <- 50L
+n_gc_chrs <- 22L
+base_reads <- 100  # base read count per bin
+
+set.seed(123)
+
+# Create synthetic GC table: each chromosome gets GC values that vary
+# systematically from ~30% to ~70% across its bins.
+gc_table_syn <- list()
+for (chr in as.character(1:n_gc_chrs)) {
+  # Smooth gradient with slight per-chr offset
+  offset <- (as.integer(chr) - 1L) * 0.005
+  gc_table_syn[[chr]] <- seq(0.30 + offset, 0.70 + offset,
+                              length.out = n_gc_bins)
+}
+# Add sex chromosomes (required by the gc_table format)
+gc_table_syn[["X"]] <- seq(0.35, 0.65, length.out = n_gc_bins)
+gc_table_syn[["Y"]] <- seq(0.35, 0.65, length.out = n_gc_bins)
+
+# Build a NIPTeRSample with GC bias: count = base * (1 + 2*(gc - 0.5))
+# This means bins with gc=0.3 get base*0.6=60, gc=0.5 get base*1.0=100,
+# gc=0.7 get base*1.4=140.
+col_names <- as.character(seq_len(n_gc_bins))
+auto_mat_gc <- matrix(0L, nrow = n_gc_chrs, ncol = n_gc_bins,
+                      dimnames = list(as.character(1:n_gc_chrs), col_names))
+for (chr in as.character(1:n_gc_chrs)) {
+  gc_vals <- gc_table_syn[[chr]]
+  # GC bias: counts proportional to GC, plus small Poisson noise
+  biased_counts <- as.integer(round(base_reads * (1 + 2 * (gc_vals - 0.5)) +
+                                     rnorm(n_gc_bins, 0, 3)))
+  biased_counts[biased_counts < 1L] <- 1L
+  auto_mat_gc[chr, ] <- biased_counts
+}
+
+sex_mat_gc <- matrix(0L, nrow = 2L, ncol = n_gc_bins,
+                     dimnames = list(c("X", "Y"), col_names))
+
+gc_sample <- structure(
+  list(autosomal_chromosome_reads  = list(auto_mat_gc),
+       sex_chromosome_reads        = list(sex_mat_gc),
+       correction_status_autosomal = "Uncorrected",
+       correction_status_sex       = "Uncorrected",
+       sample_name                 = "gc_biased_sample"),
+  class = c("NIPTeRSample", "CombinedStrands")
+)
+
+# Verify the uncorrected sample has substantial GC bias.
+# Compute correlation between GC and read count across all autosomal bins.
+gc_flat <- unlist(gc_table_syn[as.character(1:n_gc_chrs)])
+reads_flat_before <- as.numeric(t(gc_sample$autosomal_chromosome_reads[[1L]]))
+cor_before <- cor(gc_flat, reads_flat_before)
+
+expect_true(abs(cor_before) > 0.8,
+            info = paste0("synthetic sample has strong GC bias before correction",
+                          " (cor = ", round(cor_before, 3), ")"))
+
+# 7a. LOESS GC correction
+corrected_loess <- nipter_gc_correct(gc_sample, gc_table = gc_table_syn,
+                                     method = "loess", span = 0.75)
+
+expect_true(.is_nipter_sample(corrected_loess),
+            info = "LOESS gc_correct returns an NIPTSample")
+expect_equal(corrected_loess$correction_status_autosomal, "GC Corrected",
+             info = "LOESS gc_correct sets correction_status to 'GC Corrected'")
+
+# After LOESS correction, GC-count correlation should be substantially reduced
+reads_flat_loess <- as.numeric(t(corrected_loess$autosomal_chromosome_reads[[1L]]))
+cor_loess <- cor(gc_flat, reads_flat_loess)
+
+expect_true(abs(cor_loess) < abs(cor_before) * 0.3,
+            info = paste0("LOESS correction reduces GC-count correlation: ",
+                          round(cor_before, 3), " -> ", round(cor_loess, 3)))
+
+# Corrected counts should not all be identical to uncorrected (something changed)
+expect_false(all(abs(reads_flat_loess - reads_flat_before) < 1e-10),
+             info = "LOESS correction actually changes bin counts")
+
+# Corrected counts should be positive (no negative counts)
+expect_true(all(reads_flat_loess >= 0),
+            info = "LOESS corrected counts are non-negative")
+
+# 7b. Bin-weight GC correction
+corrected_bin <- nipter_gc_correct(gc_sample, gc_table = gc_table_syn,
+                                   method = "bin")
+
+expect_true(.is_nipter_sample(corrected_bin),
+            info = "bin-weight gc_correct returns an NIPTSample")
+expect_equal(corrected_bin$correction_status_autosomal, "GC Corrected",
+             info = "bin-weight gc_correct sets correction_status to 'GC Corrected'")
+
+reads_flat_bin <- as.numeric(t(corrected_bin$autosomal_chromosome_reads[[1L]]))
+cor_bin <- cor(gc_flat, reads_flat_bin)
+
+expect_true(abs(cor_bin) < abs(cor_before) * 0.3,
+            info = paste0("bin-weight correction reduces GC-count correlation: ",
+                          round(cor_before, 3), " -> ", round(cor_bin, 3)))
+
+# 7c. Both methods should produce different results from each other
+# (LOESS is smooth, bin-weight is discrete)
+expect_false(all(abs(reads_flat_loess - reads_flat_bin) < 1e-10),
+             info = "LOESS and bin-weight produce different corrections")
+
+# 7d. Verify coefficient of variation is reduced after correction.
+# The CV of reads at similar GC should decrease after correction.
+cv_before <- sd(reads_flat_before) / mean(reads_flat_before)
+cv_loess  <- sd(reads_flat_loess) / mean(reads_flat_loess)
+cv_bin    <- sd(reads_flat_bin) / mean(reads_flat_bin)
+
+expect_true(cv_loess < cv_before,
+            info = paste0("LOESS correction reduces CV: ",
+                          round(cv_before, 4), " -> ", round(cv_loess, 4)))
+expect_true(cv_bin < cv_before,
+            info = paste0("bin-weight correction reduces CV: ",
+                          round(cv_before, 4), " -> ", round(cv_bin, 4)))

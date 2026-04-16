@@ -5,7 +5,7 @@ library(RWisecondorX)
 # Tests for the native WisecondorX R implementation:
 #   rwisecondorx_utils.R   — scale_sample, gender_correct, predict_gender,
 #                            get_mask, train_pca, project_pc
-#   rwisecondorx_newref.R  — rwisecondorx_newref
+#   rwisecondorx_newref.R  — rwisecondorx_newref, rwisecondorx_ref_qc
 #   rwisecondorx_predict.R — rwisecondorx_predict, .log_trans, .inflate_results
 #   rwisecondorx_cbs.R     — .exec_cbs, .split_na_segments
 #   rwisecondorx_output.R  — write_wisecondorx_output
@@ -63,6 +63,12 @@ rm(.fn)
 expect_silent(
   s <- .make_sample(n_bins = 100L, lambda = 50, seed = 42)
 )
+s <- getFromNamespace(".as_wcx_sample", "RWisecondorX")(s)
+
+expect_true(is.list(s),
+            info = "synthetic sample stays list-like after wrapping")
+expect_true(S7::S7_inherits(s, WisecondorXSample),
+            info = "sample wrapper uses the WisecondorXSample S7 class")
 
 # Identity scaling
 s_same <- scale_sample(s, from_size = 5000, to_size = 5000)
@@ -357,22 +363,49 @@ if (has_mclust && has_dnacopy) {
     )
   )
 
-  expect_true(inherits(ref, "WisecondorXReference"),
-              info = "rwisecondorx_newref returns WisecondorXReference class")
+  expect_true(is.list(ref),
+              info = "rwisecondorx_newref returns a list-like reference object")
+  expect_true(S7::S7_inherits(ref, WisecondorXReference),
+              info = "rwisecondorx_newref returns the typed WisecondorXReference S7 class")
   expect_equal(ref$binsize, 100000L,
                info = "reference binsize matches input")
-  expect_true(is.logical(ref$mask),
-              info = "reference contains logical mask")
-  expect_true(is.matrix(ref$pca_components),
-              info = "reference contains PCA components matrix")
-  expect_true(is.numeric(ref$trained_cutoff),
-              info = "reference contains trained gender cutoff")
   expect_true(ref$trained_cutoff > 0 && ref$trained_cutoff < 1,
               info = "gender cutoff is in (0, 1)")
-  expect_true(is.matrix(ref$indexes),
-              info = "reference contains indexes matrix")
-  expect_true(is.matrix(ref$null_ratios),
-              info = "reference contains null_ratios matrix")
+  expect_identical(sum(ref$masked_bins_per_chr), nrow(ref$indexes),
+                   info = "reference rows match masked autosomal bins")
+  expect_identical(dim(ref$indexes), dim(ref$distances),
+                   info = "reference indexes and distances share the same shape")
+  expect_identical(nrow(ref$null_ratios), nrow(ref$indexes),
+                   info = "null ratios have one row per target bin")
+  expect_identical(ncol(ref$pca_components), length(ref$pca_mean),
+                   info = "PCA components and center describe the same feature space")
+
+  qc <- rwisecondorx_ref_qc(ref, min_ref_bins = 5L)
+  expect_true(qc$overall_verdict %in% c("PASS", "WARN", "FAIL"),
+              info = "QC report has a valid overall verdict")
+  expect_identical(sort(names(qc$metrics)), c("F", "M"),
+                   info = "non-NIPT QC reports female and male branches")
+  expect_true(all(vapply(qc$metrics, function(branch) {
+    is.finite(branch$mean_of_means) &&
+      is.finite(branch$std_of_means) &&
+      branch$n_bins > 0L
+  }, logical(1L))),
+  info = "QC metrics contain finite branch summaries")
+
+  if (requireNamespace("jsonlite", quietly = TRUE)) {
+    qc_json <- tempfile(fileext = ".json")
+    qc_json_result <- rwisecondorx_ref_qc(
+      ref,
+      min_ref_bins = 5L,
+      output_json = qc_json
+    )
+    qc_parsed <- jsonlite::read_json(qc_json, simplifyVector = TRUE)
+    expect_identical(qc_parsed$overall_verdict, qc_json_result$overall_verdict,
+                     info = "JSON output preserves the QC verdict")
+    expect_identical(names(qc_parsed$metrics), names(qc_json_result$metrics),
+                     info = "JSON output preserves QC branch labels")
+    unlink(qc_json)
+  }
 
   # --- Test predict with a female sample ---
   test_sample_f <- .make_female_sample(n_bins = n_bins, lambda = 200, seed = 999)
@@ -389,26 +422,28 @@ if (has_mclust && has_dnacopy) {
     )
   ))
 
-  expect_true(inherits(pred, "WisecondorXPrediction"),
-              info = "rwisecondorx_predict returns WisecondorXPrediction class")
-  expect_true(is.list(pred$results_r),
-              info = "prediction contains per-chr ratio list")
-  expect_true(is.list(pred$results_z),
-              info = "prediction contains per-chr z-score list")
-  expect_true(is.data.frame(pred$results_c),
-              info = "prediction contains CBS segments data frame")
-  expect_true(is.data.frame(pred$aberrations),
-              info = "prediction contains aberrations data frame")
-  expect_true(is.data.frame(pred$statistics),
-              info = "prediction contains statistics data frame")
+  expect_true(is.list(pred),
+              info = "rwisecondorx_predict returns a list-like prediction object")
+  expect_true(S7::S7_inherits(pred, WisecondorXPrediction),
+              info = "rwisecondorx_predict returns the typed WisecondorXPrediction S7 class")
   expect_true(pred$gender %in% c("F", "M"),
               info = "predicted gender is F or M")
   expect_true(pred$n_reads > 0,
               info = "n_reads is positive")
-
-  # Statistics should have per-chromosome rows
-  expect_true(nrow(pred$statistics) > 0L,
-              info = "statistics has rows")
+  expect_identical(length(pred$results_r), length(pred$bins_per_chr),
+                   info = "prediction returns one ratio vector per chromosome")
+  expect_identical(vapply(pred$results_r, length, integer(1L)),
+                   vapply(pred$results_z, length, integer(1L)),
+                   info = "ratio and z-score vectors stay aligned per chromosome")
+  expect_true(all(pred$results_c$start <= pred$results_c$end),
+              info = "CBS segments have valid start/end ordering")
+  expect_true(all(pred$statistics$chr %in% c(as.character(1:22), "X", "Y")),
+              info = "statistics rows are chromosome-labelled")
+  expect_true(nrow(pred$statistics) >= 22L,
+              info = "statistics include chromosome-level summaries")
+  expect_true(nrow(pred$aberrations) == 0L ||
+              all(pred$aberrations$type %in% c("gain", "loss")),
+              info = "aberrations use gain/loss labels only")
 
   # --- Test output writing ---
   tmpdir <- tempfile("rwx_test_")
@@ -424,25 +459,26 @@ if (has_mclust && has_dnacopy) {
   aber_file <- paste0(outprefix, "_aberrations.bed")
   stat_file <- paste0(outprefix, "_statistics.txt")
 
-  expect_true(file.exists(bins_file),
-              info = "bins BED file created")
-  expect_true(file.exists(segs_file),
-              info = "segments BED file created")
-  expect_true(file.exists(aber_file),
-              info = "aberrations BED file created")
-  expect_true(file.exists(stat_file),
-              info = "statistics file created")
-
-  # Read bins and check header
-  bins_lines <- readLines(bins_file, n = 2L)
-  expect_true(grepl("^chr\tstart\tend", bins_lines[1]),
-              info = "bins BED has correct header")
-
-  # Read stats and check gender line
+  bins_lines <- readLines(bins_file)
+  seg_lines <- readLines(segs_file)
+  aber_lines <- readLines(aber_file)
   stat_lines <- readLines(stat_file)
-  gender_line <- grep("Gender", stat_lines, value = TRUE)
-  expect_true(length(gender_line) >= 1L,
-              info = "statistics file contains gender line")
+  expect_identical(bins_lines[1L], "chr\tstart\tend\tid\tratio\tzscore",
+                   info = "bins BED header matches the public format")
+  expect_identical(seg_lines[1L], "chr\tstart\tend\tratio\tzscore",
+                   info = "segments BED header matches the public format")
+  expect_identical(aber_lines[1L], "chr\tstart\tend\tratio\tzscore\ttype",
+                   info = "aberrations BED header matches the public format")
+  expect_identical(length(bins_lines), sum(vapply(pred$results_r, length, integer(1L))) + 1L,
+                   info = "bins BED writes one data row per bin")
+  expect_identical(length(seg_lines), nrow(pred$results_c) + 1L,
+                   info = "segments BED writes one data row per segment")
+  expect_identical(length(aber_lines), nrow(pred$aberrations) + 1L,
+                   info = "aberrations BED writes one data row per call")
+  expect_true(any(grepl(paste0("^Number of reads: ", pred$n_reads, "$"), stat_lines)),
+              info = "statistics file records the prediction read count")
+  expect_true(any(grepl(paste0(": ", pred$gender, "$"), stat_lines)),
+              info = "statistics file records the predicted gender")
 
   unlink(tmpdir, recursive = TRUE)
 
@@ -459,6 +495,10 @@ if (has_mclust && has_dnacopy) {
 
   expect_true(isTRUE(ref_nipt$is_nipt),
               info = "NIPT mode reference has is_nipt=TRUE")
+
+  qc_nipt <- rwisecondorx_ref_qc(ref_nipt, min_ref_bins = 5L)
+  expect_identical(names(qc_nipt$metrics), "F",
+                   info = "NIPT QC follows upstream female-only branch selection")
 
 } else {
   if (!has_mclust) {

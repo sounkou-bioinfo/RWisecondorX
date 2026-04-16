@@ -49,12 +49,13 @@
 #'   `NULL` (default) a temporary in-memory DuckDB connection is created.
 #' @param reference Optional FASTA reference path for CRAM inputs.
 #'
-#' @return When `separate_strands = FALSE` (default): a named list with one
-#'   integer vector per chromosome key (`"1"`–`"22"`, `"23"` for X, `"24"` for
-#'   Y). Each vector contains per-bin read counts (bin 0 = positions 0 to
-#'   `binsize - 1`). Chromosomes present in the BAM header are returned as dense
-#'   vectors padded with trailing zeros up to the chromosome span implied by the
-#'   header and `binsize`; chromosomes absent from the header are `NULL`.
+#' @return When `separate_strands = FALSE` (default): a list-like
+#'   `WisecondorXSample` S7 object with one integer vector per chromosome key
+#'   (`"1"`–`"22"`, `"23"` for X, `"24"` for Y). Each vector contains per-bin
+#'   read counts (bin 0 = positions 0 to `binsize - 1`). Chromosomes present in
+#'   the BAM header are returned as dense vectors padded with trailing zeros up
+#'   to the chromosome span implied by the header and `binsize`; chromosomes
+#'   absent from the header are `NULL`.
 #'
 #'   When `separate_strands = TRUE`: a list with two elements, `fwd` and `rev`,
 #'   each structured like the default return.
@@ -133,9 +134,11 @@ bam_convert <- function(bam,
                                 binsize = binsize)
     )
   } else {
-    .count_rows_to_bins(rows, "count_total",
-                        chr_lengths = chr_lengths,
-                        binsize = binsize)
+    .as_wcx_sample(
+      .count_rows_to_bins(rows, "count_total",
+                          chr_lengths = chr_lengths,
+                          binsize = binsize)
+    )
   }
 }
 
@@ -276,12 +279,6 @@ bam_convert_bed <- function(bam,
   switch(key, "23" = "X", "24" = "Y", key)
 }
 
-.valid_chr_map <- c(
-  as.character(1:22),
-  "X" = "23", "x" = "23",
-  "Y" = "24", "y" = "24"
-)
-
 #' Query BAM header for chromosome lengths, keyed "1"-"24"
 #'
 #' Returns a named list: keys are "1"-"24" (matching bam_convert() convention),
@@ -300,9 +297,7 @@ bam_convert_bed <- function(bam,
   for (i in seq_len(nrow(sq))) {
     nm  <- sq$id[i]
     len <- sq$length[i]
-    key <- sub("^[Cc][Hh][Rr]", "", nm)
-    if (key == "X" || key == "x") key <- "23"
-    if (key == "Y" || key == "y") key <- "24"
+    key <- .normalize_chr_name(nm)
     if (key %in% as.character(1:24)) {
       result[[key]] <- as.integer(len)
     }
@@ -332,9 +327,7 @@ bam_convert_bed <- function(bam,
   if (nrow(rows) == 0L) return(result)
 
   chrom <- rows[[grep("^chrom$", names(rows), ignore.case = TRUE, value = TRUE)]]
-  chrom <- sub("^[Cc][Hh][Rr]", "", chrom)
-  chrom[chrom == "X" | chrom == "x"] <- "23"
-  chrom[chrom == "Y" | chrom == "y"] <- "24"
+  chrom <- .normalize_chr_name(chrom)
   values <- as.integer(rows[[value_col]])
   bins <- as.integer(rows$bin_id)
 

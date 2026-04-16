@@ -30,9 +30,12 @@ static double compute_cv(const std::vector<double>& focus_reads,
                           const NumericMatrix&        ctrl_reads,  // n_chr × n_ctrl
                           const std::vector<int>&     denom_rows,  // row indices
                           int                         n_ctrl) {
-    // Compute denominator sums and ratios across controls
+    // Compute denominator sums and ratios across controls.
+    // Use a stable two-pass sample SD rather than the textbook one-pass
+    // variance identity; real control groups can be in the hundreds or
+    // thousands, and there is no reason to accept cancellation risk here.
     std::vector<double> ratios(n_ctrl);
-    double sum_r = 0.0, sum_r2 = 0.0;
+    double sum_r = 0.0;
 
     for (int c = 0; c < n_ctrl; ++c) {
         double denom = 0.0;
@@ -42,18 +45,21 @@ static double compute_cv(const std::vector<double>& focus_reads,
         if (denom <= 0.0) return std::numeric_limits<double>::infinity();
         double ratio = focus_reads[c] / denom;
         ratios[c] = ratio;
-        sum_r  += ratio;
-        sum_r2 += ratio * ratio;
+        sum_r += ratio;
     }
 
     double mean_r = sum_r / n_ctrl;
     if (mean_r == 0.0) return std::numeric_limits<double>::infinity();
 
-    // NIPTeR uses stats::sd (sample SD, n-1 divisor) — replicate that:
-    double sd_r = (n_ctrl > 1)
-        ? std::sqrt(sum_r2 / (n_ctrl - 1) -
-                    (sum_r * sum_r) / ((double)n_ctrl * (n_ctrl - 1)))
-        : 0.0;
+    double sd_r = 0.0;
+    if (n_ctrl > 1) {
+        double ss = 0.0;
+        for (double ratio : ratios) {
+            const double centered = ratio - mean_r;
+            ss += centered * centered;
+        }
+        sd_r = std::sqrt(ss / (n_ctrl - 1));
+    }
 
     return sd_r / std::abs(mean_r);
 }

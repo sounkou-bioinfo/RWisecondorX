@@ -62,9 +62,9 @@
 #' @param con Optional existing DuckDB connection. Used only when `bed_dir` is
 #'   supplied. A temporary connection is created (and closed) if `NULL`.
 #'
-#' @return A list (the reference object) with class `"WisecondorXReference"`,
-#'   containing autosomal and (optionally) gonosomal sub-references. See
-#'   Details for the full structure.
+#' @return A list-like `WisecondorXReference` S7 object containing autosomal
+#'   and (optionally) gonosomal sub-references. See Details for the full
+#'   structure.
 #'
 #' @details
 #' The returned reference object contains:
@@ -142,6 +142,8 @@ rwisecondorx_newref <- function(samples         = NULL,
   if (!is.null(yfrac)) {
     stopifnot(is.numeric(yfrac), length(yfrac) == 1L, yfrac > 0, yfrac <= 1)
   }
+
+  samples <- lapply(samples, .as_wcx_sample)
 
   # ---------- Step 1: rescale all samples ----------
   if (!is.null(sample_binsizes)) {
@@ -226,8 +228,7 @@ rwisecondorx_newref <- function(samples         = NULL,
     for (nm in names(gon_m_ref)) result[[paste0(nm, ".M")]] <- gon_m_ref[[nm]]
   }
 
-  class(result) <- "WisecondorXReference"
-  result
+  .as_wcx_reference(result)
 }
 
 
@@ -364,18 +365,15 @@ rwisecondorx_newref <- function(samples         = NULL,
 #' @return Named list of integer vectors keyed by chromosome ("1"–"24").
 #' @keywords internal
 .bed_rows_to_wcx_sample <- function(rows) {
-  # Map chromosome names to 1-24 (handles "chrX"->"23", "chrY"->"24" etc.)
-  chr_map <- c(as.character(1:22), "X", "Y",
-               paste0("chr", 1:22), "chrX", "chrY")
-  std_map <- c(as.character(1:22), "23", "24",
-               as.character(1:22), "23", "24")
-  names(std_map) <- chr_map
-
   sample <- stats::setNames(vector("list", 24L), as.character(1:24))
 
-  for (chr_raw in unique(rows$chrom)) {
-    chr_key <- std_map[chr_raw]
-    if (is.na(chr_key)) next
+  # Normalize all unique chromosome names once
+  unique_chroms <- unique(rows$chrom)
+  normed <- stats::setNames(.normalize_chr_name(unique_chroms), unique_chroms)
+
+  for (chr_raw in unique_chroms) {
+    chr_key <- normed[chr_raw]
+    if (!(chr_key %in% as.character(1:24))) next
     r <- rows[rows$chrom == chr_raw, ]
     r <- r[order(r$start_pos), ]
     sample[[chr_key]] <- as.integer(r$count)
@@ -386,5 +384,5 @@ rwisecondorx_newref <- function(samples         = NULL,
     if (is.null(sample[[k]])) sample[[k]] <- integer(0L)
   }
 
-  sample
+  .as_wcx_sample(sample)
 }

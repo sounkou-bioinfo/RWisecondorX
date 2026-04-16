@@ -9,4 +9,12 @@
 \description{
 Copy number profile abnormality (CPA)
 }
+\note{
+\strong{Upstream bug replicated for conformance (CPA +1 overcount).}
+Upstream Python (\code{overall_tools.py:146}) computes segment length as
+\code{segment[2] - segment[1] + 1}. Given that CBS returns half-open
+\verb{[start, end)} intervals, the correct length is \code{end - start}, so the
+\code{+ 1} overcounts by one bin per segment. We replicate this exactly
+(\code{end - start + 1L}) for conformance with Python WisecondorX output.
+}
 \keyword{internal}

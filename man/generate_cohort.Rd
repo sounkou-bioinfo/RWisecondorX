@@ -4,7 +4,15 @@
 \alias{generate_cohort}
 \title{Generate a synthetic BAM cohort for testing}
 \usage{
-generate_cohort(out_dir, n_samples = 50L, verbose = TRUE)
+generate_cohort(
+  out_dir,
+  n_samples = 50L,
+  fetal_fraction = 0.1,
+  reads_per_bin = READS_PER_BIN_DEFAULT,
+  gc_bias_strength = 0.3,
+  mosaic = FALSE,
+  verbose = TRUE
+)
 }
 \arguments{
 \item{out_dir}{Directory to write BAM files into (created if needed).}
@@ -12,11 +20,27 @@ generate_cohort(out_dir, n_samples = 50L, verbose = TRUE)
 \item{n_samples}{Total number of samples to generate (default 50L).
 Must be at least 6 (3 trisomy + 1 male + 2 female minimum).}
 
+\item{fetal_fraction}{Fetal DNA fraction for trisomy samples (default 0.10).
+Higher values produce stronger trisomy signal. Typical NIPT range: 0.05-0.20.}
+
+\item{reads_per_bin}{Average reads per bin for euploid autosomes
+(default 3). Higher values produce larger BAMs but better signal-to-noise
+for trisomy detection. At \code{reads_per_bin = 3}, BAMs are ~435KB;
+at 10, ~1.3MB; at 30, ~4.4MB.}
+
+\item{gc_bias_strength}{Numeric scaling factor for simulated GC bias
+amplitude (default 0.3). Each sample gets a random quadratic GC bias
+curve; higher values produce more between-sample variance. Set to 0
+for uniform coverage (no GC effect).}
+
+\item{mosaic}{Logical; if \code{TRUE}, simulate 50\% placental mosaicism (halved
+trisomy signal strength). Default \code{FALSE}.}
+
 \item{verbose}{Logical; emit progress messages via \code{\link[=message]{message()}}.}
 }
 \value{
 A data frame (manifest) with columns: \code{sample_id}, \code{sex},
-\code{trisomy}, \code{n_reads}, \code{bam_file}.
+\code{trisomy}, \code{fetal_fraction}, \code{n_reads}, \code{bam_file}.
 }
 \description{
 Creates coordinate-sorted, indexed BAM files in a specified directory
@@ -30,11 +54,23 @@ and 3 trisomy females (T21, T18, T13). Each sample uses approximately
 3 reads per bin (~91k reads total). Results are deterministic (sample \emph{i}
 uses \code{set.seed(42 + i)}).
 
+Trisomy simulation follows Nguyen et al. 2023
+(doi:10.1101/2023.11.24.568620): instead of naively multiplying reads
+on the trisomy chromosome, reads are stochastically removed from
+non-target chromosomes so that the relative coverage of the trisomy
+chromosome reflects an extra copy in the fetal genome. The removal
+probability is \code{p = k*f / (1 + k*f)} where \code{k = 0.5} (non-mosaic) or
+\code{k = 0.25} (mosaic).
+
 The generated BAMs are NIPTeR-compatible (no unmapped reads, unique
 positions per chromosome) and can be used with both the NIPTeR binning
 layer (\code{\link[=nipter_bin_bam]{nipter_bin_bam()}}) and the WisecondorX native pipeline
 (\code{\link[=rwisecondorx_newref]{rwisecondorx_newref()}}, \code{\link[=rwisecondorx_predict]{rwisecondorx_predict()}}) when binned with
 \code{binsize = COMPRESSED_BINSIZE} (100).
+
+These BAMs are structurally valid and fast to generate, but the underlying
+coverage model is still synthetic. Use real negative cohorts for
+calibration, threshold selection, and any real conformance work.
 
 The manifest is also written to \code{manifest.tsv} in \code{out_dir}.
 }

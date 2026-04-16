@@ -58,7 +58,7 @@ any tabix-aware tool.
 Coordinates are 0-based half-open intervals matching the BED convention
 (\code{start = bin_index * binsize}, \code{end = start + binsize}). Chromosomes are
 written as \code{1}–\code{22}, \code{X}, \code{Y} (no \code{chr} prefix) in numeric order. All
-bins are written, including those with a count of zero.
+header-defined bins are written, including those with a count of zero.
 
 bgzip and tabix indexing are performed via \code{\link[Rduckhts:rduckhts_bgzip]{Rduckhts::rduckhts_bgzip()}} and
 \code{\link[Rduckhts:rduckhts_tabix_index]{Rduckhts::rduckhts_tabix_index()}}, so no external tools are required.

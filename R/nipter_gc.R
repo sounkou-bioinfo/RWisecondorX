@@ -168,7 +168,8 @@ nipter_gc_correct <- function(object,
               nzchar(fasta), file.exists(fasta))
   }
 
-  if (inherits(object, "NIPTeRControlGroup")) {
+  if (inherits(object, "NIPTeRControlGroup") ||
+      S7::S7_inherits(object, NIPTControlGroup)) {
     # Resolve gc_table once for all samples; convert path → list so we only
     # hit disk / run rduckhts_fasta_nuc once.
     resolved_gc <- .resolve_gc_table(gc_table, fasta, binsize, con)
@@ -187,7 +188,8 @@ nipter_gc_correct <- function(object,
     return(object)
   }
 
-  stopifnot(inherits(object, "NIPTeRSample"))
+  stopifnot(inherits(object, "NIPTeRSample") ||
+              S7::S7_inherits(object, NIPTSample))
 
   gc_tbl <- .resolve_gc_table(gc_table, fasta, binsize, con)
 
@@ -246,7 +248,7 @@ nipter_gc_correct <- function(object,
   ", path_sql)
 
   rows <- DBI::dbGetQuery(con, sql)
-  rows$chrom <- sub("^[Cc][Hh][Rr]", "", rows$chrom)
+  rows$chrom <- .normalize_chr_name(rows$chrom, xy_to_numeric = FALSE)
 
   valid_chroms <- c(as.character(1:22), "X", "Y")
   rows <- rows[rows$chrom %in% valid_chroms, , drop = FALSE]
@@ -281,7 +283,7 @@ nipter_gc_correct <- function(object,
   nuc <- Rduckhts::rduckhts_fasta_nuc(con, fasta, bin_width = binsize)
 
   # Normalise chrom names: strip chr prefix, accept 1-22,X,Y
-  nuc$chrom <- sub("^[Cc][Hh][Rr]", "", nuc$chrom)
+  nuc$chrom <- .normalize_chr_name(nuc$chrom, xy_to_numeric = FALSE)
 
   valid_chroms <- c(as.character(1:22), "X", "Y")
   nuc <- nuc[nuc$chrom %in% valid_chroms, , drop = FALSE]
@@ -312,15 +314,8 @@ nipter_gc_correct <- function(object,
   auto_list <- sample$autosomal_chromosome_reads
   is_ss     <- inherits(sample, "SeparatedStrands")
 
-  # For fitting: always use the summed (F+R) matrix.
-  # CombinedStrands: auto_list has 1 element.
-  # SeparatedStrands: Reduce("+", auto_list) sums fwd + rev.
-  if (is_ss) {
-    summed_auto <- Reduce("+", auto_list)
-    rownames(summed_auto) <- as.character(1:22)
-  } else {
-    summed_auto <- auto_list[[1L]]
-  }
+  # For fitting: always use the summed (F+R) matrix via autosomal_matrix().
+  summed_auto <- autosomal_matrix(sample)
   n_bins <- ncol(summed_auto)
 
   # Build combined GC vector (all autosomal bins concatenated)
@@ -352,7 +347,9 @@ nipter_gc_correct <- function(object,
 
   # Correction factor: median / fitted (so bins normalise to the median)
   correction <- rep(1.0, length(reads_flat))
-  correction[valid] <- median_reads / fitted_vals
+  safe_fitted <- pmax(fitted_vals, .Machine$double.eps)
+  safe_fitted[is.na(safe_fitted)] <- median_reads
+  correction[valid] <- median_reads / safe_fitted
 
   # Apply correction to each autosomal matrix in the list
   corrected_auto <- lapply(auto_list, function(mat) {
@@ -426,13 +423,8 @@ nipter_gc_correct <- function(object,
   auto_list <- sample$autosomal_chromosome_reads
   is_ss     <- inherits(sample, "SeparatedStrands")
 
-  # Sum F+R for SeparatedStrands; use single matrix for CombinedStrands
-  if (is_ss) {
-    summed_auto <- Reduce("+", auto_list)
-    rownames(summed_auto) <- as.character(1:22)
-  } else {
-    summed_auto <- auto_list[[1L]]
-  }
+  # Sum F+R via autosomal_matrix() for both S3 and S7 objects
+  summed_auto <- autosomal_matrix(sample)
   n_bins <- ncol(summed_auto)
 
   # Flatten summed autosomal reads and GC values

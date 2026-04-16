@@ -2,6 +2,42 @@
 # namespace (nipter_sex.R and rwisecondorx_utils.R).
 utils::globalVariables(c("Mclust", "emControl", "data"))
 
+
+# %||% is base R since 4.4.0; define fallback for R 4.1-4.3
+if (getRversion() < "4.4.0") {
+  `%||%` <- function(x, y) if (!is.null(x)) x else y
+}
+
+
+# ---- Shared chromosome name normalization ---------------------------------
+#
+# Two conventions coexist: the WisecondorX layer uses "23"/"24" as internal
+# keys for X/Y, while the NIPTeR layer uses "X"/"Y" natively. Both need to
+# strip the "chr" prefix from external sources (BAM headers, BED files,
+# FASTA output). This shared helper handles both steps.
+
+#' Normalize chromosome names: strip "chr" prefix and optionally map X/Y to
+#' 23/24.
+#'
+#' Works on both scalar and vector inputs. Used throughout the package to
+#' convert external chromosome names (from BAM headers, BED files, FASTA
+#' nucleotide tables) to internal representation.
+#'
+#' @param x Character vector of chromosome names.
+#' @param xy_to_numeric Logical; if `TRUE` (default), map "X"/"x" to "23" and
+#'   "Y"/"y" to "24". Set to `FALSE` for the NIPTeR layer which uses "X"/"Y"
+#'   natively.
+#' @return Character vector with normalized names.
+#' @noRd
+.normalize_chr_name <- function(x, xy_to_numeric = TRUE) {
+  x <- sub("^[Cc][Hh][Rr]", "", x)
+  if (xy_to_numeric) {
+    x[x == "X" | x == "x"] <- "23"
+    x[x == "Y" | x == "y"] <- "24"
+  }
+  x
+}
+
 #' SRA Run Metadata Utilities
 #'
 #' These helpers standardize how `RWisecondorX` stages SRA run metadata for
@@ -109,4 +145,35 @@ read_sra_runinfo <- function(
   }
 
   utils::read.csv(path, stringsAsFactors = FALSE, check.names = FALSE)
+}
+
+
+.onLoad <- function(libname, pkgname) {
+  S7::methods_register()
+
+  ns <- asNamespace(pkgname)
+  register_compat_method <- function(generic, cls, fun) {
+    registerS3method(generic, paste0(pkgname, "::", cls), fun, envir = ns)
+  }
+
+  register_compat_method("$", "NIPTSample", .nipt_sample_dollar)
+  register_compat_method("$", "CombinedStrandsSample", .nipt_sample_dollar)
+  register_compat_method("$", "SeparatedStrandsSample", .nipt_sample_dollar)
+  register_compat_method("[[", "NIPTSample", .nipt_sample_subset2)
+  register_compat_method("[[", "CombinedStrandsSample", .nipt_sample_subset2)
+  register_compat_method("[[", "SeparatedStrandsSample", .nipt_sample_subset2)
+
+  register_compat_method("$", "NIPTControlGroup", .nipt_control_group_dollar)
+  register_compat_method("$", "CombinedControlGroup", .nipt_control_group_dollar)
+  register_compat_method("$", "SeparatedControlGroup", .nipt_control_group_dollar)
+  register_compat_method("[[", "NIPTControlGroup", .nipt_control_group_subset2)
+  register_compat_method("[[", "CombinedControlGroup", .nipt_control_group_subset2)
+  register_compat_method("[[", "SeparatedControlGroup", .nipt_control_group_subset2)
+
+  register_compat_method("$<-", "NIPTSample", .nipt_sample_dollar_assign)
+  register_compat_method("$<-", "CombinedStrandsSample", .nipt_sample_dollar_assign)
+  register_compat_method("$<-", "SeparatedStrandsSample", .nipt_sample_dollar_assign)
+  register_compat_method("$<-", "NIPTControlGroup", .nipt_control_group_dollar_assign)
+  register_compat_method("$<-", "CombinedControlGroup", .nipt_control_group_dollar_assign)
+  register_compat_method("$<-", "SeparatedControlGroup", .nipt_control_group_dollar_assign)
 }

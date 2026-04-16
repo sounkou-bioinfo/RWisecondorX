@@ -24,21 +24,22 @@ if (nzchar(.helper_nipter)) {
 # ===================================================================
 
 ctrl_samples <- .sim_nipter_control_set(10L)
+.sample_names <- function(samples) {
+  vapply(samples, `[[`, character(1L), "sample_name")
+}
 
 # --- nipter_as_control_group ---
 
 cg <- nipter_as_control_group(ctrl_samples)
 
-expect_true(inherits(cg, "NIPTeRControlGroup"),
-            info = "control group has correct class")
-expect_true(inherits(cg, "CombinedStrands"),
-            info = "control group inherits strand type")
 expect_identical(length(cg$samples), 10L,
                  info = "control group has 10 samples")
+expect_identical(.sample_names(cg$samples), .sample_names(ctrl_samples),
+                 info = "control group preserves sample ordering and names")
 expect_identical(cg$description, "General control group",
                  info = "default description")
-expect_true(is.character(cg$correction_status_autosomal),
-            info = "correction_status_autosomal is character")
+expect_identical(cg$correction_status_autosomal, "Uncorrected",
+                 info = "new control groups start uncorrected")
 
 # Validation: must have at least 2 samples
 expect_error(nipter_as_control_group(ctrl_samples[1]),
@@ -58,18 +59,15 @@ expect_identical(length(cg_dedup$samples), 10L,
 
 diag <- nipter_diagnose_control_group(cg)
 
-expect_true(is.matrix(diag$z_scores),   info = "z_scores is a matrix")
-expect_identical(nrow(diag$z_scores), 22L,
-                 info = "z_scores has 22 rows (chromosomes)")
-expect_identical(ncol(diag$z_scores), 10L,
-                 info = "z_scores has 10 columns (samples)")
-
-expect_true(is.matrix(diag$statistics), info = "statistics is a matrix")
+expect_identical(dim(diag$z_scores), c(22L, 10L),
+                 info = "diagnose returns one Z-score per chromosome and sample")
 expect_identical(colnames(diag$statistics),
                  c("mean", "SD", "shapiro_p_value"),
                  info = "statistics has expected columns")
 expect_identical(nrow(diag$statistics), 22L,
                  info = "statistics has 22 rows")
+expect_true(all(is.finite(diag$statistics[, c("mean", "SD")])),
+            info = "diagnose returns finite per-chromosome mean/SD values")
 
 # With well-behaved synthetic data, no aberrant scores
 # (the noise is small relative to the signal)
@@ -85,17 +83,17 @@ test_sample <- .sim_nipter_sample(.sim_chr_totals(scale = 1), "test_subject",
 
 matched <- nipter_match_control_group(test_sample, cg, n = 5L,
                                       mode = "subset")
-expect_true(inherits(matched, "NIPTeRControlGroup"),
-            info = "matched control group has correct class")
 expect_identical(length(matched$samples), 5L,
                  info = "matched control group has n=5 samples")
 
 scores <- nipter_match_control_group(test_sample, cg, n = 10L,
                                      mode = "report")
-expect_true(is.numeric(scores),        info = "report mode returns numeric")
 expect_identical(length(scores), 10L,  info = "report returns all controls")
 # Scores should be sorted ascending
 expect_true(all(diff(scores) >= 0),    info = "scores sorted ascending")
+expect_identical(sort(.sample_names(matched$samples)),
+                 sort(names(scores)[seq_len(5L)]),
+                 info = "subset mode returns the same top controls as report mode")
 
 
 # ===================================================================
@@ -104,9 +102,6 @@ expect_true(all(diff(scores) >= 0),    info = "scores sorted ascending")
 
 z21 <- nipter_z_score(test_sample, cg, chromo_focus = 21L)
 
-expect_true(inherits(z21, "NIPTeRZScore"), info = "z_score result class")
-expect_true(is.numeric(z21$sample_z_score),
-            info = "sample_z_score is numeric")
 expect_identical(z21$focus_chromosome, "21",
                  info = "focus_chromosome is '21'")
 expect_identical(names(z21$control_statistics),
@@ -140,13 +135,8 @@ expect_true(z21_tri$sample_z_score > 2,
 ncv21 <- nipter_ncv_score(test_sample, cg, chromo_focus = 21L,
                           max_elements = 3L)
 
-expect_true(inherits(ncv21, "NIPTeRNCV"), info = "NCV result class")
-expect_true(is.numeric(ncv21$sample_score),
-            info = "sample_score is numeric")
 expect_identical(ncv21$focus_chromosome, "21",
                  info = "NCV focus_chromosome")
-expect_true(is.integer(ncv21$denominators),
-            info = "denominators is integer vector")
 expect_true(length(ncv21$denominators) >= 1L &&
             length(ncv21$denominators) <= 3L,
             info = "denominators between 1 and max_elements")
@@ -168,12 +158,6 @@ expect_true(ncv21_tri$sample_score > ncv21$sample_score,
 
 chi_result <- nipter_chi_correct(test_sample, cg, chi_cutoff = 3.5)
 
-expect_true(is.list(chi_result),          info = "chi_correct returns list")
-expect_true(inherits(chi_result$sample, "NIPTeRSample"),
-            info = "corrected sample is NIPTeRSample")
-expect_true(inherits(chi_result$control_group, "NIPTeRControlGroup"),
-            info = "corrected control_group is NIPTeRControlGroup")
-
 # Correction status should include "Chi square corrected"
 expect_true("Chi square corrected" %in%
             chi_result$sample$correction_status_autosomal,
@@ -182,12 +166,10 @@ expect_true(!"Uncorrected" %in%
             chi_result$sample$correction_status_autosomal,
             info = "'Uncorrected' removed after chi correction")
 
-# All control samples should also be corrected
-for (i in seq_along(chi_result$control_group$samples)) {
-  s <- chi_result$control_group$samples[[i]]
-  expect_true("Chi square corrected" %in% s$correction_status_autosomal,
-              info = paste("control", i, "correction status updated"))
-}
+expect_true(all(vapply(chi_result$control_group$samples, function(s) {
+  "Chi square corrected" %in% s$correction_status_autosomal
+}, logical(1L))),
+info = "chi correction updates every control sample")
 
 # Corrected read counts should still be non-negative
 corrected_auto <- chi_result$sample$autosomal_chromosome_reads[[1L]]
@@ -213,27 +195,21 @@ reg21 <- nipter_regression(test_sample, cg_large, chromo_focus = 21L,
                            n_models = 2L, n_predictors = 3L,
                            seed = 42L)
 
-expect_true(inherits(reg21, "NIPTeRRegression"),
-            info = "regression result class")
 expect_identical(reg21$focus_chromosome, "21",
                  info = "regression focus_chromosome")
 expect_identical(reg21$sample_name, "test_subject",
                  info = "regression sample_name")
 
-expect_true(is.list(reg21$models),        info = "models is a list")
 expect_true(length(reg21$models) >= 1L,   info = "at least 1 model")
 expect_true(length(reg21$models) <= 2L,   info = "at most n_models models")
 
 m1 <- reg21$models[[1L]]
-expect_true(is.numeric(m1$z_score),       info = "model z_score is numeric")
-expect_true(is.numeric(m1$cv),            info = "model cv is numeric")
 expect_true(m1$cv_type %in% c("practical", "theoretical"),
             info = "model cv_type valid")
-expect_true(is.character(m1$predictors),  info = "model predictors is character")
 expect_true(length(m1$predictors) >= 1L && length(m1$predictors) <= 3L,
             info = "model has 1-3 predictors")
-expect_true(is.numeric(m1$control_z_scores),
-            info = "model control_z_scores is numeric")
+expect_true(all(is.finite(c(m1$z_score, m1$cv, m1$control_z_scores))),
+            info = "model metrics are finite")
 
 # No predictor reuse between models
 if (length(reg21$models) >= 2L) {
@@ -268,8 +244,6 @@ expect_error(
 # --- SeparatedStrands object structure ---
 
 ss_sample <- .sim_nipter_ss_sample(.sim_chr_totals(), "ss_test", seed = 500L)
-expect_true(inherits(ss_sample, "SeparatedStrands"),
-            info = "SS sample has SeparatedStrands class")
 expect_identical(length(ss_sample$autosomal_chromosome_reads), 2L,
                  info = "SS auto has 2 matrices (fwd, rev)")
 expect_identical(nrow(ss_sample$autosomal_chromosome_reads[[1L]]), 22L,
@@ -286,10 +260,10 @@ expect_true(all(grepl("R$", rownames(ss_sample$autosomal_chromosome_reads[[2L]])
 ss_ctrl <- .sim_nipter_ss_control_set(10L)
 ss_cg <- nipter_as_control_group(ss_ctrl)
 
-expect_true(inherits(ss_cg, "SeparatedStrands"),
-            info = "SS control group inherits SeparatedStrands")
 expect_identical(length(ss_cg$samples), 10L,
                  info = "SS control group has 10 samples")
+expect_identical(.sample_names(ss_cg$samples), .sample_names(ss_ctrl),
+                 info = "SS control group preserves sample ordering and names")
 
 # Mixed strand types should error
 expect_error(
@@ -300,10 +274,6 @@ expect_error(
 # --- SeparatedStrands Z-score ---
 
 ss_z21 <- nipter_z_score(ss_sample, ss_cg, chromo_focus = 21L)
-expect_true(inherits(ss_z21, "NIPTeRZScore"),
-            info = "SS z_score result class")
-expect_true(is.numeric(ss_z21$sample_z_score),
-            info = "SS z_score is numeric")
 expect_true(abs(ss_z21$sample_z_score) < 5,
             info = "SS normal sample has moderate Z-score")
 
@@ -320,10 +290,8 @@ expect_true(ss_z21_tri$sample_z_score > ss_z21$sample_z_score,
 
 ss_ncv21 <- nipter_ncv_score(ss_sample, ss_cg, chromo_focus = 21L,
                              max_elements = 3L)
-expect_true(inherits(ss_ncv21, "NIPTeRNCV"),
-            info = "SS NCV result class")
-expect_true(is.numeric(ss_ncv21$sample_score),
-            info = "SS NCV score is numeric")
+expect_true(length(ss_ncv21$denominators) >= 1L,
+            info = "SS NCV chooses at least one denominator chromosome")
 
 ss_ncv21_tri <- nipter_ncv_score(ss_trisomy, ss_cg, chromo_focus = 21L,
                                  max_elements = 3L)
@@ -333,10 +301,6 @@ expect_true(ss_ncv21_tri$sample_score > ss_ncv21$sample_score,
 # --- SeparatedStrands chi-squared correction ---
 
 ss_chi <- nipter_chi_correct(ss_sample, ss_cg, chi_cutoff = 3.5)
-expect_true(inherits(ss_chi$sample, "NIPTeRSample"),
-            info = "SS chi sample is NIPTeRSample")
-expect_true(inherits(ss_chi$sample, "SeparatedStrands"),
-            info = "SS chi sample retains SeparatedStrands class")
 expect_identical(length(ss_chi$sample$autosomal_chromosome_reads), 2L,
                  info = "SS chi sample still has 2 auto matrices")
 expect_true("Chi square corrected" %in%
@@ -358,18 +322,14 @@ ss_reg21 <- nipter_regression(ss_sample, ss_cg_large, chromo_focus = 21L,
                               n_models = 2L, n_predictors = 3L,
                               seed = 42L)
 
-expect_true(inherits(ss_reg21, "NIPTeRRegression"),
-            info = "SS regression result class")
 expect_identical(ss_reg21$focus_chromosome, "21",
                  info = "SS regression focus_chromosome")
 expect_true(length(ss_reg21$models) >= 1L,
-            info = "SS regression has at least 1 model")
+             info = "SS regression has at least 1 model")
 
 ss_m1 <- ss_reg21$models[[1L]]
-expect_true(is.numeric(ss_m1$z_score),
-            info = "SS regression z_score is numeric")
-expect_true(is.character(ss_m1$predictors),
-            info = "SS regression predictors is character")
+expect_true(all(is.finite(c(ss_m1$z_score, ss_m1$cv, ss_m1$control_z_scores))),
+            info = "SS regression metrics are finite")
 
 # Predictors should be strand-specific (end in F or R)
 expect_true(all(grepl("[FR]$", ss_m1$predictors)),
@@ -401,18 +361,12 @@ expect_true(ss_reg21_tri$models[[1]]$z_score > ss_reg21$models[[1]]$z_score,
 # --- SeparatedStrands diagnose ---
 
 ss_diag <- nipter_diagnose_control_group(ss_cg)
-expect_true(is.matrix(ss_diag$z_scores),
-            info = "SS diagnose z_scores is matrix")
-expect_identical(nrow(ss_diag$z_scores), 22L,
-                 info = "SS diagnose z_scores has 22 rows (collapsed)")
-expect_identical(ncol(ss_diag$z_scores), 10L,
-                 info = "SS diagnose z_scores has 10 columns")
+expect_identical(dim(ss_diag$z_scores), c(22L, 10L),
+                 info = "SS diagnose collapses to one Z-score matrix")
 
 # --- SeparatedStrands match ---
 
 ss_matched <- nipter_match_control_group(ss_sample, ss_cg, n = 5L,
                                          mode = "subset")
-expect_true(inherits(ss_matched, "NIPTeRControlGroup"),
-            info = "SS matched has correct class")
 expect_identical(length(ss_matched$samples), 5L,
                  info = "SS matched has 5 samples")

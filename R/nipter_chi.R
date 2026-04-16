@@ -50,26 +50,40 @@ nipter_chi_correct <- function(sample,
                                control_group,
                                chi_cutoff  = 3.5,
                                include_sex = FALSE) {
-  stopifnot(inherits(sample, "NIPTeRSample"))
-  stopifnot(inherits(control_group, "NIPTeRControlGroup"))
+  stopifnot(inherits(sample, "NIPTeRSample") || S7::S7_inherits(sample, NIPTSample))
+  stopifnot(inherits(control_group, "NIPTeRControlGroup") ||
+              S7::S7_inherits(control_group, NIPTControlGroup))
   stopifnot(is.numeric(chi_cutoff), length(chi_cutoff) == 1L)
   stopifnot(is.logical(include_sex), length(include_sex) == 1L)
 
+  # Strand-type compatibility guard
+  sample_st <- .strand_type_of(sample)
+  cg_st     <- .strand_type_of(control_group)
+  if (!identical(sample_st, cg_st)) {
+    stop(sprintf(
+      "Strand type mismatch: sample is '%s' but control_group is '%s'.",
+      sample_st, cg_st
+    ), call. = FALSE)
+  }
+
+  if (isTRUE(include_sex)) {
+    stop(
+      "include_sex = TRUE deviates from NIPTeR upstream (chi_correct always uses ",
+      "include_XY = FALSE in the production pipeline). ",
+      "For GC correction of sex chromosomes use nipter_gc_correct(include_sex = TRUE).",
+      call. = FALSE
+    )
+  }
+
   n_controls <- length(control_group$samples)
   df         <- n_controls - 1L
-  n_bins     <- ncol(sample$autosomal_chromosome_reads[[1L]])
+  n_bins     <- ncol(autosomal_matrix(sample))
 
   # Flatten each control sample's autosomal reads into a single vector.
-  # For SeparatedStrands, sum F+R via Reduce first (matching upstream NIPTeR's
-  # chi_correct which does Reduce("+", x[[autosomal_chromosome_reads]])).
+  # autosomal_matrix() handles both S7 and S3 objects and sums strands for
+  # SeparatedStrands, matching upstream NIPTeR's chi_correct behaviour.
   ctrl_flat <- lapply(control_group$samples, function(s) {
-    auto <- s$autosomal_chromosome_reads
-    if (inherits(s, "SeparatedStrands")) {
-      summed <- Reduce("+", auto)
-      rownames(summed) <- as.character(1:22)
-      return(as.numeric(t(summed)))
-    }
-    as.numeric(t(auto[[1L]]))
+    as.numeric(t(autosomal_matrix(s)))
   })
 
   total_bins <- 22L * n_bins
@@ -101,25 +115,18 @@ nipter_chi_correct <- function(sample,
   correction_factor[overdispersed] <- chi_sum[overdispersed] / df
 
   # Apply correction to the test sample
-  sample <- .chi_correct_sample(sample, correction_factor, n_bins,
-                                include_sex)
+  sample <- .chi_correct_sample(sample, correction_factor, n_bins)
 
   # Apply correction to all control samples
   control_group$samples <- lapply(control_group$samples,
                                   .chi_correct_sample,
                                   correction_factor = correction_factor,
-                                  n_bins = n_bins,
-                                  include_sex = include_sex)
+                                  n_bins = n_bins)
 
   # Update control group correction statuses
   control_group$correction_status_autosomal <- unique(unlist(lapply(
     control_group$samples, `[[`, "correction_status_autosomal"
   )))
-  if (include_sex) {
-    control_group$correction_status_sex <- unique(unlist(lapply(
-      control_group$samples, `[[`, "correction_status_sex"
-    )))
-  }
 
   list(sample = sample, control_group = control_group)
 }
@@ -133,8 +140,7 @@ nipter_chi_correct <- function(sample,
 # For SeparatedStrands, applies the same correction factors (derived from
 # summed F+R) independently to each strand matrix via lapply, matching
 # upstream NIPTeR's correctsamples pattern.
-.chi_correct_sample <- function(sample, correction_factor, n_bins,
-                                include_sex) {
+.chi_correct_sample <- function(sample, correction_factor, n_bins) {
   auto_list <- sample$autosomal_chromosome_reads
 
   corrected_auto <- lapply(auto_list, function(mat) {
@@ -151,26 +157,6 @@ nipter_chi_correct <- function(sample,
   sample$correction_status_autosomal <- .update_correction_status(
     sample$correction_status_autosomal, "Chi square corrected"
   )
-
-  if (include_sex) {
-    corrected_sex <- lapply(sample$sex_chromosome_reads, function(sex_mat) {
-      corrected <- sex_mat
-      # Sex chromosomes use the same autosomal chi weights — the chi
-      # distribution is derived from autosomes. We apply the mean correction
-      # factor (across autosomal bins at comparable positions) to sex bins.
-      for (b in seq_len(n_bins)) {
-        auto_idx <- seq(b, by = n_bins, length.out = 22L)
-        mean_cf  <- mean(correction_factor[auto_idx])
-        corrected[, b] <- sex_mat[, b] / mean_cf
-      }
-      corrected
-    })
-
-    sample$sex_chromosome_reads <- corrected_sex
-    sample$correction_status_sex <- .update_correction_status(
-      sample$correction_status_sex, "Chi square corrected"
-    )
-  }
 
   sample
 }

@@ -88,6 +88,8 @@ rwisecondorx_predict <- function(sample,
                                 parallel        = TRUE,
                                 cpus            = 4L) {
   # ---------- validation ----------
+  sample <- .as_wcx_sample(sample)
+  reference <- .as_wcx_reference(reference)
   stopifnot(is.list(sample), is.list(reference))
   minrefbins  <- as.integer(minrefbins)
   maskrepeats <- as.integer(maskrepeats)
@@ -330,7 +332,7 @@ rwisecondorx_predict <- function(sample,
     binsize      = binsize,
     bins_per_chr = rem_bins_per_chr
   )
-  class(prediction) <- "WisecondorXPrediction"
+  prediction <- .as_wcx_prediction(prediction)
 
   if (!is.null(outprefix)) {
     .write_prediction_output(prediction, outprefix)
@@ -517,7 +519,14 @@ rwisecondorx_predict <- function(sample,
       # Global index g maps to: g if g < chr_start, g - n_chr if g > chr_cum.
       # Indexes within [chr_start, chr_cum] should never appear (same-chr bins
       # are excluded during KNN reference building).
-      ref_idx_local <- ifelse(ref_idx < chr_start, ref_idx, ref_idx - n_chr)
+      bad <- ref_idx >= chr_start & ref_idx <= chr_cum
+      if (any(bad)) {
+        stop(sprintf(
+          "KNN reference contains same-chromosome indexes for chr %d (bin %d): %s",
+          chr_idx, bin_idx, paste(ref_idx[bad], collapse = ", ")
+        ))
+      }
+      ref_idx_local <- ref_idx - n_chr * (ref_idx >= chr_start)
 
       # Get reference values from within the sample (from excluded-chr data)
       ref_vals <- chr_data[ref_idx_local]
@@ -566,6 +575,8 @@ rwisecondorx_predict <- function(sample,
 #' @keywords internal
 .split_by_chr <- function(data, bins_per_chr) {
   result <- vector("list", length(bins_per_chr))
+  chr_names <- vapply(seq_along(bins_per_chr), .idx_to_chr_name, character(1L))
+  names(result) <- chr_names
   pos <- 1L
   for (i in seq_along(bins_per_chr)) {
     n <- bins_per_chr[i]
@@ -580,6 +591,8 @@ rwisecondorx_predict <- function(sample,
 #' @keywords internal
 .split_nr_by_chr <- function(nr_matrix, bins_per_chr) {
   result <- vector("list", length(bins_per_chr))
+  chr_names <- vapply(seq_along(bins_per_chr), .idx_to_chr_name, character(1L))
+  names(result) <- chr_names
   pos <- 1L
   for (i in seq_along(bins_per_chr)) {
     n <- bins_per_chr[i]
@@ -617,14 +630,12 @@ rwisecondorx_predict <- function(sample,
   for (line in lines) {
     parts <- strsplit(trimws(line), "\t")[[1]]
     if (length(parts) < 3L) next
-    chr_name <- sub("^[Cc][Hh][Rr]", "", parts[1])
-    if (chr_name == "X") chr_name <- "23"
-    if (chr_name == "Y") chr_name <- "24"
+    chr_name <- .normalize_chr_name(parts[1])
     chr_idx <- suppressWarnings(as.integer(chr_name))
     if (is.na(chr_idx) || chr_idx < 1L || chr_idx > length(results_r)) next
 
     s_bin <- as.integer(as.numeric(parts[2]) / binsize) + 1L  # 1-based R index
-    e_bin <- as.integer(as.numeric(parts[3]) / binsize) + 1L + 1L  # +1 for python int(e/b)+1
+    e_bin <- as.integer(as.numeric(parts[3]) / binsize) + 1L  # 1-based; upstream int(e/b)+1 is exclusive, R : is inclusive
 
     n <- length(results_r[[chr_idx]])
     s_bin <- max(1L, s_bin)

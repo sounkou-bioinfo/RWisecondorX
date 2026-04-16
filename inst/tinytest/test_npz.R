@@ -52,7 +52,13 @@ test_bam <- .find_test_bam()
 if (is.null(test_bam)) {
   exit_file("No test BAM available")
 }
+old_reticulate_venv <- Sys.getenv("RETICULATE_USE_MANAGED_VENV", unset = NA_character_)
 Sys.setenv(RETICULATE_USE_MANAGED_VENV = "no")
+if (is.na(old_reticulate_venv)) {
+  on.exit(Sys.unsetenv("RETICULATE_USE_MANAGED_VENV"), add = TRUE)
+} else {
+  on.exit(Sys.setenv(RETICULATE_USE_MANAGED_VENV = old_reticulate_venv), add = TRUE)
+}
 if (!requireNamespace("reticulate", quietly = TRUE)) {
   exit_file("reticulate not available; skipping NPZ tests")
 }

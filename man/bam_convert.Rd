@@ -52,10 +52,13 @@ SeparatedStrands object. Default \code{FALSE}.}
 \item{reference}{Optional FASTA reference path for CRAM inputs.}
 }
 \value{
-When \code{separate_strands = FALSE} (default): a named list with one
-integer vector per chromosome key (\code{"1"}–\code{"22"}, \code{"23"} for X, \code{"24"} for
-Y). Each vector contains per-bin read counts (bin 0 = positions 0 to
-\code{binsize - 1}). Chromosomes absent from the BAM are \code{NULL}.
+When \code{separate_strands = FALSE} (default): a list-like
+\code{WisecondorXSample} S7 object with one integer vector per chromosome key
+(\code{"1"}–\code{"22"}, \code{"23"} for X, \code{"24"} for Y). Each vector contains per-bin
+read counts (bin 0 = positions 0 to \code{binsize - 1}). Chromosomes present in
+the BAM header are returned as dense vectors padded with trailing zeros up
+to the chromosome span implied by the header and \code{binsize}; chromosomes
+absent from the header are \code{NULL}.
 
 When \code{separate_strands = TRUE}: a list with two elements, \code{fwd} and \code{rev},
 each structured like the default return.

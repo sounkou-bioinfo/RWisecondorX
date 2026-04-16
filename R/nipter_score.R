@@ -31,10 +31,22 @@
 #'
 #' @export
 nipter_z_score <- function(sample, control_group, chromo_focus) {
-  stopifnot(inherits(sample, "NIPTeRSample"))
-  stopifnot(inherits(control_group, "NIPTeRControlGroup"))
+  stopifnot(inherits(sample, "NIPTeRSample") || S7::S7_inherits(sample, NIPTSample))
+  stopifnot(inherits(control_group, "NIPTeRControlGroup") ||
+              S7::S7_inherits(control_group, NIPTControlGroup))
   stopifnot(is.numeric(chromo_focus), length(chromo_focus) == 1L,
             chromo_focus >= 1L, chromo_focus <= 22L)
+
+  # Strand-type compatibility guard
+  sample_st <- .strand_type_of(sample)
+  cg_st     <- .strand_type_of(control_group)
+  if (!identical(sample_st, cg_st)) {
+    stop(sprintf(
+      "Strand type mismatch: sample is '%s' but control_group is '%s'.",
+      sample_st, cg_st
+    ), call. = FALSE)
+  }
+
   chromo_focus <- as.integer(chromo_focus)
 
   chr_key <- as.character(chromo_focus)
@@ -138,10 +150,22 @@ nipter_ncv_score <- function(sample,
                              max_elements          = 5L,
                              exclude_chromosomes   = c(13L, 18L, 21L),
                              include_chromosomes   = NULL) {
-  stopifnot(inherits(sample, "NIPTeRSample"))
-  stopifnot(inherits(control_group, "NIPTeRControlGroup"))
+  stopifnot(inherits(sample, "NIPTeRSample") || S7::S7_inherits(sample, NIPTSample))
+  stopifnot(inherits(control_group, "NIPTeRControlGroup") ||
+              S7::S7_inherits(control_group, NIPTControlGroup))
   stopifnot(is.numeric(chromo_focus), length(chromo_focus) == 1L,
             chromo_focus >= 1L, chromo_focus <= 22L)
+
+  # Strand-type compatibility guard
+  sample_st <- .strand_type_of(sample)
+  cg_st     <- .strand_type_of(control_group)
+  if (!identical(sample_st, cg_st)) {
+    stop(sprintf(
+      "Strand type mismatch: sample is '%s' but control_group is '%s'.",
+      sample_st, cg_st
+    ), call. = FALSE)
+  }
+
   chromo_focus <- as.integer(chromo_focus)
   max_elements <- as.integer(max_elements)
 

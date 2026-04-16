@@ -85,7 +85,9 @@ if (is.null(test_bam)) {
 
 bins <- bam_convert(test_bam, binsize = 5000L, rmdup = "streaming")
 
-expect_true(is.list(bins), info = "bam_convert returns a list")
+expect_true(is.list(bins), info = "bam_convert returns a list-like sample object")
+expect_true(S7::S7_inherits(bins, WisecondorXSample),
+            info = "bam_convert returns the typed WisecondorXSample S7 class")
 expect_identical(names(bins), as.character(1:24), info = "result has keys 1-24")
 
 non_null <- Filter(Negate(is.null), bins)
@@ -117,7 +119,13 @@ expect_true(total_none >= total_streaming,
 if (!requireNamespace("condathis", quietly = TRUE)) {
   exit_file("condathis not available; skipping conformance test")
 }
+old_reticulate_venv <- Sys.getenv("RETICULATE_USE_MANAGED_VENV", unset = NA_character_)
 Sys.setenv(RETICULATE_USE_MANAGED_VENV = "no")
+if (is.na(old_reticulate_venv)) {
+  on.exit(Sys.unsetenv("RETICULATE_USE_MANAGED_VENV"), add = TRUE)
+} else {
+  on.exit(Sys.setenv(RETICULATE_USE_MANAGED_VENV = old_reticulate_venv), add = TRUE)
+}
 if (!requireNamespace("reticulate", quietly = TRUE)) {
   exit_file("reticulate not available; skipping conformance test")
 }

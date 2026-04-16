@@ -34,8 +34,10 @@ expect_true(all(file.exists(bed_paths)),
 ref <- rwisecondorx_newref(bed_dir = bed_dir, binsize = 5000L, nipt = TRUE,
                            refsize = 5L, yfrac = 0.001)
 
-expect_true(inherits(ref, "WisecondorXReference"),
-            info = "bed_dir= returns WisecondorXReference")
+expect_true(is.list(ref),
+            info = "bed_dir= returns a list-like reference object")
+expect_true(S7::S7_inherits(ref, WisecondorXReference),
+            info = "bed_dir= returns the typed WisecondorXReference S7 class")
 expect_equal(ref$binsize, 5000L,
              info = "reference binsize matches input")
 expect_true(ref$is_nipt,

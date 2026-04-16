@@ -11,6 +11,13 @@
 #' @param samples A list of \code{NIPTeRSample} objects.
 #' @param description Label for the group (default
 #'   \code{"General control group"}).
+#' @param sample_sex Optional character vector of known sex labels for the
+#'   control samples. Accepted values are \code{"female"}, \code{"male"},
+#'   \code{"ambiguous"}, and \code{"unknown"}. When unnamed, values are matched
+#'   in sample order; when named, names must match \code{sample_name}.
+#' @param sex_source Optional string describing where \code{sample_sex} came
+#'   from, e.g. \code{"explicit"}, \code{"consensus_gmm"}, or
+#'   \code{"laboratory_lims"}.
 #'
 #' @return An object of class \code{c("NIPTeRControlGroup", <strand_type>)}.
 #'
@@ -25,20 +32,24 @@
 #'
 #' @export
 nipter_as_control_group <- function(samples,
-                                    description = "General control group") {
+                                    description = "General control group",
+                                    sample_sex = NULL,
+                                    sex_source = NULL) {
   stopifnot(is.list(samples), length(samples) >= 2L)
   stopifnot(is.character(description), length(description) == 1L,
             nzchar(description))
 
-  # Validate that all entries are NIPTeRSample
-
-  ok <- vapply(samples, inherits, logical(1L), what = "NIPTeRSample")
+  # Validate that all entries are NIPTeRSample (S3) or NIPTSample (S7)
+  ok <- vapply(samples, function(s) {
+    inherits(s, "NIPTeRSample") || S7::S7_inherits(s, NIPTSample)
+  }, logical(1L))
   if (!all(ok)) {
-    stop("All elements of 'samples' must be NIPTeRSample objects.", call. = FALSE)
+    stop("All elements of 'samples' must be NIPTeRSample or NIPTSample objects.",
+         call. = FALSE)
   }
 
-  # Validate same strand type
-  strand_types <- vapply(samples, function(s) class(s)[2L], character(1L))
+  # Validate same strand type using .strand_type_of() which handles both
+  strand_types <- vapply(samples, .strand_type_of, character(1L))
   if (length(unique(strand_types)) > 1L) {
     stop(
       "All samples must have the same strand type. Found: ",
@@ -46,31 +57,43 @@ nipter_as_control_group <- function(samples,
       call. = FALSE
     )
   }
-  strand_type <- strand_types[1L]
+  strand_type_val <- strand_types[1L]   # "combined" or "separated"
 
   # Remove duplicate sample names (keep first occurrence)
-  names_vec <- vapply(samples, function(s) s$sample_name, character(1L))
+  names_vec <- vapply(samples, function(s) {
+    if (S7::S7_inherits(s, NIPTSample)) s@sample_name else s$sample_name
+  }, character(1L))
   dups <- duplicated(names_vec)
   if (any(dups)) {
     message("Removing ", sum(dups), " duplicate sample(s) by name.")
     samples <- samples[!dups]
+    if (!is.null(sample_sex)) {
+      if (is.null(names(sample_sex))) {
+        sample_sex <- sample_sex[!dups]
+      } else {
+        sample_sex <- sample_sex[names_vec[!dups]]
+      }
+    }
   }
 
-  # Collect correction statuses
-  auto_status <- unique(unlist(lapply(samples, `[[`,
-                                      "correction_status_autosomal")))
-  sex_status  <- unique(unlist(lapply(samples, `[[`,
-                                      "correction_status_sex")))
+  sample_sex <- .normalize_sample_sex(sample_sex, samples)
 
-  structure(
-    list(
-      samples                       = samples,
-      correction_status_autosomal   = auto_status,
-      correction_status_sex         = sex_status,
-      description                   = description
-    ),
-    class = c("NIPTeRControlGroup", strand_type)
-  )
+  # Return S7 control group
+  if (identical(strand_type_val, "separated")) {
+    SeparatedControlGroup(
+      samples = samples,
+      description = description,
+      sample_sex = sample_sex,
+      sex_source = sex_source
+    )
+  } else {
+    CombinedControlGroup(
+      samples = samples,
+      description = description,
+      sample_sex = sample_sex,
+      sex_source = sex_source
+    )
+  }
 }
 
 
@@ -103,15 +126,15 @@ nipter_as_control_group <- function(samples,
 #'
 #' @export
 nipter_diagnose_control_group <- function(control_group) {
-  stopifnot(inherits(control_group, "NIPTeRControlGroup"))
+  stopifnot(inherits(control_group, "NIPTeRControlGroup") ||
+              S7::S7_inherits(control_group, NIPTControlGroup))
 
   fracs <- .control_group_fractions_collapsed(control_group)
   # fracs: 22 x n_samples matrix
 
   # Z-score each chromosome across samples
   z_mat <- t(apply(fracs, 1L, scale))
-  sample_names <- vapply(control_group$samples, function(s) s$sample_name,
-                         character(1L))
+  sample_names <- control_names(control_group)
   colnames(z_mat) <- sample_names
   rownames(z_mat) <- as.character(1:22)
 
@@ -185,9 +208,21 @@ nipter_match_control_group <- function(sample,
                                        include_chromosomes = NULL,
                                        cpus = 1L) {
   mode <- match.arg(mode)
-  stopifnot(inherits(sample, "NIPTeRSample"))
-  stopifnot(inherits(control_group, "NIPTeRControlGroup"))
+  stopifnot(inherits(sample, "NIPTeRSample") || S7::S7_inherits(sample, NIPTSample))
+  stopifnot(inherits(control_group, "NIPTeRControlGroup") ||
+              S7::S7_inherits(control_group, NIPTControlGroup))
   stopifnot(is.numeric(n), length(n) == 1L, n >= 1L)
+
+  # Strand-type compatibility guard
+  sample_st <- .strand_type_of(sample)
+  cg_st     <- .strand_type_of(control_group)
+  if (!identical(sample_st, cg_st)) {
+    stop(sprintf(
+      "Strand type mismatch: sample is '%s' but control_group is '%s'.",
+      sample_st, cg_st
+    ), call. = FALSE)
+  }
+
   cpus <- as.integer(cpus)
 
   # Determine comparison chromosomes (0-based row indices for Rcpp)
@@ -215,12 +250,27 @@ nipter_match_control_group <- function(sample,
   # Subset mode: return top n as a new control group
   n <- min(n, length(scores))
   keep_names <- names(scores)[seq_len(n)]
-  keep_idx   <- match(keep_names, vapply(control_group$samples,
-                                         function(s) s$sample_name,
+  all_samples <- if (S7::S7_inherits(control_group, NIPTControlGroup))
+    control_group@samples else control_group$samples
+  keep_idx   <- match(keep_names, vapply(all_samples,
+                                         function(s) {
+                                           if (S7::S7_inherits(s, NIPTSample))
+                                             s@sample_name else s$sample_name
+                                         },
                                          character(1L)))
+  sname <- if (S7::S7_inherits(sample, NIPTSample)) sample@sample_name
+           else sample$sample_name
+  keep_sex <- NULL
+  if (S7::S7_inherits(control_group, NIPTControlGroup) &&
+      !is.null(control_group$sample_sex)) {
+    keep_sex <- control_group$sample_sex[keep_names]
+  }
   nipter_as_control_group(
-    control_group$samples[keep_idx],
-    description = sprintf("Fitted to %s", sample$sample_name)
+    all_samples[keep_idx],
+    description = sprintf("Fitted to %s", sname),
+    sample_sex = keep_sex,
+    sex_source = if (S7::S7_inherits(control_group, NIPTControlGroup))
+      control_group$sex_source else NULL
   )
 }
 
@@ -257,7 +307,8 @@ nipter_match_matrix <- function(control_group,
                                 exclude_chromosomes = c(13L, 18L, 21L),
                                 include_chromosomes = NULL,
                                 cpus = 1L) {
-  stopifnot(inherits(control_group, "NIPTeRControlGroup"))
+  stopifnot(inherits(control_group, "NIPTeRControlGroup") ||
+              S7::S7_inherits(control_group, NIPTControlGroup))
   cpus <- as.integer(cpus)
 
   if (is.null(include_chromosomes)) {
@@ -270,7 +321,7 @@ nipter_match_matrix <- function(control_group,
   fracs_mat <- .control_group_fractions_collapsed(control_group)  # 22 × N
   ssd_mat   <- nipter_ssd_matrix_cpp(fracs_mat, compare_idx, cpus)
 
-  nm <- vapply(control_group$samples, function(s) s$sample_name, character(1L))
+  nm <- control_names(control_group)
   rownames(ssd_mat) <- nm
   colnames(ssd_mat) <- nm
   ssd_mat
@@ -294,6 +345,11 @@ nipter_match_matrix <- function(control_group,
 #'   (default), inferred from the first row of the first file.
 #' @param description Label for the resulting control group (default
 #'   \code{"General control group"}).
+#' @param sample_sex Optional character vector of known sex labels for the
+#'   samples in \code{bed_dir}. Names must match the inferred sample names when
+#'   supplied as a named vector.
+#' @param sex_source Optional string describing the provenance of
+#'   \code{sample_sex}.
 #' @param con Optional open DBI connection with duckhts loaded.
 #'
 #' @details
@@ -323,6 +379,8 @@ nipter_control_group_from_beds <- function(bed_dir,
                                            pattern     = "*.bed.gz",
                                            binsize     = NULL,
                                            description = "General control group",
+                                           sample_sex  = NULL,
+                                           sex_source  = NULL,
                                            con         = NULL) {
   stopifnot(is.character(bed_dir), length(bed_dir) == 1L,
             nzchar(bed_dir), dir.exists(bed_dir))
@@ -427,166 +485,32 @@ nipter_control_group_from_beds <- function(bed_dir,
     })
   }
 
-  nipter_as_control_group(samples, description = description)
+  nipter_as_control_group(
+    samples,
+    description = description,
+    sample_sex = sample_sex,
+    sex_source = sex_source
+  )
 }
 
 
-# Internal helper: build a NIPTeRSample from a data frame of rows already
-# fetched from the multi-reader table.
+# Internal helper: build a CombinedStrandsSample from a data frame of rows
+# already fetched from the multi-reader table.
 # Columns: chrom, start_pos, end_pos, count, corrected_count (all typed).
 # n_bins_global: shared column width so all samples in a control group have
 #   identical matrix dimensions (narrower chromosomes are zero-padded).
+# Delegates to .rows_to_nipter_combined() in bed_reader.R for the core logic.
 .bed_rows_to_nipter_combined <- function(rows, name, binsize, n_bins_global) {
-  auto_keys  <- as.character(1:22)
-  sex_labels <- c("X", "Y")
-  sex_keys   <- c("23", "24")
-
-  chrom <- sub("^[Cc][Hh][Rr]", "", rows$chrom)
-  chrom[chrom == "X" | chrom == "x"] <- "23"
-  chrom[chrom == "Y" | chrom == "y"] <- "24"
-
-  bin_idx <- as.integer(rows$start_pos / binsize)
-  n_bins  <- n_bins_global
-
-  col_names <- as.character(seq_len(n_bins))
-
-  auto_mat <- matrix(0L, nrow = 22L, ncol = n_bins,
-                     dimnames = list(auto_keys, col_names))
-  sex_mat  <- matrix(0L, nrow = 2L, ncol = n_bins,
-                     dimnames = list(sex_labels, col_names))
-
-  for (i in seq_along(auto_keys)) {
-    sel <- which(chrom == auto_keys[i])
-    if (length(sel) > 0L)
-      auto_mat[i, bin_idx[sel] + 1L] <- as.integer(rows$count[sel])
-  }
-  for (i in seq_along(sex_keys)) {
-    sel <- which(chrom == sex_keys[i])
-    if (length(sel) > 0L)
-      sex_mat[i, bin_idx[sel] + 1L] <- as.integer(rows$count[sel])
-  }
-
-  obj <- structure(
-    list(autosomal_chromosome_reads  = list(auto_mat),
-         sex_chromosome_reads        = list(sex_mat),
-         correction_status_autosomal = "Uncorrected",
-         correction_status_sex       = "Uncorrected",
-         sample_name                 = name),
-    class = c("NIPTeRSample", "CombinedStrands")
-  )
-
-  if (!all(is.na(rows$corrected_count))) {
-    corr_auto <- matrix(0, nrow = 22L, ncol = n_bins,
-                        dimnames = list(auto_keys, col_names))
-    corr_sex  <- matrix(0, nrow = 2L, ncol = n_bins,
-                        dimnames = list(sex_labels, col_names))
-    for (i in seq_along(auto_keys)) {
-      sel <- which(chrom == auto_keys[i])
-      if (length(sel) > 0L)
-        corr_auto[i, bin_idx[sel] + 1L] <- rows$corrected_count[sel]
-    }
-    for (i in seq_along(sex_keys)) {
-      sel <- which(chrom == sex_keys[i])
-      if (length(sel) > 0L)
-        corr_sex[i, bin_idx[sel] + 1L] <- rows$corrected_count[sel]
-    }
-    obj$autosomal_chromosome_reads  <- list(corr_auto)
-    obj$sex_chromosome_reads        <- list(corr_sex)
-    obj$correction_status_autosomal <- "GC Corrected"
-    obj$correction_status_sex       <- "GC Corrected"
-  }
-
-  obj
+  .rows_to_nipter_combined(rows, name, binsize)
 }
 
 
-# Internal helper: build a SeparatedStrands NIPTeRSample from rows already
-# fetched from the multi-reader table.
-# Columns: chrom, start_pos, end_pos, count, count_fwd, count_rev,
-#          corrected_count, corrected_fwd, corrected_rev (all typed).
-# n_bins_global: shared column width (narrower chromosomes zero-padded).
+# Internal helper: build a SeparatedStrandsSample from rows already fetched
+# from the multi-reader table. Delegates to .rows_to_nipter_sep() in bed_reader.R.
+# n_bins_global is accepted for API compatibility but not used (the core helper
+# infers n_bins from the row data).
 .bed_rows_to_nipter_sep <- function(rows, name, binsize, n_bins_global) {
-  fwd_auto_keys <- paste0(1:22, "F")
-  rev_auto_keys <- paste0(1:22, "R")
-  fwd_sex_keys  <- c("XF", "YF")
-  rev_sex_keys  <- c("XR", "YR")
-  # Numeric chromosome keys for lookup
-  auto_keys <- as.character(1:22)
-  sex_keys  <- c("23", "24")
-
-  chrom <- sub("^[Cc][Hh][Rr]", "", rows$chrom)
-  chrom[chrom == "X" | chrom == "x"] <- "23"
-  chrom[chrom == "Y" | chrom == "y"] <- "24"
-
-  bin_idx <- as.integer(rows$start_pos / binsize)
-  n_bins  <- n_bins_global
-  col_names <- as.character(seq_len(n_bins))
-
-  fwd_auto <- matrix(0L, nrow = 22L, ncol = n_bins,
-                     dimnames = list(fwd_auto_keys, col_names))
-  rev_auto <- matrix(0L, nrow = 22L, ncol = n_bins,
-                     dimnames = list(rev_auto_keys, col_names))
-  fwd_sex  <- matrix(0L, nrow = 2L, ncol = n_bins,
-                     dimnames = list(c("XF", "YF"), col_names))
-  rev_sex  <- matrix(0L, nrow = 2L, ncol = n_bins,
-                     dimnames = list(c("XR", "YR"), col_names))
-
-  for (i in seq_along(auto_keys)) {
-    sel <- which(chrom == auto_keys[i])
-    if (length(sel) > 0L) {
-      fwd_auto[i, bin_idx[sel] + 1L] <- as.integer(rows$count_fwd[sel])
-      rev_auto[i, bin_idx[sel] + 1L] <- as.integer(rows$count_rev[sel])
-    }
-  }
-  for (i in seq_along(sex_keys)) {
-    sel <- which(chrom == sex_keys[i])
-    if (length(sel) > 0L) {
-      fwd_sex[i, bin_idx[sel] + 1L] <- as.integer(rows$count_fwd[sel])
-      rev_sex[i, bin_idx[sel] + 1L] <- as.integer(rows$count_rev[sel])
-    }
-  }
-
-  obj <- structure(
-    list(autosomal_chromosome_reads  = list(fwd_auto, rev_auto),
-         sex_chromosome_reads        = list(fwd_sex, rev_sex),
-         correction_status_autosomal = "Uncorrected",
-         correction_status_sex       = "Uncorrected",
-         sample_name                 = name),
-    class = c("NIPTeRSample", "SeparatedStrands")
-  )
-
-  # Use GC-corrected counts when available (non-NA in corrected_fwd/corrected_rev)
-  has_corr <- !all(is.na(rows$corrected_fwd)) && !all(is.na(rows$corrected_rev))
-  if (has_corr) {
-    corr_fwd_auto <- matrix(0, nrow = 22L, ncol = n_bins,
-                            dimnames = list(fwd_auto_keys, col_names))
-    corr_rev_auto <- matrix(0, nrow = 22L, ncol = n_bins,
-                            dimnames = list(rev_auto_keys, col_names))
-    corr_fwd_sex  <- matrix(0, nrow = 2L, ncol = n_bins,
-                            dimnames = list(c("XF", "YF"), col_names))
-    corr_rev_sex  <- matrix(0, nrow = 2L, ncol = n_bins,
-                            dimnames = list(c("XR", "YR"), col_names))
-    for (i in seq_along(auto_keys)) {
-      sel <- which(chrom == auto_keys[i])
-      if (length(sel) > 0L) {
-        corr_fwd_auto[i, bin_idx[sel] + 1L] <- rows$corrected_fwd[sel]
-        corr_rev_auto[i, bin_idx[sel] + 1L] <- rows$corrected_rev[sel]
-      }
-    }
-    for (i in seq_along(sex_keys)) {
-      sel <- which(chrom == sex_keys[i])
-      if (length(sel) > 0L) {
-        corr_fwd_sex[i, bin_idx[sel] + 1L] <- rows$corrected_fwd[sel]
-        corr_rev_sex[i, bin_idx[sel] + 1L] <- rows$corrected_rev[sel]
-      }
-    }
-    obj$autosomal_chromosome_reads  <- list(corr_fwd_auto, corr_rev_auto)
-    obj$sex_chromosome_reads        <- list(corr_fwd_sex, corr_rev_sex)
-    obj$correction_status_autosomal <- "GC Corrected"
-    obj$correction_status_sex       <- "GC Corrected"
-  }
-
-  obj
+  .rows_to_nipter_sep(rows, name, binsize)
 }
 
 
@@ -606,18 +530,23 @@ nipter_control_group_from_beds <- function(bed_dir,
 #   sapply(auto_list, function(x) (rowSums(x) / sum(x)) / 2)  and then
 #   flattens the 22×2 result into a 44-vector via sapply over samples.
 .sample_chr_fractions <- function(sample) {
-  if (inherits(sample, "SeparatedStrands")) {
-    auto <- sample$autosomal_chromosome_reads  # list of 2 matrices (fwd, rev)
-    # Each matrix: rows = "1F".."22F" (or "1R".."22R"), cols = bins
-    fracs <- unlist(lapply(auto, function(mat) {
+  if (.strand_type_of(sample) == "separated") {
+    # SeparatedStrands: per-strand fractions, each strand normalised to its own
+    # total, then divided by 2 (matches NIPTeR's chrfractions.SeparatedStrands).
+    if (S7::S7_inherits(sample, SeparatedStrandsSample)) {
+      auto_list <- list(sample@auto_fwd, sample@auto_rev)
+    } else {
+      auto_list <- sample$autosomal_chromosome_reads  # list of 2 matrices
+    }
+    fracs <- unlist(lapply(auto_list, function(mat) {
       s <- sum(mat)
       if (s == 0) return(stats::setNames(rep(0, nrow(mat)), rownames(mat)))
       (rowSums(mat) / s) / 2
     }))
     return(fracs)
   }
-  # CombinedStrands
-  auto <- sample$autosomal_chromosome_reads[[1L]]
+  # CombinedStrands: use autosomal_matrix() which works for both S3 and S7
+  auto <- autosomal_matrix(sample)
   chr_sums <- rowSums(auto)
   total <- sum(chr_sums)
   if (total == 0) return(stats::setNames(rep(0, 22L), as.character(1:22)))
@@ -630,7 +559,7 @@ nipter_control_group_from_beds <- function(bed_dir,
 # frac[paste0(chr,"F"),] + frac[paste0(chr,"R"),]).
 # Used by nipter_z_score(), nipter_ncv_score(), nipter_match_control_group().
 .sample_chr_fractions_collapsed <- function(sample) {
-  if (inherits(sample, "SeparatedStrands")) {
+  if (.strand_type_of(sample) == "separated") {
     frac44 <- .sample_chr_fractions(sample)
     keys_f <- paste0(1:22, "F")
     keys_r <- paste0(1:22, "R")
@@ -644,7 +573,9 @@ nipter_control_group_from_beds <- function(bed_dir,
 # Compute a fractions matrix for a control group.
 # CombinedStrands: 22 x n_samples. SeparatedStrands: 44 x n_samples.
 .control_group_fractions <- function(control_group) {
-  n <- length(control_group$samples)
+  if (S7::S7_inherits(control_group, NIPTControlGroup)) {
+    return(fractions_for_regression(control_group))
+  }
   frac_list <- lapply(control_group$samples, .sample_chr_fractions)
   mat <- do.call(cbind, frac_list)
   colnames(mat) <- vapply(control_group$samples,
@@ -654,7 +585,9 @@ nipter_control_group_from_beds <- function(bed_dir,
 
 # Compute collapsed 22 x n_samples fractions matrix for any control group.
 .control_group_fractions_collapsed <- function(control_group) {
-  n <- length(control_group$samples)
+  if (S7::S7_inherits(control_group, NIPTControlGroup)) {
+    return(fractions_auto(control_group))
+  }
   frac_list <- lapply(control_group$samples, .sample_chr_fractions_collapsed)
   mat <- do.call(cbind, frac_list)
   colnames(mat) <- vapply(control_group$samples,
@@ -664,13 +597,75 @@ nipter_control_group_from_beds <- function(bed_dir,
 
 # Compute total reads per chromosome (22-element vector, always collapsed)
 # for a NIPTeRSample. Uses autosomal reads only.
-# For SeparatedStrands, sums forward + reverse via Reduce("+", auto).
+# For SeparatedStrands, sums forward + reverse via autosomal_matrix().
 .sample_chr_reads <- function(sample) {
-  auto <- sample$autosomal_chromosome_reads
-  if (inherits(sample, "SeparatedStrands")) {
-    summed <- Reduce("+", auto)
-    rownames(summed) <- as.character(1:22)
-    return(stats::setNames(rowSums(summed), rownames(summed)))
+  mat <- autosomal_matrix(sample)
+  stats::setNames(rowSums(mat), rownames(mat))
+}
+
+
+#' Build a chromosome-level reference frame from a NIPTeR control group
+#'
+#' Produces the per-sample count and fraction table that downstream sex-aware
+#' NIPT model building actually needs. This keeps application-level gaunosome
+#' modelling data out of the raw \code{NIPTeRSample} class while providing a
+#' stable training frame for future sex-chromosome Z-score, NCV, and
+#' regression models.
+#'
+#' @param control_group A \code{NIPTeRControlGroup} object.
+#' @param sample_sex Optional character vector overriding the sex labels stored
+#'   on \code{control_group}. Accepted values are \code{"female"},
+#'   \code{"male"}, \code{"ambiguous"}, and \code{"unknown"}.
+#'
+#' @return A \code{data.frame} with one row per sample and columns:
+#'   \code{Sample_name}, optional \code{SampleSex}, \code{NChrReads_*}, and
+#'   \code{FrChrReads_*} for chromosomes \code{1:22}, \code{X}, and \code{Y}.
+#'
+#' @export
+nipter_reference_frame <- function(control_group, sample_sex = NULL) {
+  stopifnot(inherits(control_group, "NIPTeRControlGroup") ||
+              S7::S7_inherits(control_group, NIPTControlGroup))
+
+  samples <- control_group$samples
+  sample_names <- vapply(samples, .sample_name, character(1L))
+  sample_sex <- .normalize_sample_sex(
+    if (is.null(sample_sex)) control_group$sample_sex else sample_sex,
+    samples
+  )
+
+  chroms <- c(as.character(1:22), "X", "Y")
+  rows <- lapply(samples, function(sample) {
+    auto_counts <- .sample_chr_reads(sample)
+    sex_counts <- stats::setNames(rowSums(sex_matrix(sample)), c("X", "Y"))
+    chr_counts <- c(auto_counts[as.character(1:22)], sex_counts[c("X", "Y")])
+    auto_total <- sum(auto_counts)
+    chr_fracs <- chr_counts / max(auto_total, .Machine$double.eps)
+
+    row <- c(
+      Sample_name = .sample_name(sample),
+      stats::setNames(as.list(as.numeric(chr_counts)),
+                      paste0("NChrReads_", chroms)),
+      stats::setNames(as.list(as.numeric(chr_fracs)),
+                      paste0("FrChrReads_", chroms))
+    )
+    as.data.frame(row, stringsAsFactors = FALSE)
+  })
+
+  out <- do.call(rbind, rows)
+  rownames(out) <- NULL
+
+  count_cols <- paste0("NChrReads_", chroms)
+  frac_cols  <- paste0("FrChrReads_", chroms)
+  for (col in count_cols) out[[col]] <- as.numeric(out[[col]])
+  for (col in frac_cols) out[[col]] <- as.numeric(out[[col]])
+
+  if (!is.null(sample_sex)) {
+    out$SampleSex <- unname(sample_sex[out$Sample_name])
+    out <- out[, c("Sample_name", "SampleSex", count_cols, frac_cols),
+               drop = FALSE]
+  } else {
+    out <- out[, c("Sample_name", count_cols, frac_cols), drop = FALSE]
   }
-  stats::setNames(rowSums(auto[[1L]]), rownames(auto[[1L]]))
+
+  out
 }

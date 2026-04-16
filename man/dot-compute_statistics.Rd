@@ -19,4 +19,13 @@
 \description{
 Mirrors \code{predict_output._generate_chr_statistics_file()}.
 }
+\note{
+\strong{Upstream bug replicated for conformance (last-bin drop).}
+Upstream Python (\code{predict_output.py:210}) sets \code{end = bins_per_chr - 1}
+when constructing whole-chromosome segments. Combined with \code{get_z_score}'s
+\code{array[s:e]} slicing (Python half-open), this drops the last bin of every
+chromosome from the whole-chromosome Z-score calculation. We replicate this
+exactly (\code{end = bins_per_chr - 1L}) for conformance with Python WisecondorX
+output.
+}
 \keyword{internal}

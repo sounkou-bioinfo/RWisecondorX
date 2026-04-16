@@ -69,6 +69,15 @@ When the writer's numpy is >= 2.0 the internal pickle references
 \code{numpy._core}, which older numpy (< 2.0) cannot unpickle.  This function
 patches the pickle bytestream to use \code{numpy.core} so the NPZ is readable
 by both numpy 1.x and 2.x.
+
+Native \code{\link[=bam_convert]{bam_convert()}} returns dense vectors covering the chromosome span in
+the BAM header. Upstream \verb{wisecondorx convert} has one additional historical
+quirk: it allocates \code{int(length / binsize + 1)} bins for every chromosome in
+the header, so chromosomes whose lengths are exact multiples of \code{binsize}
+carry one extra trailing all-zero bin. This function pads to that upstream
+NPZ layout during serialisation so Python \verb{wisecondorx newref/predict}
+remains byte-compatible, while the native R list/BED paths keep the cleaner
+header-span contract.
 }
 \examples{
 \dontrun{

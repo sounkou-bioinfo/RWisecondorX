@@ -53,9 +53,9 @@ Default \code{"*.bed.gz"}.}
 supplied. A temporary connection is created (and closed) if \code{NULL}.}
 }
 \value{
-A list (the reference object) with class \code{"WisecondorXReference"},
-containing autosomal and (optionally) gonosomal sub-references. See
-Details for the full structure.
+A list-like \code{WisecondorXReference} S7 object containing autosomal
+and (optionally) gonosomal sub-references. See Details for the full
+structure.
 }
 \description{
 Native R implementation of the WisecondorX \code{newref} pipeline. Takes a

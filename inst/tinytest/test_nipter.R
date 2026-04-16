@@ -17,8 +17,10 @@ if (is.null(test_bam)) {
 
 sample <- nipter_bin_bam(test_bam, binsize = 50000L)
 
-expect_true(inherits(sample, "NIPTeRSample"),    info = "result has class NIPTeRSample")
-expect_true(inherits(sample, "CombinedStrands"), info = "result has class CombinedStrands")
+expect_true(S7::S7_inherits(sample, NIPTSample),
+            info = "result inherits the NIPTSample S7 base class")
+expect_true(S7::S7_inherits(sample, CombinedStrandsSample),
+            info = "result inherits the CombinedStrandsSample S7 subclass")
 
 expect_true(is.list(sample$autosomal_chromosome_reads), info = "autosomal_chromosome_reads is a list")
 expect_true(is.list(sample$sex_chromosome_reads),       info = "sex_chromosome_reads is a list")

@@ -58,7 +58,7 @@ scale_sample <- function(sample, from_size, to_size) {
     result[[chr_name]] <- as.integer(colSums(matrix(padded, nrow = scale)))
   }
 
-  result
+  if (.is_wcx_sample(sample)) .as_wcx_sample(result) else result
 }
 
 

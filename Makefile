@@ -23,7 +23,7 @@ build: deps
 .PHONY: install check build rd test test-source fixtures cohort conformance nipter-fixture clean help
 
 install: build
-	THREADS=4 R CMD INSTALL $(PKG_NAME)_$(PKG_VERSION).tar.gz
+	THREADS=12 R CMD INSTALL $(PKG_NAME)_$(PKG_VERSION).tar.gz
 
 .PHONY: check
 

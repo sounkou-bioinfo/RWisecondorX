@@ -260,6 +260,18 @@ if (!is.null(bam_files)) {
 
   bed_files <- character(length(bam_files))
 
+  # Create a single DuckDB connection for the entire binning loop (NIPTeR GC
+
+  # correction path). Avoids leaking one connection per BAM when on.exit()
+  # handlers only fire at script exit.
+  gc_con <- NULL
+  if (mode == "nipter" && (!is.null(gc_table) || !is.null(gc_fasta))) {
+    drv <- duckdb::duckdb(config = list(allow_unsigned_extensions = "true"))
+    gc_con <- DBI::dbConnect(drv)
+    Rduckhts::rduckhts_load(gc_con)
+    on.exit(DBI::dbDisconnect(gc_con, shutdown = TRUE), add = TRUE)
+  }
+
   for (i in seq_along(bam_files)) {
     bam <- bam_files[i]
     bed_name <- paste0(tools::file_path_sans_ext(basename(bam)), ".bed.gz")
@@ -286,11 +298,6 @@ if (!is.null(bam_files)) {
       )
     } else {
       if (!is.null(gc_table) || !is.null(gc_fasta)) {
-        drv <- duckdb::duckdb(config = list(allow_unsigned_extensions = "true"))
-        con <- DBI::dbConnect(drv)
-        Rduckhts::rduckhts_load(con)
-        on.exit(DBI::dbDisconnect(con, shutdown = TRUE), add = TRUE)
-
         raw_sample <- nipter_bin_bam(
           bam              = bam,
           binsize          = binsize,
@@ -299,13 +306,13 @@ if (!is.null(bam_files)) {
           exclude_flags    = opts$`exclude-flags`,
           rmdup            = rmdup,
           separate_strands = opts$`separate-strands`,
-          con              = con,
+          con              = gc_con,
           reference        = opts$reference
         )
         corrected_sample <- if (!is.null(gc_table)) {
-          nipter_gc_correct(raw_sample, gc_table = gc_table, con = con)
+          nipter_gc_correct(raw_sample, gc_table = gc_table, con = gc_con)
         } else {
-          nipter_gc_correct(raw_sample, fasta = gc_fasta, binsize = binsize, con = con)
+          nipter_gc_correct(raw_sample, fasta = gc_fasta, binsize = binsize, con = gc_con)
         }
 
         nipter_sample_to_bed(
@@ -313,7 +320,7 @@ if (!is.null(bam_files)) {
           bed       = bed_path,
           binsize   = binsize,
           corrected = corrected_sample,
-          con       = con
+          con       = gc_con
         )
       } else {
         nipter_bin_bam_bed(

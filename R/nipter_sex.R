@@ -67,7 +67,8 @@
 nipter_sex_model <- function(control_group,
                              method = c("y_fraction", "xy_fraction")) {
   method <- match.arg(method)
-  stopifnot(inherits(control_group, "NIPTeRControlGroup"))
+  stopifnot(inherits(control_group, "NIPTeRControlGroup") ||
+              S7::S7_inherits(control_group, NIPTControlGroup))
 
   n_samples <- length(control_group$samples)
   if (n_samples < 4L) {
@@ -182,7 +183,8 @@ nipter_sex_model <- function(control_group,
 #'
 #' @export
 nipter_predict_sex <- function(sample, ..., y_unique_ratio = NULL) {
-  stopifnot(inherits(sample, "NIPTeRSample"))
+  stopifnot(inherits(sample, "NIPTeRSample") ||
+              S7::S7_inherits(sample, NIPTSample))
 
   models <- list(...)
   # Allow a single list of models
@@ -531,7 +533,7 @@ nipter_y_unique_ratio <- function(bam,
 .sample_sex_fractions <- function(sample) {
   # Autosomal total
   auto <- sample$autosomal_chromosome_reads
-  if (inherits(sample, "SeparatedStrands")) {
+  if (.strand_type_of(sample) == "separated") {
     auto_total <- sum(Reduce("+", auto))
   } else {
     auto_total <- sum(auto[[1L]])
@@ -543,7 +545,7 @@ nipter_y_unique_ratio <- function(bam,
 
   # Sex chromosome totals
   sex <- sample$sex_chromosome_reads
-  if (inherits(sample, "SeparatedStrands")) {
+  if (.strand_type_of(sample) == "separated") {
     sex_summed <- Reduce("+", sex)
     # rownames: "XF"+"XR" → sum to get X, "YF"+"YR" → sum to get Y
     # After Reduce, rownames come from the first matrix ("XF", "YF"),

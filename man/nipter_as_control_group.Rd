@@ -4,13 +4,27 @@
 \alias{nipter_as_control_group}
 \title{Build a NIPTeR control group from a list of binned samples}
 \usage{
-nipter_as_control_group(samples, description = "General control group")
+nipter_as_control_group(
+  samples,
+  description = "General control group",
+  sample_sex = NULL,
+  sex_source = NULL
+)
 }
 \arguments{
 \item{samples}{A list of \code{NIPTeRSample} objects.}
 
 \item{description}{Label for the group (default
 \code{"General control group"}).}
+
+\item{sample_sex}{Optional character vector of known sex labels for the
+control samples. Accepted values are \code{"female"}, \code{"male"},
+\code{"ambiguous"}, and \code{"unknown"}. When unnamed, values are matched
+in sample order; when named, names must match \code{sample_name}.}
+
+\item{sex_source}{Optional string describing where \code{sample_sex} came
+from, e.g. \code{"explicit"}, \code{"consensus_gmm"}, or
+\code{"laboratory_lims"}.}
 }
 \value{
 An object of class \code{c("NIPTeRControlGroup", <strand_type>)}.

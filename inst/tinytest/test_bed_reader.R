@@ -76,10 +76,10 @@ expect_true(file.exists(nipter_bed),
 
 nipter_rt <- bed_to_nipter_sample(nipter_bed)
 
-expect_true(inherits(nipter_rt, "NIPTeRSample"),
-            info = "bed_to_nipter_sample() returns NIPTeRSample")
-expect_true(inherits(nipter_rt, "CombinedStrands"),
-            info = "5-column BED produces CombinedStrands")
+expect_true(S7::S7_inherits(nipter_rt, NIPTSample),
+            info = "bed_to_nipter_sample() returns an NIPTSample")
+expect_true(S7::S7_inherits(nipter_rt, CombinedStrandsSample),
+            info = "5-column BED produces a CombinedStrandsSample")
 
 # Matrix dimensions match
 auto_orig <- nipter_orig$autosomal_chromosome_reads[[1L]]
@@ -137,10 +137,10 @@ expect_true(file.exists(ss_bed),
 
 nipter_ss_rt <- bed_to_nipter_sample(ss_bed)
 
-expect_true(inherits(nipter_ss_rt, "NIPTeRSample"),
-            info = "SeparatedStrands bed_to_nipter_sample() returns NIPTeRSample")
-expect_true(inherits(nipter_ss_rt, "SeparatedStrands"),
-            info = "9-column BED produces SeparatedStrands")
+expect_true(S7::S7_inherits(nipter_ss_rt, NIPTSample),
+            info = "SeparatedStrands bed_to_nipter_sample() returns an NIPTSample")
+expect_true(S7::S7_inherits(nipter_ss_rt, SeparatedStrandsSample),
+            info = "9-column BED produces a SeparatedStrandsSample")
 
 # Forward autosomal
 fwd_auto_orig <- nipter_ss_orig$autosomal_chromosome_reads[[1L]]
@@ -238,7 +238,6 @@ nipter_ss_corr$autosomal_chromosome_reads <- list(corr_fwd_auto, corr_rev_auto)
 nipter_ss_corr$sex_chromosome_reads       <- list(corr_fwd_sex, corr_rev_sex)
 nipter_ss_corr$correction_status_autosomal <- "GC Corrected"
 nipter_ss_corr$correction_status_sex       <- "GC Corrected"
-class(nipter_ss_corr) <- c("NIPTeRSample", "SeparatedStrands")
 
 corr_ss_bed <- tempfile(fileext = ".bed.gz")
 nipter_sample_to_bed(nipter_ss_orig, corr_ss_bed, binsize = 5000L,
@@ -246,8 +245,8 @@ nipter_sample_to_bed(nipter_ss_orig, corr_ss_bed, binsize = 5000L,
 
 corr_ss_rt <- bed_to_nipter_sample(corr_ss_bed)
 
-expect_true(inherits(corr_ss_rt, "SeparatedStrands"),
-            info = "Corrected SeparatedStrands round-trip: class is SeparatedStrands")
+expect_true(S7::S7_inherits(corr_ss_rt, SeparatedStrandsSample),
+            info = "Corrected SeparatedStrands round-trip: class is SeparatedStrandsSample")
 expect_identical(corr_ss_rt$correction_status_autosomal, "GC Corrected",
                  info = "Corrected SeparatedStrands round-trip: auto correction status")
 expect_identical(corr_ss_rt$correction_status_sex, "GC Corrected",

@@ -5,9 +5,10 @@
 # Manifest-driven preprocessing for real BAM/CRAM cohorts. This script:
 #   1. stages a BAM manifest under --out-root/manifests
 #   2. precomputes a NIPTeR GC table once
-#   3. converts every BAM to WisecondorX BED.gz
-#   4. optionally writes WisecondorX NPZ files for later upstream conformance
-#   5. converts every BAM to NIPTeR BED.gz with separated strands and GC-corrected columns
+#   3. optionally computes SeqFF fetal-fraction estimates from BAMs
+#   4. converts every BAM to WisecondorX BED.gz
+#   5. optionally writes WisecondorX NPZ files for later upstream conformance
+#   6. converts every BAM to NIPTeR BED.gz with separated strands and GC-corrected columns
 #
 # It intentionally does not build references or score samples.
 
@@ -81,6 +82,10 @@ option_list <- list(
               help = "NIPTeR exclude flags [default: %default]"),
   make_option("--nipter-separate-strands", action = "store_true", default = TRUE,
               help = "Write NIPTeR 9-column separated-strand BEDs [default: %default]"),
+  make_option("--seqff", action = "store_true", default = TRUE,
+              help = "Compute SeqFF fetal-fraction estimates from BAMs [default: %default]"),
+  make_option("--seqff-samtools-bin", type = "character", default = "samtools",
+              help = "Samtools executable used by SeqFF [default: %default]"),
   make_option("--wcx-write-npz", action = "store_true", default = FALSE,
               help = "Also write WisecondorX NPZ files for later upstream conformance [default: %default]"),
   make_option("--overwrite", action = "store_true", default = FALSE,
@@ -109,6 +114,7 @@ out_root <- .ensure_dir(opts$`out-root`)
 dirs <- list(
   manifests = .ensure_dir(file.path(out_root, "manifests")),
   gc = .ensure_dir(file.path(out_root, "gc")),
+  seqff = .ensure_dir(file.path(out_root, "seqff")),
   wcx_beds = .ensure_dir(file.path(out_root, "wcx_beds")),
   wcx_npz = .ensure_dir(file.path(out_root, "wcx_npz")),
   nipter_beds = .ensure_dir(file.path(out_root, "nipter_beds")),
@@ -136,6 +142,60 @@ library(RWisecondorX)
     binsize = as.integer(opts$`nipter-binsize`)
   )
 }, sprintf("Precompute GC table → %s", gc_table))
+
+if (isTRUE(opts$seqff)) {
+  .run_one({
+    seqff_rows <- vector("list", length(bams))
+    for (i in seq_along(bams)) {
+      bam <- bams[[i]]
+      stem <- sub("\\.(bam|cram)$", "", basename(bam), ignore.case = TRUE)
+      out_tsv <- file.path(dirs$seqff, paste0(stem, ".seqff.tsv"))
+      if (file.exists(out_tsv) && !isTRUE(opts$overwrite)) {
+        seqff_rows[[i]] <- utils::read.delim(
+          out_tsv,
+          sep = "\t",
+          header = TRUE,
+          stringsAsFactors = FALSE
+        )
+        next
+      }
+      cat(sprintf("  [%d/%d] SeqFF %s\n", i, length(bams), stem))
+      ff <- seqff_predict(
+        input = bam,
+        input_type = "bam",
+        samtools_bin = opts$`seqff-samtools-bin`,
+        samtools_exclude_flags = as.integer(opts$`nipter-exclude-flags`),
+        samtools_min_mapq = as.integer(opts$`nipter-mapq`)
+      )
+      row <- data.frame(
+        sample = stem,
+        bam = bam,
+        SeqFF = unname(ff[["SeqFF"]]),
+        Enet = unname(ff[["Enet"]]),
+        WRSC = unname(ff[["WRSC"]]),
+        stringsAsFactors = FALSE
+      )
+      utils::write.table(
+        row,
+        file = out_tsv,
+        sep = "\t",
+        row.names = FALSE,
+        col.names = TRUE,
+        quote = FALSE
+      )
+      seqff_rows[[i]] <- row
+    }
+    seqff_summary <- do.call(rbind, seqff_rows)
+    utils::write.table(
+      seqff_summary,
+      file = file.path(dirs$seqff, "seqff_summary.tsv"),
+      sep = "\t",
+      row.names = FALSE,
+      col.names = TRUE,
+      quote = FALSE
+    )
+  }, sprintf("Compute SeqFF fetal-fraction estimates for %d BAMs", length(bams)))
+}
 
 .run_one({
   for (i in seq_along(bams)) {
@@ -211,6 +271,7 @@ cat("\nPreprocessing layout ready under:\n")
 cat("  out_root:    ", out_root, "\n", sep = "")
 cat("  manifest:    ", staged_manifest, "\n", sep = "")
 cat("  gc_table:    ", gc_table, "\n", sep = "")
+cat("  seqff:       ", dirs$seqff, "\n", sep = "")
 cat("  wcx_beds:    ", dirs$wcx_beds, "\n", sep = "")
 cat("  wcx_npz:     ", dirs$wcx_npz, "\n", sep = "")
 cat("  nipter_beds: ", dirs$nipter_beds, "\n", sep = "")

@@ -205,6 +205,7 @@ the native and upstream WisecondorX paths explicit:
 
   - `inst/scripts/preprocess_cohort.R` stages a cohort manifest and
     writes:
+      - SeqFF fetal-fraction estimates
       - native `rwisecondorx` BED.gz files
       - optional upstream `wisecondorx` NPZ files
       - NIPTeR BED.gz files

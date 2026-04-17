@@ -10,6 +10,13 @@ nipter_build_reference(
   sex_source = NULL,
   sex_methods = c("y_fraction", "xy_fraction"),
   y_unique_ratios = NULL,
+  sample_qc = NULL,
+  sample_qc_sample_col = NULL,
+  sample_qc_total_unique_reads_col = NULL,
+  sample_qc_gc_col = NULL,
+  min_total_unique_reads = NULL,
+  max_total_unique_reads = NULL,
+  gc_mad_cutoff = NULL,
   build_params = list()
 )
 }
@@ -31,6 +38,33 @@ Default builds both.}
 \item{y_unique_ratios}{Optional named numeric vector of Y-unique ratios for
 building an additional \code{"y_unique"} sex model and storing
 \code{YUniqueRatio} in the reference frame.}
+
+\item{sample_qc}{Optional data frame with per-sample QC metrics. When
+supplied together with one or more QC thresholds below, controls failing
+the read-depth and/or GC gates are removed before any reference models are
+fitted.}
+
+\item{sample_qc_sample_col}{Optional sample-name column in
+\code{sample_qc}. When \code{NULL}, common names such as
+\code{sample_name} and \code{Sample} are inferred.}
+
+\item{sample_qc_total_unique_reads_col}{Optional total-unique-reads column in
+\code{sample_qc}. Required when either unique-read threshold is enabled.
+When \code{NULL}, common names such as \code{TotalUniqueReads} are
+inferred.}
+
+\item{sample_qc_gc_col}{Optional GC column in \code{sample_qc}. Required
+when \code{gc_mad_cutoff} is enabled. When \code{NULL}, common names such
+as \code{GCPCTAfterFiltering} are inferred.}
+
+\item{min_total_unique_reads}{Optional minimum allowed total unique reads.
+Controls below this threshold are removed before fitting.}
+
+\item{max_total_unique_reads}{Optional maximum allowed total unique reads.
+Controls above this threshold are removed before fitting.}
+
+\item{gc_mad_cutoff}{Optional robust MAD cutoff for GC values. Controls more
+than this many MADs from the cohort median are removed before fitting.}
 
 \item{build_params}{Optional named list of provenance parameters to attach to
 the returned reference model.}

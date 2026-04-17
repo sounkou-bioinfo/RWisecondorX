@@ -14,7 +14,8 @@ bam_convert_bed(
   rmdup = c("streaming", "flag", "none"),
   con = NULL,
   reference = NULL,
-  index = TRUE
+  index = TRUE,
+  metadata = NULL
 )
 }
 \arguments{
@@ -42,6 +43,10 @@ If \code{NULL} (default), a temporary in-memory DuckDB connection is created.}
 
 \item{index}{Logical; when \code{TRUE} (default) a tabix index is created
 alongside the bgzipped output.}
+
+\item{metadata}{Optional named list or named atomic vector of provenance
+metadata to write as leading \verb{##RWX_<key>=<value>} lines before the BED
+body. The data rows remain headerless. Default \code{NULL} writes no metadata.}
 }
 \value{
 \code{bed} (invisibly).

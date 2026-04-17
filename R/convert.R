@@ -112,15 +112,15 @@ bam_convert <- function(bam,
     on.exit(DBI::dbDisconnect(con, shutdown = TRUE), add = TRUE)
   }
 
-  rows <- Rduckhts::rduckhts_bam_bin_counts(
-    con,
-    path          = bam,
-    bin_width     = binsize,
-    reference     = reference,
-    mapq          = mapq,
+  rows <- .bam_bin_count_rows(
+    con = con,
+    bam = bam,
+    binsize = binsize,
+    mapq = mapq,
     require_flags = require_flags,
     exclude_flags = exclude_flags,
-    rmdup         = rmdup
+    rmdup = rmdup,
+    reference = reference
   )
   chr_lengths <- .bam_chr_lengths(con, bam)
 
@@ -175,6 +175,9 @@ bam_convert <- function(bam,
 #' @param reference Optional FASTA reference path for CRAM inputs.
 #' @param index Logical; when `TRUE` (default) a tabix index is created
 #'   alongside the bgzipped output.
+#' @param metadata Optional named list or named atomic vector of provenance
+#'   metadata to write as leading `##RWX_<key>=<value>` lines before the BED
+#'   body. The data rows remain headerless. Default `NULL` writes no metadata.
 #'
 #' @return `bed` (invisibly).
 #'
@@ -195,7 +198,8 @@ bam_convert_bed <- function(bam,
                             rmdup         = c("streaming", "flag", "none"),
                             con           = NULL,
                             reference     = NULL,
-                            index         = TRUE) {
+                            index         = TRUE,
+                            metadata      = NULL) {
   rmdup <- match.arg(rmdup)
   stopifnot(is.character(bam), length(bam) == 1L, nzchar(bam))
   stopifnot(file.exists(bam))
@@ -224,9 +228,25 @@ bam_convert_bed <- function(bam,
     on.exit(DBI::dbDisconnect(con, shutdown = TRUE), add = TRUE)
   }
 
-  bins <- bam_convert(bam, binsize = binsize, mapq = mapq,
-                      require_flags = require_flags, exclude_flags = exclude_flags,
-                      rmdup = rmdup, con = con, reference = reference)
+  needs_native_stats <- !is.null(metadata)
+  rows <- .bam_bin_count_rows(
+    con = con,
+    bam = bam,
+    binsize = binsize,
+    mapq = mapq,
+    require_flags = require_flags,
+    exclude_flags = exclude_flags,
+    rmdup = rmdup,
+    reference = reference,
+    stats = if (needs_native_stats) "gc,mq" else NULL,
+    include_unmapped = isTRUE(needs_native_stats)
+  )
+  chr_lengths <- .bam_chr_lengths(con, bam)
+  bins <- .as_wcx_sample(
+    .count_rows_to_bins(rows, "count_total",
+                        chr_lengths = chr_lengths,
+                        binsize = binsize)
+  )
 
   frames <- vector("list", 24L)
   for (i in seq_len(24L)) {
@@ -252,8 +272,14 @@ bam_convert_bed <- function(bam,
   # Write uncompressed BED to a temp file, then bgzip → tabix via Rduckhts.
   tmp <- tempfile(fileext = ".bed")
   on.exit(unlink(tmp), add = TRUE)
-  utils::write.table(df, tmp, sep = "\t", quote = FALSE, row.names = FALSE,
-                     col.names = FALSE)
+  .write_tabix_body(
+    df,
+    tmp,
+    metadata = .merge_tabix_metadata(
+      metadata,
+      if (needs_native_stats) .bam_bin_stats_metadata(rows) else NULL
+    )
+  )
 
   Rduckhts::rduckhts_bgzip(con, tmp,
                            output_path = bed,
@@ -264,7 +290,8 @@ bam_convert_bed <- function(bam,
   if (isTRUE(index)) {
     Rduckhts::rduckhts_tabix_index(con, bed,
                                    preset  = "bed",
-                                   threads = 1L)
+                                   threads = 1L,
+                                   comment_char = "#")
   }
 
   invisible(bed)
@@ -346,4 +373,80 @@ bam_convert_bed <- function(bam,
   }
 
   result
+}
+
+.bam_bin_count_rows <- function(con,
+                                bam,
+                                binsize,
+                                mapq,
+                                require_flags,
+                                exclude_flags,
+                                rmdup,
+                                reference = NULL,
+                                stats = NULL,
+                                include_unmapped = FALSE) {
+  Rduckhts::rduckhts_bam_bin_counts(
+    con,
+    path = bam,
+    bin_width = binsize,
+    include_unmapped = include_unmapped,
+    reference = reference,
+    mapq = mapq,
+    require_flags = require_flags,
+    exclude_flags = exclude_flags,
+    rmdup = rmdup,
+    stats = stats
+  )
+}
+
+.weighted_mean_or_na <- function(values, weights) {
+  ok <- is.finite(values) & is.finite(weights) & weights > 0
+  if (!any(ok)) {
+    return(NA_real_)
+  }
+  stats::weighted.mean(values[ok], weights[ok])
+}
+
+.bam_bin_stats_metadata <- function(rows) {
+  if (!nrow(rows)) {
+    return(NULL)
+  }
+
+  out <- list(
+    native_bin_stats = "gc,mq",
+    n_rows_stats = nrow(rows)
+  )
+  if ("count_total" %in% names(rows)) {
+    out$count_total_sum <- sum(as.numeric(rows$count_total), na.rm = TRUE)
+    out$n_nonzero_bins_post <- sum(as.numeric(rows$count_total) > 0, na.rm = TRUE)
+  }
+  if ("count_fwd" %in% names(rows)) {
+    out$count_fwd_sum <- sum(as.numeric(rows$count_fwd), na.rm = TRUE)
+  }
+  if ("count_rev" %in% names(rows)) {
+    out$count_rev_sum <- sum(as.numeric(rows$count_rev), na.rm = TRUE)
+  }
+  if ("count_pre" %in% names(rows)) {
+    out$count_pre_sum <- sum(as.numeric(rows$count_pre), na.rm = TRUE)
+  }
+  if (all(c("gc_perc_pre", "count_pre") %in% names(rows))) {
+    out$gc_perc_pre_weighted_mean <- .weighted_mean_or_na(
+      as.numeric(rows$gc_perc_pre),
+      as.numeric(rows$count_pre)
+    )
+  }
+  if (all(c("gc_perc_post", "count_total") %in% names(rows))) {
+    out$gc_perc_post_weighted_mean <- .weighted_mean_or_na(
+      as.numeric(rows$gc_perc_post),
+      as.numeric(rows$count_total)
+    )
+  }
+  if (all(c("mean_mapq_post", "count_total") %in% names(rows))) {
+    out$mean_mapq_post_weighted_mean <- .weighted_mean_or_na(
+      as.numeric(rows$mean_mapq_post),
+      as.numeric(rows$count_total)
+    )
+  }
+
+  out[!vapply(out, is.null, logical(1L))]
 }

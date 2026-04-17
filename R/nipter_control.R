@@ -100,14 +100,22 @@ nipter_as_control_group <- function(samples,
 #' chromosome's fraction distribution.
 #'
 #' @param control_group A \code{NIPTeRControlGroup} object.
+#' @param collapse_strands Logical; for \code{SeparatedStrands} control groups,
+#'   collapse forward and reverse strand fractions into 22 autosomal fractions
+#'   (\code{TRUE}, default) or keep the upstream-style 44-row strand-resolved
+#'   diagnostics (\code{FALSE}). Ignored for \code{CombinedStrands}.
+#' @param z_cutoff Absolute Z-score cutoff used to flag aberrant rows.
+#'   Default \code{3}.
 #'
 #' @return A list with three elements:
 #' \describe{
 #'   \item{z_scores}{Chromosome-by-sample matrix of Z-scores (rows =
-#'     chromosomes 1-22, columns = samples).}
+#'     chromosomes 1-22, or strand-resolved rows 1F-22F/1R-22R when
+#'     \code{collapse_strands = FALSE} on a \code{SeparatedStrands}
+#'     control group; columns = samples).}
 #'   \item{aberrant_scores}{A \code{data.frame} with columns
 #'     \code{chromosome}, \code{sample_name}, \code{z_score} for all
-#'     |Z| > 3, or \code{NULL} if none.}
+#'     \code{|Z| > z_cutoff}, or \code{NULL} if none.}
 #'   \item{statistics}{A matrix with rows per chromosome and columns
 #'     \code{mean}, \code{SD}, \code{shapiro_p_value}.}
 #' }
@@ -121,20 +129,27 @@ nipter_as_control_group <- function(samples,
 #' }
 #'
 #' @export
-nipter_diagnose_control_group <- function(control_group) {
+nipter_diagnose_control_group <- function(control_group,
+                                         collapse_strands = TRUE,
+                                         z_cutoff = 3) {
   stopifnot(.is_nipt_control_group_object(control_group))
+  stopifnot(is.logical(collapse_strands), length(collapse_strands) == 1L)
+  stopifnot(is.numeric(z_cutoff), length(z_cutoff) == 1L,
+            is.finite(z_cutoff), z_cutoff > 0)
 
-  fracs <- .control_group_fractions_collapsed(control_group)
-  # fracs: 22 x n_samples matrix
+  fracs <- .diagnose_control_group_fractions(
+    control_group,
+    collapse_strands = collapse_strands
+  )
 
   # Z-score each chromosome across samples
   z_mat <- t(apply(fracs, 1L, scale))
   sample_names <- control_names(control_group)
   colnames(z_mat) <- sample_names
-  rownames(z_mat) <- as.character(1:22)
+  rownames(z_mat) <- rownames(fracs)
 
-  # Find aberrant |Z| > 3
-  aberrant <- which(abs(z_mat) > 3, arr.ind = TRUE)
+  # Find aberrant |Z| > cutoff
+  aberrant <- which(abs(z_mat) > z_cutoff, arr.ind = TRUE)
   if (nrow(aberrant) > 0L) {
     ab_df <- data.frame(
       chromosome  = rownames(z_mat)[aberrant[, 1L]],
@@ -156,13 +171,553 @@ nipter_diagnose_control_group <- function(control_group) {
 
   stats_mat <- cbind(mean = chr_means, SD = chr_sds,
                      shapiro_p_value = chr_shap)
-  rownames(stats_mat) <- as.character(1:22)
+  rownames(stats_mat) <- rownames(fracs)
 
 
   list(
     z_scores        = z_mat,
     aberrant_scores = ab_df,
     statistics      = stats_mat
+  )
+}
+
+.diagnose_control_group_fractions <- function(control_group,
+                                              collapse_strands = TRUE) {
+  separated <- identical(.strand_type_of(control_group), "separated")
+  if (separated && !isTRUE(collapse_strands)) {
+    fracs <- fractions_for_regression(control_group)
+  } else {
+    fracs <- fractions_auto(control_group)
+  }
+  stopifnot(is.matrix(fracs), ncol(fracs) == n_controls(control_group))
+  fracs
+}
+
+
+#' Drop samples from a NIPTeR control group by sample name
+#'
+#' Convenience helper for quickly pruning a control cohort before rebuilding
+#' downstream reference artifacts.
+#'
+#' @param control_group A \code{NIPTeRControlGroup} object.
+#' @param sample_names Character vector of sample names to drop.
+#'
+#' @return A \code{NIPTeRControlGroup} of the same strand type with the
+#'   requested samples removed.
+#'
+#' @seealso [nipter_as_control_group()], [nipter_diagnose_control_group()]
+#'
+#' @export
+nipter_drop_control_group_samples <- function(control_group, sample_names) {
+  stopifnot(.is_nipt_control_group_object(control_group))
+  stopifnot(is.character(sample_names))
+
+  sample_names <- unique(sample_names[nzchar(sample_names)])
+  if (!length(sample_names)) {
+    return(control_group)
+  }
+
+  keep <- !control_names(control_group) %in% sample_names
+  if (sum(keep) < 2L) {
+    stop("Dropping the requested samples would leave fewer than 2 controls.",
+         call. = FALSE)
+  }
+
+  samples <- control_group$samples[keep]
+  sample_sex <- .control_sample_sex(control_group)
+  if (!is.null(sample_sex)) {
+    sample_sex <- sample_sex[control_names(control_group)[keep]]
+  }
+
+  nipter_as_control_group(
+    samples,
+    description = control_group$description,
+    sample_sex = sample_sex,
+    sex_source = .control_sex_source(control_group)
+  )
+}
+
+.match_sample_qc_col <- function(df,
+                                 provided,
+                                 candidates,
+                                 label) {
+  nms <- names(df)
+  if (!length(nms)) {
+    stop("sample_qc must have named columns.", call. = FALSE)
+  }
+
+  if (!is.null(provided) && nzchar(provided)) {
+    hit <- match(tolower(provided), tolower(nms), nomatch = 0L)
+    if (hit < 1L) {
+      stop(
+        "Could not find sample_qc column '", provided,
+        "' for ", label, ".",
+        call. = FALSE
+      )
+    }
+    return(nms[[hit]])
+  }
+
+  hit <- match(tolower(candidates), tolower(nms), nomatch = 0L)
+  hit <- hit[hit > 0L]
+  if (!length(hit)) {
+    stop(
+      "Could not infer a sample_qc ", label, " column. Tried: ",
+      paste(candidates, collapse = ", "),
+      call. = FALSE
+    )
+  }
+  nms[[hit[[1L]]]]
+}
+
+.append_filter_reason <- function(current, new_reason) {
+  ifelse(
+    is.na(current) | !nzchar(current),
+    new_reason,
+    paste(current, new_reason, sep = ";")
+  )
+}
+
+.flag_mad_outliers <- function(values,
+                               cutoff,
+                               label) {
+  stopifnot(is.numeric(values))
+  stopifnot(is.numeric(cutoff), length(cutoff) == 1L, is.finite(cutoff), cutoff > 0)
+
+  finite <- is.finite(values)
+  if (sum(finite) < 3L) {
+    stop(
+      "Need at least 3 finite ", label, " values to apply MAD-based filtering.",
+      call. = FALSE
+    )
+  }
+
+  center <- stats::median(values[finite], na.rm = TRUE)
+  spread <- stats::mad(values[finite], center = center, constant = 1.4826,
+                       na.rm = TRUE)
+  if (!is.finite(spread) || spread <= .Machine$double.eps) {
+    return(rep(FALSE, length(values)))
+  }
+
+  out <- rep(FALSE, length(values))
+  out[!finite] <- TRUE
+  out[finite] <- abs(values[finite] - center) / spread > cutoff
+  out
+}
+
+#' Filter control samples by read-depth and GC QC
+#'
+#' Applies hard sample-level QC gates before reference/model building. This is
+#' intended for cohort curation steps such as excluding controls with too few
+#' unique reads or aberrant GC content.
+#'
+#' @param control_group A \code{NIPTeRControlGroup}.
+#' @param sample_qc Data frame containing at least a sample-name column and, if
+#'   the corresponding filters are enabled, QC columns for total unique reads
+#'   and/or GC content.
+#' @param sample_col Optional sample-name column in \code{sample_qc}. When
+#'   \code{NULL}, common names such as \code{sample_name} and \code{Sample}
+#'   are inferred.
+#' @param total_unique_reads_col Optional total-unique-reads column in
+#'   \code{sample_qc}. Required when either read-depth threshold is supplied.
+#'   If \code{NULL}, common names such as \code{TotalUniqueReads} are inferred.
+#' @param gc_col Optional GC column in \code{sample_qc}. Required when
+#'   \code{gc_mad_cutoff} is supplied. If \code{NULL}, common names such as
+#'   \code{GCPCTAfterFiltering} are inferred.
+#' @param min_total_unique_reads Optional minimum allowed total unique reads.
+#'   Samples below this threshold are dropped.
+#' @param max_total_unique_reads Optional maximum allowed total unique reads.
+#'   Samples above this threshold are dropped.
+#' @param gc_mad_cutoff Optional robust MAD cutoff for the GC column. Samples
+#'   more than this many MADs from the cohort median are dropped.
+#'
+#' @return A list with:
+#' \describe{
+#'   \item{control_group}{The filtered control group.}
+#'   \item{retained_samples}{Character vector of retained sample names.}
+#'   \item{excluded_samples}{Character vector of excluded sample names.}
+#'   \item{exclusion_table}{Data frame describing dropped samples and reasons.}
+#'   \item{matched_qc}{The QC rows matched to the control-group sample order.}
+#'   \item{settings}{Named list of applied QC filter settings.}
+#' }
+#'
+#' @seealso [nipter_drop_control_group_samples()], [nipter_build_reference()]
+#'
+#' @export
+nipter_filter_control_group_qc <- function(control_group,
+                                           sample_qc,
+                                           sample_col = NULL,
+                                           total_unique_reads_col = NULL,
+                                           gc_col = NULL,
+                                           min_total_unique_reads = NULL,
+                                           max_total_unique_reads = NULL,
+                                           gc_mad_cutoff = NULL) {
+  stopifnot(.is_nipt_control_group_object(control_group))
+
+  thresholds_active <- !is.null(min_total_unique_reads) ||
+    !is.null(max_total_unique_reads) ||
+    !is.null(gc_mad_cutoff)
+  if (!thresholds_active) {
+    return(list(
+      control_group = control_group,
+      retained_samples = control_names(control_group),
+      excluded_samples = character(),
+      exclusion_table = data.frame(
+        sample_name = character(),
+        exclusion_reason = character(),
+        total_unique_reads = numeric(),
+        gc = numeric(),
+        stringsAsFactors = FALSE
+      ),
+      matched_qc = NULL,
+      settings = list(
+        min_total_unique_reads = min_total_unique_reads,
+        max_total_unique_reads = max_total_unique_reads,
+        gc_mad_cutoff = gc_mad_cutoff
+      )
+    ))
+  }
+
+  if (is.null(sample_qc)) {
+    stop(
+      "sample_qc must be supplied when QC thresholds are enabled.",
+      call. = FALSE
+    )
+  }
+
+  stopifnot(is.data.frame(sample_qc))
+  qc <- as.data.frame(sample_qc, stringsAsFactors = FALSE)
+  sample_col <- .match_sample_qc_col(
+    qc,
+    sample_col,
+    c("sample_name", "sample", "Sample_name", "Sample", "sample_id", "SampleID"),
+    "sample-name"
+  )
+  qc_names <- as.character(qc[[sample_col]])
+  if (anyNA(qc_names) || any(!nzchar(qc_names))) {
+    stop("sample_qc sample names must be non-missing and non-empty.",
+         call. = FALSE)
+  }
+  if (anyDuplicated(qc_names)) {
+    dup <- unique(qc_names[duplicated(qc_names)])
+    stop(
+      "Duplicate sample names in sample_qc: ",
+      paste(dup, collapse = ", "),
+      call. = FALSE
+    )
+  }
+
+  sample_names <- control_names(control_group)
+  missing_qc <- setdiff(sample_names, qc_names)
+  if (length(missing_qc)) {
+    stop(
+      "sample_qc is missing rows for control samples: ",
+      paste(missing_qc, collapse = ", "),
+      call. = FALSE
+    )
+  }
+
+  qc <- qc[match(sample_names, qc_names), , drop = FALSE]
+  rownames(qc) <- sample_names
+  reason <- rep(NA_character_, length(sample_names))
+
+  reads_vals <- rep(NA_real_, length(sample_names))
+  if (!is.null(min_total_unique_reads) || !is.null(max_total_unique_reads)) {
+    total_unique_reads_col <- .match_sample_qc_col(
+      qc,
+      total_unique_reads_col,
+      c("TotalUniqueReads", "total_unique_reads", "total_unique_reads_filtered",
+        "UniqueReads", "unique_reads"),
+      "total-unique-reads"
+    )
+    reads_vals <- suppressWarnings(as.numeric(qc[[total_unique_reads_col]]))
+    if (any(!is.finite(reads_vals))) {
+      bad <- sample_names[!is.finite(reads_vals)]
+      stop(
+        "Non-numeric or missing total unique reads for samples: ",
+        paste(bad, collapse = ", "),
+        call. = FALSE
+      )
+    }
+
+    if (!is.null(min_total_unique_reads)) {
+      below <- reads_vals < as.numeric(min_total_unique_reads)
+      reason[below] <- .append_filter_reason(reason[below], "below_min_unique_reads")
+    }
+    if (!is.null(max_total_unique_reads)) {
+      above <- reads_vals > as.numeric(max_total_unique_reads)
+      reason[above] <- .append_filter_reason(reason[above], "above_max_unique_reads")
+    }
+  }
+
+  gc_vals <- rep(NA_real_, length(sample_names))
+  if (!is.null(gc_mad_cutoff)) {
+    gc_col <- .match_sample_qc_col(
+      qc,
+      gc_col,
+      c("GCPCTAfterFiltering", "gc_after_filtering", "gc_pct_after_filtering",
+        "GCPCT", "gc_pct", "gc"),
+      "GC"
+    )
+    gc_vals <- suppressWarnings(as.numeric(qc[[gc_col]]))
+    if (any(!is.finite(gc_vals))) {
+      bad <- sample_names[!is.finite(gc_vals)]
+      stop(
+        "Non-numeric or missing GC values for samples: ",
+        paste(bad, collapse = ", "),
+        call. = FALSE
+      )
+    }
+    gc_outliers <- .flag_mad_outliers(
+      gc_vals,
+      cutoff = as.numeric(gc_mad_cutoff),
+      label = "GC"
+    )
+    reason[gc_outliers] <- .append_filter_reason(reason[gc_outliers], "gc_mad_outlier")
+  }
+
+  excluded <- sample_names[!is.na(reason) & nzchar(reason)]
+  filtered_group <- if (length(excluded)) {
+    nipter_drop_control_group_samples(control_group, excluded)
+  } else {
+    control_group
+  }
+
+  list(
+    control_group = filtered_group,
+    retained_samples = control_names(filtered_group),
+    excluded_samples = excluded,
+    exclusion_table = data.frame(
+      sample_name = excluded,
+      exclusion_reason = reason[match(excluded, sample_names)],
+      total_unique_reads = reads_vals[match(excluded, sample_names)],
+      gc = gc_vals[match(excluded, sample_names)],
+      stringsAsFactors = FALSE
+    ),
+    matched_qc = qc,
+    settings = list(
+      sample_col = sample_col,
+      total_unique_reads_col = if (exists("total_unique_reads_col")) total_unique_reads_col else NULL,
+      gc_col = if (exists("gc_col")) gc_col else NULL,
+      min_total_unique_reads = min_total_unique_reads,
+      max_total_unique_reads = max_total_unique_reads,
+      gc_mad_cutoff = gc_mad_cutoff
+    )
+  )
+}
+
+.flag_control_group_outliers <- function(diagnostics,
+                                         collapse_strands = TRUE,
+                                         max_aberrant_chromosomes = 2L) {
+  stopifnot(is.list(diagnostics))
+  stopifnot(is.logical(collapse_strands), length(collapse_strands) == 1L)
+  stopifnot(is.numeric(max_aberrant_chromosomes),
+            length(max_aberrant_chromosomes) == 1L,
+            max_aberrant_chromosomes >= 0)
+
+  ab <- diagnostics$aberrant_scores
+  if (is.null(ab) || !nrow(ab)) {
+    return(character())
+  }
+
+  if (isTRUE(collapse_strands)) {
+    chrom_summary <- stats::aggregate(
+      chromosome ~ sample_name,
+      data = ab,
+      FUN = function(x) length(unique(x))
+    )
+    return(chrom_summary$sample_name[
+      chrom_summary$chromosome > as.integer(max_aberrant_chromosomes)
+    ])
+  }
+
+  ab$chromosome_core <- sub("[FR]$", "", ab$chromosome)
+  sample_split <- split(ab, ab$sample_name)
+
+  flagged <- vapply(sample_split, function(df) {
+    per_chr <- table(df$chromosome_core)
+    any(per_chr > 1L) ||
+      length(unique(df$chromosome_core)) > as.integer(max_aberrant_chromosomes)
+  }, logical(1L))
+
+  names(flagged)[flagged]
+}
+
+
+#' Iteratively prune aberrant controls using chi-correction diagnostics
+#'
+#' Mirrors the legacy production cleaning loop for NIPTeR control cohorts:
+#' chi-correct the current control group, diagnose chromosomal-fraction
+#' outliers, drop flagged samples, and repeat until no further outliers remain
+#' or the minimum control size would be violated.
+#'
+#' For \code{SeparatedStrands} control groups with
+#' \code{collapse_strands = FALSE} (default), the pruning rule matches the
+#' legacy script: drop a sample if both strands of any chromosome are
+#' aberrant, or if more than \code{max_aberrant_chromosomes} distinct
+#' chromosomes are aberrant.
+#'
+#' @param control_group A \code{NIPTeRControlGroup}.
+#' @param sample Optional \code{NIPTeRSample} used as the dummy sample passed
+#'   into [nipter_chi_correct()]. Defaults to the first control sample.
+#' @param chi_cutoff Numeric chi-correction cutoff passed to
+#'   [nipter_chi_correct()]. Default \code{3.5}.
+#' @param collapse_strands Logical; keep 44 strand-resolved diagnostics for
+#'   \code{SeparatedStrands} (\code{FALSE}, default) or collapse to 22
+#'   autosomal fractions.
+#' @param z_cutoff Absolute Z-score cutoff passed to
+#'   [nipter_diagnose_control_group()].
+#' @param max_aberrant_chromosomes Maximum number of distinct aberrant
+#'   chromosomes allowed before a sample is dropped. Default \code{2L}.
+#' @param min_controls Minimum allowed retained control count. The iteration
+#'   stops before dropping samples if doing so would leave fewer controls than
+#'   this threshold.
+#' @param max_iterations Maximum number of pruning iterations. Default
+#'   \code{100L}.
+#' @param verbose Logical; emit per-iteration messages.
+#'
+#' @return A named list with:
+#' \describe{
+#'   \item{control_group}{The final uncorrected control group after dropping
+#'     flagged samples.}
+#'   \item{chi_corrected_control_group}{The final chi-corrected control group
+#'     used for the terminal diagnostic pass.}
+#'   \item{diagnostics}{The terminal diagnostic list from
+#'     [nipter_diagnose_control_group()].}
+#'   \item{dropped_samples}{Character vector of unique dropped sample names in
+#'     drop order.}
+#'   \item{iteration_log}{Data frame recording flagged and retained control
+#'     counts per iteration.}
+#'   \item{converged}{Logical; \code{TRUE} when the loop ended without flagged
+#'     samples.}
+#'   \item{stop_reason}{Text reason for the stopping condition.}
+#' }
+#'
+#' @seealso [nipter_chi_correct()], [nipter_diagnose_control_group()],
+#'   [nipter_drop_control_group_samples()]
+#'
+#' @export
+nipter_prune_control_group_outliers <- function(control_group,
+                                                sample = NULL,
+                                                chi_cutoff = 3.5,
+                                                collapse_strands = FALSE,
+                                                z_cutoff = 3,
+                                                max_aberrant_chromosomes = 2L,
+                                                min_controls = 10L,
+                                                max_iterations = 100L,
+                                                verbose = FALSE) {
+  stopifnot(.is_nipt_control_group_object(control_group))
+  stopifnot(is.null(sample) || .is_nipt_sample_object(sample))
+  stopifnot(is.numeric(chi_cutoff), length(chi_cutoff) == 1L)
+  stopifnot(is.logical(collapse_strands), length(collapse_strands) == 1L)
+  stopifnot(is.numeric(z_cutoff), length(z_cutoff) == 1L, z_cutoff > 0)
+  stopifnot(is.numeric(max_aberrant_chromosomes),
+            length(max_aberrant_chromosomes) == 1L,
+            max_aberrant_chromosomes >= 0)
+  stopifnot(is.numeric(min_controls), length(min_controls) == 1L, min_controls >= 2L)
+  stopifnot(is.numeric(max_iterations), length(max_iterations) == 1L,
+            max_iterations >= 1L)
+  stopifnot(is.logical(verbose), length(verbose) == 1L)
+
+  sample <- if (is.null(sample)) control_group$samples[[1L]] else sample
+  if (!identical(.strand_type_of(sample), .strand_type_of(control_group))) {
+    stop("sample and control_group must have the same strand type.",
+         call. = FALSE)
+  }
+
+  current_raw <- control_group
+  dropped <- character()
+  iter_log <- vector("list", as.integer(max_iterations))
+  stop_reason <- "max_iterations"
+  converged <- FALSE
+
+  for (iter in seq_len(as.integer(max_iterations))) {
+    current_chi <- nipter_chi_correct(
+      sample = sample,
+      control_group = current_raw,
+      chi_cutoff = chi_cutoff
+    )[["control_group"]]
+    diag <- nipter_diagnose_control_group(
+      current_chi,
+      collapse_strands = collapse_strands,
+      z_cutoff = z_cutoff
+    )
+    flagged <- .flag_control_group_outliers(
+      diag,
+      collapse_strands = collapse_strands,
+      max_aberrant_chromosomes = max_aberrant_chromosomes
+    )
+
+    iter_log[[iter]] <- data.frame(
+      iteration = iter,
+      n_controls = n_controls(current_raw),
+      n_flagged = length(flagged),
+      flagged_samples = paste(flagged, collapse = ";"),
+      stringsAsFactors = FALSE
+    )
+
+    if (isTRUE(verbose)) {
+      message(
+        sprintf(
+          "nipter_prune_control_group_outliers iter %d: %d controls, %d flagged",
+          iter, n_controls(current_raw), length(flagged)
+        )
+      )
+    }
+
+    if (!length(flagged)) {
+      stop_reason <- "no_flagged_samples"
+      converged <- TRUE
+      iter_log <- iter_log[seq_len(iter)]
+      return(list(
+        control_group = current_raw,
+        chi_corrected_control_group = current_chi,
+        diagnostics = diag,
+        dropped_samples = dropped,
+        iteration_log = do.call(rbind, iter_log),
+        converged = converged,
+        stop_reason = stop_reason
+      ))
+    }
+
+    if ((n_controls(current_raw) - length(flagged)) < min_controls) {
+      stop_reason <- "min_controls"
+      iter_log <- iter_log[seq_len(iter)]
+      return(list(
+        control_group = current_raw,
+        chi_corrected_control_group = current_chi,
+        diagnostics = diag,
+        dropped_samples = dropped,
+        iteration_log = do.call(rbind, iter_log),
+        converged = converged,
+        stop_reason = stop_reason
+      ))
+    }
+
+    current_raw <- nipter_drop_control_group_samples(current_raw, flagged)
+    sample <- current_raw$samples[[1L]]
+    dropped <- c(dropped, flagged)
+  }
+
+  current_chi <- nipter_chi_correct(
+    sample = sample,
+    control_group = current_raw,
+    chi_cutoff = chi_cutoff
+  )[["control_group"]]
+  diag <- nipter_diagnose_control_group(
+    current_chi,
+    collapse_strands = collapse_strands,
+    z_cutoff = z_cutoff
+  )
+
+  list(
+    control_group = current_raw,
+    chi_corrected_control_group = current_chi,
+    diagnostics = diag,
+    dropped_samples = dropped,
+    iteration_log = do.call(rbind, iter_log),
+    converged = converged,
+    stop_reason = stop_reason
   )
 }
 

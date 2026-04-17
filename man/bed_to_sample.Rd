@@ -27,10 +27,12 @@ suitable for \code{\link[=rwisecondorx_newref]{rwisecondorx_newref()}}, \code{\l
 }
 \details{
 Only the first 4 tab-delimited columns are used: \code{chrom}, \code{start}, \code{end},
-\code{count} (no header). Any trailing columns are ignored, so this reader stays
-strand-agnostic and can also consume NIPTeR BEDs by taking their total-count
-column. Coordinates are 0-based half-open intervals. The bin size is
-inferred from the first row (\code{end - start}) unless explicitly provided.
+\code{count} (no column header row). Optional leading \verb{##RWX_<key>=<value>}
+metadata lines are ignored automatically. Any trailing columns are ignored,
+so this reader stays strand-agnostic and can also consume NIPTeR BEDs by
+taking their total-count column. Coordinates are 0-based half-open
+intervals. The bin size is inferred from the first row (\code{end - start})
+unless explicitly provided.
 }
 \examples{
 \dontrun{

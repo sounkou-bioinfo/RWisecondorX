@@ -55,8 +55,9 @@ A 5-column BED (\code{chrom}, \code{start}, \code{end}, \code{count}, \code{corr
 produces a \code{CombinedStrands} sample. A 9-column BED (\code{chrom}, \code{start},
 \code{end}, \code{count}, \code{count_fwd}, \code{count_rev}, \code{corrected_count},
 \code{corrected_fwd}, \code{corrected_rev}) produces a \code{SeparatedStrands} sample
-with independent forward/reverse count matrices. The number of columns is
-detected automatically.
+with independent forward/reverse count matrices. Optional leading
+\verb{##RWX_<key>=<value>} metadata lines are ignored automatically. The number
+of columns is detected automatically.
 
 When corrected columns contain non-NA values (i.e. the BED was written with
 a GC-corrected \code{corrected} argument), \code{autosomal_source = "auto"} (default)

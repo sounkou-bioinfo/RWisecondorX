@@ -52,6 +52,11 @@ library(optparse)
   )
 }
 
+.compact_metadata <- function(x) {
+  keep <- !vapply(x, is.null, logical(1L))
+  x[keep]
+}
+
 .ensure_dir <- function(path) {
   dir.create(path, recursive = TRUE, showWarnings = FALSE)
   if (!dir.exists(path)) {
@@ -172,6 +177,8 @@ option_list <- list(
               help = "Compute SeqFF fetal-fraction estimates from BAMs [default: %default]"),
   make_option("--wcx-write-npz", action = "store_true", default = FALSE,
               help = "Also write upstream WisecondorX NPZ files via the Python CLI [default: %default]"),
+  make_option("--tabix-metadata", action = "store_true", default = FALSE,
+              help = "Write optional ##RWX_<key>=<value> provenance lines into BED/tabix outputs [default: %default]"),
   make_option("--overwrite", action = "store_true", default = FALSE,
               help = "Overwrite existing outputs [default: %default]")
 )
@@ -295,7 +302,17 @@ if (isTRUE(opts$seqff)) {
       binsize = as.integer(opts$`wcx-binsize`),
       mapq = 1L,
       rmdup = "streaming",
-      reference = opts$fasta
+      reference = opts$fasta,
+      metadata = if (isTRUE(opts$`tabix-metadata`)) .compact_metadata(list(
+        format = "rwisecondorx_bed",
+        schema = "count_v1",
+        binsize = as.integer(opts$`wcx-binsize`),
+        mapq = 1L,
+        require_flags = 0L,
+        exclude_flags = 0L,
+        rmdup = "streaming",
+        reference = normalizePath(opts$fasta, winslash = "/", mustWork = TRUE)
+      )) else NULL
     )
     invisible(NULL)
   })
@@ -350,7 +367,21 @@ if (isTRUE(opts$`wcx-write-npz`)) {
       sample = raw_sample,
       corrected = corrected_sample,
       bed = out_bed,
-      binsize = as.integer(opts$`nipter-binsize`)
+      binsize = as.integer(opts$`nipter-binsize`),
+      metadata = if (isTRUE(opts$`tabix-metadata`)) .compact_metadata(list(
+        format = "nipter_bed",
+        schema = if (isTRUE(opts$`nipter-separate-strands`)) "separated_v1" else "combined_v1",
+        binsize = as.integer(opts$`nipter-binsize`),
+        mapq = as.integer(opts$`nipter-mapq`),
+        require_flags = 0L,
+        exclude_flags = as.integer(opts$`nipter-exclude-flags`),
+        rmdup = "none",
+        corrected_columns = TRUE,
+        gc_method = "loess",
+        gc_include_sex = isTRUE(opts$`nipter-gc-include-sex`),
+        reference = normalizePath(opts$fasta, winslash = "/", mustWork = TRUE),
+        gc_table = normalizePath(gc_table, winslash = "/", mustWork = TRUE)
+      )) else NULL
     )
     invisible(NULL)
   })

@@ -141,6 +141,9 @@ nipter_bin_bam <- function(bam,
 #'   those columns are `NA` otherwise.
 #' @param con Optional open DBI connection with duckhts already loaded.
 #' @param index Logical; write a tabix index alongside the BED (default `TRUE`).
+#' @param metadata Optional named list or named atomic vector of provenance
+#'   metadata to write as leading `##RWX_<key>=<value>` lines before the BED
+#'   body. The data rows remain headerless. Default `NULL` writes no metadata.
 #'
 #' @return `bed` (invisibly).
 #'
@@ -165,7 +168,8 @@ nipter_sample_to_bed <- function(sample,
                                  binsize,
                                  corrected = NULL,
                                  con       = NULL,
-                                 index     = TRUE) {
+                                 index     = TRUE,
+                                 metadata  = NULL) {
   stopifnot(.is_nipt_sample_object(sample))
   stopifnot(is.character(bed), length(bed) == 1L, nzchar(bed))
   stopifnot(is.numeric(binsize), length(binsize) == 1L, binsize >= 1L)
@@ -194,8 +198,7 @@ nipter_sample_to_bed <- function(sample,
 
   tmp <- tempfile(fileext = ".bed")
   on.exit(unlink(tmp), add = TRUE)
-  utils::write.table(df, tmp, sep = "\t", quote = FALSE, row.names = FALSE,
-                     col.names = FALSE)
+  .write_tabix_body(df, tmp, metadata = metadata)
 
   Rduckhts::rduckhts_bgzip(con, tmp,
                             output_path = bed,
@@ -204,7 +207,8 @@ nipter_sample_to_bed <- function(sample,
                             overwrite   = TRUE)
 
   if (isTRUE(index)) {
-    Rduckhts::rduckhts_tabix_index(con, bed, preset = "bed", threads = 1L)
+    Rduckhts::rduckhts_tabix_index(con, bed, preset = "bed", threads = 1L,
+                                   comment_char = "#")
   }
 
   invisible(bed)
@@ -245,6 +249,9 @@ nipter_sample_to_bed <- function(sample,
 #' @param con Optional open DBI connection with duckhts already loaded.
 #' @param reference Optional FASTA reference path for CRAM inputs.
 #' @param index Logical; create a tabix index (default `TRUE`).
+#' @param metadata Optional named list or named atomic vector of provenance
+#'   metadata to write as leading `##RWX_<key>=<value>` lines before the BED
+#'   body. The data rows remain headerless. Default `NULL` writes no metadata.
 #'
 #' @return `bed` (invisibly).
 #'
@@ -275,7 +282,8 @@ nipter_bin_bam_bed <- function(bam,
                                separate_strands = FALSE,
                                con              = NULL,
                                reference        = NULL,
-                               index            = TRUE) {
+                               index            = TRUE,
+                               metadata         = NULL) {
   # Share one connection across nipter_bin_bam + nipter_sample_to_bed so
   # both operations run in the same DuckDB session without double-open.
   own_con <- is.null(con)
@@ -299,7 +307,8 @@ nipter_bin_bam_bed <- function(bam,
   nipter_sample_to_bed(sample, bed,
                         binsize   = binsize,
                         con       = con,
-                        index     = index)
+                        index     = index,
+                        metadata  = metadata)
 }
 
 

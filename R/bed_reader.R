@@ -17,10 +17,12 @@
 #' [scale_sample()], or [bam_convert_npz()].
 #'
 #' Only the first 4 tab-delimited columns are used: `chrom`, `start`, `end`,
-#' `count` (no header). Any trailing columns are ignored, so this reader stays
-#' strand-agnostic and can also consume NIPTeR BEDs by taking their total-count
-#' column. Coordinates are 0-based half-open intervals. The bin size is
-#' inferred from the first row (`end - start`) unless explicitly provided.
+#' `count` (no column header row). Optional leading `##RWX_<key>=<value>`
+#' metadata lines are ignored automatically. Any trailing columns are ignored,
+#' so this reader stays strand-agnostic and can also consume NIPTeR BEDs by
+#' taking their total-count column. Coordinates are 0-based half-open
+#' intervals. The bin size is inferred from the first row (`end - start`)
+#' unless explicitly provided.
 #'
 #' @param bed Path to a bgzipped (or plain) BED file with a `.tbi` index.
 #' @param binsize Optional integer; bin size in base pairs. If `NULL` (default),
@@ -80,8 +82,9 @@ bed_to_sample <- function(bed, binsize = NULL, con = NULL) {
 #' produces a `CombinedStrands` sample. A 9-column BED (`chrom`, `start`,
 #' `end`, `count`, `count_fwd`, `count_rev`, `corrected_count`,
 #' `corrected_fwd`, `corrected_rev`) produces a `SeparatedStrands` sample
-#' with independent forward/reverse count matrices. The number of columns is
-#' detected automatically.
+#' with independent forward/reverse count matrices. Optional leading
+#' `##RWX_<key>=<value>` metadata lines are ignored automatically. The number
+#' of columns is detected automatically.
 #'
 #' When corrected columns contain non-NA values (i.e. the BED was written with
 #' a GC-corrected `corrected` argument), `autosomal_source = "auto"` (default)

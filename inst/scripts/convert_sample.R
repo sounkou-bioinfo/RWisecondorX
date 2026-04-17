@@ -20,6 +20,11 @@ if (!requireNamespace("optparse", quietly = TRUE)) {
 
 library(optparse)
 
+.compact_metadata <- function(x) {
+  keep <- !vapply(x, is.null, logical(1L))
+  x[keep]
+}
+
 option_list <- list(
   make_option("--mode", type = "character", default = "rwisecondorx",
               help = "Conversion mode: 'rwisecondorx', 'wisecondorx', or 'nipter' [default: %default]"),
@@ -62,7 +67,10 @@ option_list <- list(
                             "NIPTeR mode only. Slower than --gc-table for multiple samples")),
   make_option("--nipter-gc-include-sex", action = "store_true", default = FALSE,
               help = paste0("NIPTeR mode: also GC-correct X/Y bins when writing corrected BED columns. ",
-                            "Guarded off by default for compatibility [default: %default]"))
+                            "Guarded off by default for compatibility [default: %default]")),
+  make_option("--tabix-metadata", action = "store_true", default = FALSE,
+              help = paste0("BED outputs only: write optional ##RWX_<key>=<value> provenance lines ",
+                            "into the bgzipped tabix file [default: %default]"))
 )
 
 parser <- OptionParser(
@@ -153,6 +161,10 @@ if (mode == "wisecondorx" && opts$npz) {
   stop("wisecondorx mode already uses the upstream NPZ wrapper; do not pass --npz", call. = FALSE)
 }
 
+if (isTRUE(opts$`tabix-metadata`) && (mode == "wisecondorx" || isTRUE(opts$npz))) {
+  stop("--tabix-metadata is only valid for BED outputs.", call. = FALSE)
+}
+
 # ---------------------------------------------------------------------------
 # Set mode-dependent defaults
 # ---------------------------------------------------------------------------
@@ -181,6 +193,21 @@ bam <- opts$bam
 out <- opts$out
 
 if (mode == "rwisecondorx") {
+  bed_metadata <- if (isTRUE(opts$`tabix-metadata`) && !isTRUE(opts$npz)) {
+    .compact_metadata(list(
+      format = "rwisecondorx_bed",
+      schema = "count_v1",
+      binsize = as.integer(binsize),
+      mapq = as.integer(mapq),
+      require_flags = as.integer(opts$`require-flags`),
+      exclude_flags = as.integer(opts$`exclude-flags`),
+      rmdup = rmdup,
+      reference = if (!is.null(opts$reference)) normalizePath(opts$reference, winslash = "/", mustWork = TRUE) else NULL
+    ))
+  } else {
+    NULL
+  }
+
   if (opts$npz) {
     cat(sprintf("Converting %s → %s (native rwisecondorx NPZ, binsize=%d, rmdup=%s)\n",
                 basename(bam), basename(out), binsize, rmdup))
@@ -205,7 +232,8 @@ if (mode == "rwisecondorx") {
       require_flags = opts$`require-flags`,
       exclude_flags = opts$`exclude-flags`,
       rmdup         = rmdup,
-      reference     = opts$reference
+      reference     = opts$reference,
+      metadata      = bed_metadata
     )
   }
 } else if (mode == "wisecondorx") {
@@ -223,6 +251,26 @@ if (mode == "rwisecondorx") {
   # NIPTeR mode
   gc_table <- opts$`gc-table`
   gc_fasta <- opts$fasta
+  bed_metadata <- if (isTRUE(opts$`tabix-metadata`)) {
+    .compact_metadata(list(
+      format = "nipter_bed",
+      schema = if (isTRUE(opts$`separate-strands`)) "separated_v1" else "combined_v1",
+      binsize = as.integer(binsize),
+      mapq = as.integer(mapq),
+      require_flags = as.integer(opts$`require-flags`),
+      exclude_flags = as.integer(opts$`exclude-flags`),
+      rmdup = rmdup,
+      corrected_columns = !is.null(gc_table) || !is.null(gc_fasta),
+      gc_method = if (!is.null(gc_table) || !is.null(gc_fasta)) "loess" else NULL,
+      gc_include_sex = if (!is.null(gc_table) || !is.null(gc_fasta)) isTRUE(opts$`nipter-gc-include-sex`) else NULL,
+      reference = if (!is.null(opts$reference)) normalizePath(opts$reference, winslash = "/", mustWork = TRUE) else NULL,
+      gc_table = if (!is.null(gc_table)) normalizePath(gc_table, winslash = "/", mustWork = TRUE) else NULL,
+      gc_fasta = if (!is.null(gc_fasta)) normalizePath(gc_fasta, winslash = "/", mustWork = TRUE) else NULL
+    ))
+  } else {
+    NULL
+  }
+
   cat(sprintf("Converting %s → %s (NIPTeR BED%s, binsize=%d, mapq=%d, rmdup=%s)\n",
               basename(bam), basename(out),
               if (opts$`separate-strands`) " 9-col" else " 5-col",
@@ -269,7 +317,8 @@ if (mode == "rwisecondorx") {
       bed       = out,
       binsize   = binsize,
       corrected = corrected_sample,
-      con       = con
+      con       = con,
+      metadata  = bed_metadata
     )
   } else {
     nipter_bin_bam_bed(
@@ -281,7 +330,8 @@ if (mode == "rwisecondorx") {
       exclude_flags    = opts$`exclude-flags`,
       rmdup            = rmdup,
       separate_strands = opts$`separate-strands`,
-      reference        = opts$reference
+      reference        = opts$reference,
+      metadata         = bed_metadata
     )
   }
 }

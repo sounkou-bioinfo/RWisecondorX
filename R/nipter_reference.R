@@ -21,6 +21,26 @@
 #' @param y_unique_ratios Optional named numeric vector of Y-unique ratios for
 #'   building an additional \code{"y_unique"} sex model and storing
 #'   \code{YUniqueRatio} in the reference frame.
+#' @param sample_qc Optional data frame with per-sample QC metrics. When
+#'   supplied together with one or more QC thresholds below, controls failing
+#'   the read-depth and/or GC gates are removed before any reference models are
+#'   fitted.
+#' @param sample_qc_sample_col Optional sample-name column in
+#'   \code{sample_qc}. When \code{NULL}, common names such as
+#'   \code{sample_name} and \code{Sample} are inferred.
+#' @param sample_qc_total_unique_reads_col Optional total-unique-reads column in
+#'   \code{sample_qc}. Required when either unique-read threshold is enabled.
+#'   When \code{NULL}, common names such as \code{TotalUniqueReads} are
+#'   inferred.
+#' @param sample_qc_gc_col Optional GC column in \code{sample_qc}. Required
+#'   when \code{gc_mad_cutoff} is enabled. When \code{NULL}, common names such
+#'   as \code{GCPCTAfterFiltering} are inferred.
+#' @param min_total_unique_reads Optional minimum allowed total unique reads.
+#'   Controls below this threshold are removed before fitting.
+#' @param max_total_unique_reads Optional maximum allowed total unique reads.
+#'   Controls above this threshold are removed before fitting.
+#' @param gc_mad_cutoff Optional robust MAD cutoff for GC values. Controls more
+#'   than this many MADs from the cohort median are removed before fitting.
 #' @param build_params Optional named list of provenance parameters to attach to
 #'   the returned reference model.
 #'
@@ -45,6 +65,13 @@ nipter_build_reference <- function(control_group,
                                    sex_source = NULL,
                                    sex_methods = c("y_fraction", "xy_fraction"),
                                    y_unique_ratios = NULL,
+                                   sample_qc = NULL,
+                                   sample_qc_sample_col = NULL,
+                                   sample_qc_total_unique_reads_col = NULL,
+                                   sample_qc_gc_col = NULL,
+                                   min_total_unique_reads = NULL,
+                                   max_total_unique_reads = NULL,
+                                   gc_mad_cutoff = NULL,
                                    build_params = list()) {
   stopifnot(.is_nipt_control_group_object(control_group))
   stopifnot(is.list(build_params))
@@ -66,6 +93,24 @@ nipter_build_reference <- function(control_group,
       sample_sex = if (is.null(sample_sex)) .control_sample_sex(cg) else sample_sex,
       sex_source = if (is.null(sex_source)) .control_sex_source(cg) else sex_source
     )
+  }
+
+  qc_filter_result <- NULL
+  if (!is.null(sample_qc) ||
+      !is.null(min_total_unique_reads) ||
+      !is.null(max_total_unique_reads) ||
+      !is.null(gc_mad_cutoff)) {
+    qc_filter_result <- nipter_filter_control_group_qc(
+      cg,
+      sample_qc = sample_qc,
+      sample_col = sample_qc_sample_col,
+      total_unique_reads_col = sample_qc_total_unique_reads_col,
+      gc_col = sample_qc_gc_col,
+      min_total_unique_reads = min_total_unique_reads,
+      max_total_unique_reads = max_total_unique_reads,
+      gc_mad_cutoff = gc_mad_cutoff
+    )
+    cg <- qc_filter_result$control_group
   }
 
   y_unique_ratios <- .normalize_named_numeric_by_sample(
@@ -97,7 +142,14 @@ nipter_build_reference <- function(control_group,
     sex_models = sex_models,
     sample_sex_source = .control_sex_source(cg),
     build_date = format(Sys.time(), tz = "UTC", usetz = TRUE),
-    build_params = build_params
+    build_params = if (is.null(qc_filter_result)) {
+      build_params
+    } else {
+      c(
+        build_params,
+        list(sample_qc_filter = qc_filter_result$settings)
+      )
+    }
   ))
 }
 

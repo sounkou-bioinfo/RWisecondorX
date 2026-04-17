@@ -4,19 +4,33 @@
 \alias{nipter_diagnose_control_group}
 \title{Diagnose a NIPTeR control group}
 \usage{
-nipter_diagnose_control_group(control_group)
+nipter_diagnose_control_group(
+  control_group,
+  collapse_strands = TRUE,
+  z_cutoff = 3
+)
 }
 \arguments{
 \item{control_group}{A \code{NIPTeRControlGroup} object.}
+
+\item{collapse_strands}{Logical; for \code{SeparatedStrands} control groups,
+collapse forward and reverse strand fractions into 22 autosomal fractions
+(\code{TRUE}, default) or keep the upstream-style 44-row strand-resolved
+diagnostics (\code{FALSE}). Ignored for \code{CombinedStrands}.}
+
+\item{z_cutoff}{Absolute Z-score cutoff used to flag aberrant rows.
+Default \code{3}.}
 }
 \value{
 A list with three elements:
 \describe{
 \item{z_scores}{Chromosome-by-sample matrix of Z-scores (rows =
-chromosomes 1-22, columns = samples).}
+chromosomes 1-22, or strand-resolved rows 1F-22F/1R-22R when
+\code{collapse_strands = FALSE} on a \code{SeparatedStrands}
+control group; columns = samples).}
 \item{aberrant_scores}{A \code{data.frame} with columns
 \code{chromosome}, \code{sample_name}, \code{z_score} for all
-|Z| > 3, or \code{NULL} if none.}
+\code{|Z| > z_cutoff}, or \code{NULL} if none.}
 \item{statistics}{A matrix with rows per chromosome and columns
 \code{mean}, \code{SD}, \code{shapiro_p_value}.}
 }

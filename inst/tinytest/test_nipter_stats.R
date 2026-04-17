@@ -380,9 +380,71 @@ ss_diag <- nipter_diagnose_control_group(ss_cg)
 expect_identical(dim(ss_diag$z_scores), c(22L, 10L),
                  info = "SS diagnose collapses to one Z-score matrix")
 
+ss_diag_stranded <- nipter_diagnose_control_group(ss_cg, collapse_strands = FALSE)
+expect_identical(dim(ss_diag_stranded$z_scores), c(44L, 10L),
+                 info = "SS diagnose can expose strand-resolved diagnostics")
+expect_true(all(grepl("^[0-9]+[FR]$", rownames(ss_diag_stranded$z_scores))),
+            info = "SS strand-resolved diagnostics use upstream-style row names")
+
 # --- SeparatedStrands match ---
 
 ss_matched <- nipter_match_control_group(ss_sample, ss_cg, n = 5L,
                                          mode = "subset")
 expect_identical(length(ss_matched$samples), 5L,
                  info = "SS matched has 5 samples")
+
+# --- Control-group dropping / iterative pruning ---
+
+ss_drop <- nipter_drop_control_group_samples(ss_cg, "ss_ctrl_01")
+expect_identical(length(ss_drop$samples), 9L,
+                 info = "dropping one control leaves 9 samples")
+expect_true(!("ss_ctrl_01" %in% control_names(ss_drop)),
+            info = "requested sample is removed from control group")
+
+ss_qc <- data.frame(
+  sample_name = control_names(ss_cg),
+  TotalUniqueReads = c(6e6, 6.1e6, 3e6, 6.2e6, 6.0e6, 5.9e6, 6.05e6, 6.15e6, 5.95e6, 6.1e6),
+  GCPCTAfterFiltering = c(40.0, 40.2, 39.9, 40.1, 39.8, 40.3, 40.0, 40.2, 39.7, 45.0),
+  stringsAsFactors = FALSE
+)
+ss_qc_filtered <- nipter_filter_control_group_qc(
+  ss_cg,
+  sample_qc = ss_qc,
+  min_total_unique_reads = 4.5e6,
+  gc_mad_cutoff = 3
+)
+expect_identical(sort(ss_qc_filtered$excluded_samples),
+                 c("ss_ctrl_03", "ss_ctrl_10"),
+                 info = "QC filtering removes low-depth and GC-outlier controls")
+expect_identical(length(ss_qc_filtered$control_group$samples), 8L,
+                 info = "QC filtering returns the retained control subset")
+
+ss_qc_ref <- nipter_build_reference(
+  ss_cg,
+  sample_qc = ss_qc,
+  min_total_unique_reads = 4.5e6,
+  gc_mad_cutoff = 3
+)
+expect_identical(length(ss_qc_ref$control_group$samples), 8L,
+                 info = "nipter_build_reference applies QC filtering before fitting")
+expect_true(all(!c("ss_ctrl_03", "ss_ctrl_10") %in%
+                  control_names(ss_qc_ref$control_group)),
+            info = "QC-filtered controls are absent from the built reference")
+
+ss_prune_samples <- .sim_nipter_ss_control_set(10L, seed = 123L)
+ss_prune_samples[[1]]@auto_fwd[c("1F", "2F", "3F"), ] <- ss_prune_samples[[1]]@auto_fwd[c("1F", "2F", "3F"), ] * 100
+ss_prune_samples[[1]]@auto_rev[c("1R", "2R", "3R"), ] <- ss_prune_samples[[1]]@auto_rev[c("1R", "2R", "3R"), ] * 100
+ss_prune_cg <- nipter_as_control_group(ss_prune_samples)
+ss_pruned <- nipter_prune_control_group_outliers(
+  ss_prune_cg,
+  collapse_strands = FALSE,
+  z_cutoff = 2.5,
+  min_controls = 9L
+)
+expect_true("ss_ctrl_01" %in% ss_pruned$dropped_samples,
+            info = "iterative pruning drops a sample with both-strand aberrant chromosome fractions")
+expect_identical(length(ss_pruned$control_group$samples), 9L,
+                 info = "iterative pruning removes the flagged outlier sample")
+expect_true("Chi square corrected" %in%
+              ss_pruned$chi_corrected_control_group$correction_status_autosomal,
+            info = "iterative pruning returns the terminal chi-corrected control group")

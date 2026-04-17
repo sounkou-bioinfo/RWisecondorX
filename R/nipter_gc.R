@@ -339,10 +339,14 @@ nipter_gc_correct <- function(object,
   fit <- stats::loess(reads_flat[valid] ~ gc_auto[valid], span = span)
   fitted_vals <- stats::predict(fit)
 
-  # Correction factor: median / fitted (so bins normalise to the median)
+  # Correction factor: median / fitted (so bins normalise to the median).
+  # Do not clamp negative LOESS fits to epsilon: that turns a modest negative
+  # prediction into an enormous positive multiplier. Keep upstream semantics
+  # and only replace non-finite or exact-zero fitted values.
   correction <- rep(1.0, length(reads_flat))
-  safe_fitted <- pmax(fitted_vals, .Machine$double.eps)
-  safe_fitted[is.na(safe_fitted)] <- median_reads
+  safe_fitted <- fitted_vals
+  bad_fitted <- !is.finite(safe_fitted) | safe_fitted == 0
+  safe_fitted[bad_fitted] <- median_reads
   correction[valid] <- median_reads / safe_fitted
 
   # Apply correction to each autosomal matrix in the list

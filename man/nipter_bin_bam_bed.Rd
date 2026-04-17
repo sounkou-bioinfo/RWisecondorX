@@ -15,7 +15,8 @@ nipter_bin_bam_bed(
   separate_strands = FALSE,
   con = NULL,
   reference = NULL,
-  index = TRUE
+  index = TRUE,
+  metadata = NULL
 )
 }
 \arguments{
@@ -46,6 +47,10 @@ reads (\verb{samtools view -F 1024}).}
 \item{reference}{Optional FASTA reference path for CRAM inputs.}
 
 \item{index}{Logical; create a tabix index (default \code{TRUE}).}
+
+\item{metadata}{Optional named list or named atomic vector of provenance
+metadata to write as leading \verb{##RWX_<key>=<value>} lines before the BED
+body. The data rows remain headerless. Default \code{NULL} writes no metadata.}
 }
 \value{
 \code{bed} (invisibly).

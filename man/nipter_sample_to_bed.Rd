@@ -10,7 +10,8 @@ nipter_sample_to_bed(
   binsize,
   corrected = NULL,
   con = NULL,
-  index = TRUE
+  index = TRUE,
+  metadata = NULL
 )
 }
 \arguments{
@@ -29,6 +30,10 @@ those columns are \code{NA} otherwise.}
 \item{con}{Optional open DBI connection with duckhts already loaded.}
 
 \item{index}{Logical; write a tabix index alongside the BED (default \code{TRUE}).}
+
+\item{metadata}{Optional named list or named atomic vector of provenance
+metadata to write as leading \verb{##RWX_<key>=<value>} lines before the BED
+body. The data rows remain headerless. Default \code{NULL} writes no metadata.}
 }
 \value{
 \code{bed} (invisibly).

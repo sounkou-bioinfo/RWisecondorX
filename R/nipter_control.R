@@ -329,6 +329,13 @@ nipter_match_matrix <- function(control_group,
 #'   \code{"*.bed.gz"}).
 #' @param binsize Optional integer; bin size in base pairs. If \code{NULL}
 #'   (default), inferred from the first row of the first file.
+#' @param autosomal_source Which autosomal counts to realize in each imported
+#'   sample. `"auto"` (default) uses corrected autosomal columns when present,
+#'   otherwise raw counts. `"raw"` always uses raw count columns.
+#'   `"corrected"` requires corrected columns.
+#' @param sex_counts Which sex-chromosome counts to realize in each imported
+#'   sample. `"match"` (default) follows `autosomal_source`. `"raw"` always
+#'   uses raw count columns. `"corrected"` requires corrected sex columns.
 #' @param description Label for the resulting control group (default
 #'   \code{"General control group"}).
 #' @param sample_sex Optional character vector of known sex labels for the
@@ -343,7 +350,10 @@ nipter_match_matrix <- function(control_group,
 #' 5-column BEDs produce a \code{CombinedStrands} control group;
 #' 9-column BEDs (written by \code{nipter_bin_bam_bed(separate_strands = TRUE)})
 #' produce a \code{SeparatedStrands} control group. All files in the directory
-#' must have the same column count.
+#' must have the same column count. When corrected BED columns are present,
+#' `autosomal_source` and `sex_counts` control whether the imported samples use
+#' raw or corrected values for each compartment before constructing the control
+#' group.
 #'
 #' @return A \code{NIPTeRControlGroup}.
 #'
@@ -364,12 +374,16 @@ nipter_match_matrix <- function(control_group,
 nipter_control_group_from_beds <- function(bed_dir,
                                            pattern     = "*.bed.gz",
                                            binsize     = NULL,
+                                           autosomal_source = c("auto", "raw", "corrected"),
+                                           sex_counts  = c("match", "raw", "corrected"),
                                            description = "General control group",
                                            sample_sex  = NULL,
                                            sex_source  = NULL,
                                            con         = NULL) {
   stopifnot(is.character(bed_dir), length(bed_dir) == 1L,
             nzchar(bed_dir), dir.exists(bed_dir))
+  autosomal_source <- match.arg(autosomal_source)
+  sex_counts <- match.arg(sex_counts)
 
   files <- Sys.glob(file.path(bed_dir, pattern))
   if (length(files) == 0L) {
@@ -458,12 +472,26 @@ nipter_control_group_from_beds <- function(bed_dir,
   if (is_separated) {
     samples <- lapply(sample_names, function(nm) {
       sub_rows <- rows[rows$sample_name == nm, , drop = FALSE]
-      .rows_to_nipter_sep(sub_rows, nm, binsize, n_bins = n_bins_global)
+      .rows_to_nipter_sep(
+        sub_rows,
+        nm,
+        binsize,
+        n_bins = n_bins_global,
+        autosomal_source = autosomal_source,
+        sex_source = sex_counts
+      )
     })
   } else {
     samples <- lapply(sample_names, function(nm) {
       sub_rows <- rows[rows$sample_name == nm, , drop = FALSE]
-      .rows_to_nipter_combined(sub_rows, nm, binsize, n_bins = n_bins_global)
+      .rows_to_nipter_combined(
+        sub_rows,
+        nm,
+        binsize,
+        n_bins = n_bins_global,
+        autosomal_source = autosomal_source,
+        sex_source = sex_counts
+      )
     })
   }
 

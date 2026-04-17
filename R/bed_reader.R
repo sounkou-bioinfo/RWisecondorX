@@ -83,18 +83,27 @@ bed_to_sample <- function(bed, binsize = NULL, con = NULL) {
 #' with independent forward/reverse count matrices. The number of columns is
 #' detected automatically.
 #'
-#' When the corrected columns contain non-NA values (i.e. the BED was written
-#' with a GC-corrected `corrected` argument), the returned sample's count
-#' matrices are replaced with the corrected values and the correction status is
-#' set to `"GC Corrected"`. For `SeparatedStrands`, the per-strand corrected
-#' values (`corrected_fwd`, `corrected_rev`) are used to populate the
-#' forward and reverse matrices independently.
+#' When corrected columns contain non-NA values (i.e. the BED was written with
+#' a GC-corrected `corrected` argument), `autosomal_source = "auto"` (default)
+#' realizes corrected autosomal counts and `sex_source = "match"` follows that
+#' same choice for X/Y. Callers can override this and request raw or corrected
+#' sex-chromosome values independently of the autosomes. For `SeparatedStrands`,
+#' the per-strand corrected values (`corrected_fwd`, `corrected_rev`) are used
+#' when corrected sex counts are selected.
 #'
 #' @param bed Path to a bgzipped (or plain) BED file with a `.tbi` index.
 #' @param name Optional sample name. If `NULL` (default), derived from the BED
 #'   file basename (e.g. `"sample"` from `"sample.bed.gz"`).
 #' @param binsize Optional integer; bin size in base pairs. If `NULL` (default),
 #'   inferred from the first row of the BED file.
+#' @param autosomal_source Which autosomal counts to realize in the returned
+#'   sample. `"auto"` (default) uses corrected autosomal columns when present,
+#'   otherwise raw counts. `"raw"` always uses raw count columns.
+#'   `"corrected"` requires corrected columns to be present.
+#' @param sex_source Which sex-chromosome counts to realize in the returned
+#'   sample. `"match"` (default) follows `autosomal_source`. `"raw"` always
+#'   uses raw count columns. `"corrected"` requires corrected sex columns to be
+#'   present.
 #' @param con Optional open DBI connection with duckhts already loaded.
 #'
 #' @return An object of class `c("NIPTeRSample", <strand_type>)`:
@@ -121,9 +130,16 @@ bed_to_sample <- function(bed, binsize = NULL, con = NULL) {
 #' }
 #'
 #' @export
-bed_to_nipter_sample <- function(bed, name = NULL, binsize = NULL, con = NULL) {
+bed_to_nipter_sample <- function(bed,
+                                 name = NULL,
+                                 binsize = NULL,
+                                 autosomal_source = c("auto", "raw", "corrected"),
+                                 sex_source = c("match", "raw", "corrected"),
+                                 con = NULL) {
   stopifnot(is.character(bed), length(bed) == 1L, nzchar(bed))
   stopifnot(file.exists(bed))
+  autosomal_source <- match.arg(autosomal_source)
+  sex_source <- match.arg(sex_source)
 
   ctx <- .bed_reader_context(con)
   if (ctx$own_con) {
@@ -143,9 +159,21 @@ bed_to_nipter_sample <- function(bed, name = NULL, binsize = NULL, con = NULL) {
   }
 
   if (is_separated) {
-    .rows_to_nipter_sep(rows, name, binsize = binsize)
+    .rows_to_nipter_sep(
+      rows,
+      name,
+      binsize = binsize,
+      autosomal_source = autosomal_source,
+      sex_source = sex_source
+    )
   } else {
-    .rows_to_nipter_combined(rows, name, binsize = binsize)
+    .rows_to_nipter_combined(
+      rows,
+      name,
+      binsize = binsize,
+      autosomal_source = autosomal_source,
+      sex_source = sex_source
+    )
   }
 }
 
@@ -270,6 +298,44 @@ bed_to_nipter_sample <- function(bed, name = NULL, binsize = NULL, con = NULL) {
   isTRUE(status[1L])
 }
 
+.resolve_corrected_import <- function(has_corrected,
+                                      source,
+                                      label,
+                                      compartment) {
+  if (identical(source, "auto")) {
+    return(has_corrected)
+  }
+  if (identical(source, "raw")) {
+    return(FALSE)
+  }
+  if (identical(source, "match")) {
+    stop("Internal error: 'match' must be resolved before import dispatch.",
+         call. = FALSE)
+  }
+  if (!isTRUE(has_corrected)) {
+    stop(sprintf(
+      "BED-derived rows for '%s' do not contain corrected %s values.",
+      label, compartment
+    ), call. = FALSE)
+  }
+  TRUE
+}
+
+.bed_correction_record <- function(autosomal_corrected, sex_corrected) {
+  NIPTCorrectionRecord(
+    autosomal = if (isTRUE(autosomal_corrected)) {
+      .nipt_gc_correction_path()
+    } else {
+      .nipt_raw_correction_path()
+    },
+    sex = if (isTRUE(sex_corrected)) {
+      .nipt_gc_correction_path()
+    } else {
+      .nipt_raw_correction_path()
+    }
+  )
+}
+
 # Convert BED rows to the named-list-of-integer-vectors format used by
 # bam_convert() and expected by rwisecondorx_newref/predict.
 .bed_rows_to_bins <- function(rows, binsize) {
@@ -301,10 +367,17 @@ bed_to_nipter_sample <- function(bed, name = NULL, binsize = NULL, con = NULL) {
 # Core: build a CombinedStrandsSample from a pre-fetched data frame.
 # rows must have columns: chrom, start_pos, end_pos, count, corrected_count.
 # name and binsize are required; binsize=NULL infers from first row.
-.rows_to_nipter_combined <- function(rows, name, binsize, n_bins = NULL) {
+.rows_to_nipter_combined <- function(rows,
+                                     name,
+                                     binsize,
+                                     n_bins = NULL,
+                                     autosomal_source = c("auto", "raw", "corrected"),
+                                     sex_source = c("match", "raw", "corrected")) {
   if (nrow(rows) == 0L)
     stop(sprintf("BED for sample '%s' has no rows.", name), call. = FALSE)
   binsize <- .infer_bed_binsize(rows, binsize, name)
+  autosomal_source <- match.arg(autosomal_source)
+  sex_source <- match.arg(sex_source)
 
   auto_keys  <- as.character(1:22)
   sex_labels <- c("X", "Y")
@@ -352,8 +425,24 @@ bed_to_nipter_sample <- function(bed, name = NULL, binsize = NULL, con = NULL) {
 
   # Determine correction status and matrices
   has_corr <- .has_corrected_values(rows, "corrected_count", name)
+  use_corr_auto <- .resolve_corrected_import(
+    has_corr,
+    autosomal_source,
+    name,
+    "autosomal"
+  )
+  use_corr_sex <- if (identical(sex_source, "match")) {
+    use_corr_auto
+  } else {
+    .resolve_corrected_import(
+      has_corr,
+      sex_source,
+      name,
+      "sex-chromosome"
+    )
+  }
 
-  if (has_corr) {
+  if (use_corr_auto || use_corr_sex) {
     corr_auto <- matrix(0, nrow = 22L, ncol = n_bins,
                         dimnames = list(auto_keys, col_names))
     corr_sex  <- matrix(0, nrow = 2L, ncol = n_bins,
@@ -373,9 +462,9 @@ bed_to_nipter_sample <- function(bed, name = NULL, binsize = NULL, con = NULL) {
     CombinedStrandsSample(
       sample_name = name,
       binsize     = binsize,
-      auto_matrix = corr_auto,
-      sex_matrix_ = corr_sex,
-      correction  = .nipt_gc_both_correction_record()
+      auto_matrix = if (use_corr_auto) corr_auto else auto_mat,
+      sex_matrix_ = if (use_corr_sex) corr_sex else sex_mat,
+      correction  = .bed_correction_record(use_corr_auto, use_corr_sex)
     )
   } else {
     CombinedStrandsSample(
@@ -390,10 +479,17 @@ bed_to_nipter_sample <- function(bed, name = NULL, binsize = NULL, con = NULL) {
 # Core: build a SeparatedStrandsSample from a pre-fetched data frame.
 # rows must have columns: chrom, start_pos, end_pos, count_fwd, count_rev,
 # corrected_fwd, corrected_rev (all typed).
-.rows_to_nipter_sep <- function(rows, name, binsize, n_bins = NULL) {
+.rows_to_nipter_sep <- function(rows,
+                                name,
+                                binsize,
+                                n_bins = NULL,
+                                autosomal_source = c("auto", "raw", "corrected"),
+                                sex_source = c("match", "raw", "corrected")) {
   if (nrow(rows) == 0L)
     stop(sprintf("BED for sample '%s' has no rows.", name), call. = FALSE)
   binsize <- .infer_bed_binsize(rows, binsize, name)
+  autosomal_source <- match.arg(autosomal_source)
+  sex_source <- match.arg(sex_source)
 
   auto_keys <- as.character(1:22)
   sex_keys  <- c("23", "24")
@@ -451,8 +547,24 @@ bed_to_nipter_sample <- function(bed, name = NULL, binsize = NULL, con = NULL) {
     c("corrected_fwd", "corrected_rev"),
     name
   )
+  use_corr_auto <- .resolve_corrected_import(
+    has_corr,
+    autosomal_source,
+    name,
+    "autosomal"
+  )
+  use_corr_sex <- if (identical(sex_source, "match")) {
+    use_corr_auto
+  } else {
+    .resolve_corrected_import(
+      has_corr,
+      sex_source,
+      name,
+      "sex-chromosome"
+    )
+  }
 
-  if (has_corr) {
+  if (use_corr_auto || use_corr_sex) {
     corr_fwd_auto <- matrix(0, nrow = 22L, ncol = n_bins,
                             dimnames = list(paste0(auto_keys, "F"), col_names))
     corr_rev_auto <- matrix(0, nrow = 22L, ncol = n_bins,
@@ -480,11 +592,11 @@ bed_to_nipter_sample <- function(bed, name = NULL, binsize = NULL, con = NULL) {
     SeparatedStrandsSample(
       sample_name = name,
       binsize     = binsize,
-      auto_fwd    = corr_fwd_auto,
-      auto_rev    = corr_rev_auto,
-      sex_fwd     = corr_fwd_sex,
-      sex_rev     = corr_rev_sex,
-      correction  = .nipt_gc_both_correction_record()
+      auto_fwd    = if (use_corr_auto) corr_fwd_auto else fwd_auto,
+      auto_rev    = if (use_corr_auto) corr_rev_auto else rev_auto,
+      sex_fwd     = if (use_corr_sex) corr_fwd_sex else fwd_sex,
+      sex_rev     = if (use_corr_sex) corr_rev_sex else rev_sex,
+      correction  = .bed_correction_record(use_corr_auto, use_corr_sex)
     )
   } else {
     SeparatedStrandsSample(

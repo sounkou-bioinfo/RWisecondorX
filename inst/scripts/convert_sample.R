@@ -59,7 +59,10 @@ option_list <- list(
                             "NIPTeR mode: GC-correct and embed corrected counts in BED")),
   make_option("--fasta", type = "character", default = NULL,
               help = paste0("FASTA reference for on-the-fly GC correction (alternative to --gc-table). ",
-                            "NIPTeR mode only. Slower than --gc-table for multiple samples"))
+                            "NIPTeR mode only. Slower than --gc-table for multiple samples")),
+  make_option("--nipter-gc-include-sex", action = "store_true", default = FALSE,
+              help = paste0("NIPTeR mode: also GC-correct X/Y bins when writing corrected BED columns. ",
+                            "Guarded off by default for compatibility [default: %default]"))
 )
 
 parser <- OptionParser(
@@ -84,6 +87,9 @@ parser <- OptionParser(
     "",
     "  # NIPTeR BED output with GC correction (on-the-fly from FASTA)",
     "  %prog --mode nipter --bam sample.bam --out sample.bed.gz --fasta hg38.fa",
+    "",
+    "  # NIPTeR BED output with GC-corrected sex chromosomes too",
+    "  %prog --mode nipter --bam sample.bam --out sample.bed.gz --gc-table hg38_gc.tsv.bgz --nipter-gc-include-sex",
     "",
     "  # NIPTeR with pre-filtering (MAPQ 40, exclude duplicates)",
     "  %prog --mode nipter --bam sample.bam --out sample.bed.gz --mapq 40 --exclude-flags 1024",
@@ -125,6 +131,10 @@ if (!is.null(opts$`gc-table`) && mode != "nipter") {
 
 if (!is.null(opts$fasta) && mode != "nipter") {
   stop("--fasta GC correction is only valid in nipter mode", call. = FALSE)
+}
+
+if (isTRUE(opts$`nipter-gc-include-sex`) && mode != "nipter") {
+  stop("--nipter-gc-include-sex is only valid in nipter mode", call. = FALSE)
 }
 
 if (!is.null(opts$`gc-table`) && !is.null(opts$fasta)) {
@@ -238,9 +248,20 @@ if (mode == "rwisecondorx") {
 
     cat("Applying GC correction ...\n")
     corrected_sample <- if (!is.null(gc_table)) {
-      nipter_gc_correct(raw_sample, gc_table = gc_table, con = con)
+      nipter_gc_correct(
+        raw_sample,
+        gc_table = gc_table,
+        include_sex = isTRUE(opts$`nipter-gc-include-sex`),
+        con = con
+      )
     } else {
-      nipter_gc_correct(raw_sample, fasta = gc_fasta, binsize = binsize, con = con)
+      nipter_gc_correct(
+        raw_sample,
+        fasta = gc_fasta,
+        binsize = binsize,
+        include_sex = isTRUE(opts$`nipter-gc-include-sex`),
+        con = con
+      )
     }
 
     nipter_sample_to_bed(

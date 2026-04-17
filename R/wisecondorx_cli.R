@@ -71,6 +71,13 @@ wisecondorx_convert <- function(bam,
   )
 
   .run_wisecondorx_cli(args, env_name)
+  if (!file.exists(npz)) {
+    stop(
+      "wisecondorx convert did not create the expected output file: ",
+      npz,
+      call. = FALSE
+    )
+  }
   invisible(npz)
 }
 
@@ -420,8 +427,9 @@ wisecondorx_predict <- function(npz,
                                       extra_args = character(0)) {
   bam_abs <- normalizePath(bam, mustWork = TRUE)
   npz_abs <- normalizePath(npz, mustWork = FALSE)
+  npz_prefix <- sub("\\.npz$", "", npz_abs, ignore.case = TRUE)
 
-  args <- c("convert", bam_abs, npz_abs)
+  args <- c("convert", bam_abs, npz_prefix)
   args <- .append_optional_path(args, "--reference", reference, must_work = TRUE)
   args <- .append_value(args, "--binsize", as.integer(binsize))
   args <- .append_flag(args, "--normdup", isTRUE(normdup))

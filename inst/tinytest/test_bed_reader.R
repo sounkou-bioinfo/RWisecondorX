@@ -240,6 +240,18 @@ corr_sex_rt <- corr_rt$sex_chromosome_reads[[1L]]
 expect_equal(as.numeric(corr_sex_rt), as.numeric(corr_sex), tolerance = 1e-6,
              info = "CombinedStrands corrected sex values round-trip")
 
+corr_rt_raw_sex <- bed_to_nipter_sample(corr_bed, sex_source = "raw")
+expect_identical(corr_rt_raw_sex$correction_status_autosomal, "GC Corrected",
+                 info = "CombinedStrands raw-sex import keeps autosomes GC-corrected")
+expect_identical(corr_rt_raw_sex$correction_status_sex, "Uncorrected",
+                 info = "CombinedStrands raw-sex import keeps sex uncorrected")
+expect_equal(as.numeric(corr_rt_raw_sex$autosomal_chromosome_reads[[1L]]),
+             as.numeric(corr_auto), tolerance = 1e-6,
+             info = "CombinedStrands raw-sex import still uses corrected autosomes")
+expect_identical(as.integer(corr_rt_raw_sex$sex_chromosome_reads[[1L]]),
+                 as.integer(sex_raw),
+                 info = "CombinedStrands raw-sex import uses raw sex counts")
+
 
 # ==========================================================================
 # NIPTeR BED row constructors should reject partially populated corrected columns
@@ -322,6 +334,24 @@ corr_rev_sex_rt <- corr_ss_rt$sex_chromosome_reads[[2L]]
 expect_equal(as.numeric(corr_rev_sex_rt), as.numeric(corr_rev_sex),
              tolerance = 1e-6,
              info = "Corrected SeparatedStrands: rev sex round-trips")
+
+corr_ss_rt_raw_sex <- bed_to_nipter_sample(corr_ss_bed, sex_source = "raw")
+expect_identical(corr_ss_rt_raw_sex$correction_status_autosomal, "GC Corrected",
+                 info = "SeparatedStrands raw-sex import keeps autosomes GC-corrected")
+expect_identical(corr_ss_rt_raw_sex$correction_status_sex, "Uncorrected",
+                 info = "SeparatedStrands raw-sex import keeps sex uncorrected")
+expect_equal(as.numeric(corr_ss_rt_raw_sex$autosomal_chromosome_reads[[1L]]),
+             as.numeric(corr_fwd_auto), tolerance = 1e-6,
+             info = "SeparatedStrands raw-sex import keeps corrected forward autosomes")
+expect_equal(as.numeric(corr_ss_rt_raw_sex$autosomal_chromosome_reads[[2L]]),
+             as.numeric(corr_rev_auto), tolerance = 1e-6,
+             info = "SeparatedStrands raw-sex import keeps corrected reverse autosomes")
+expect_identical(as.integer(corr_ss_rt_raw_sex$sex_chromosome_reads[[1L]]),
+                 as.integer(fwd_sex_raw),
+                 info = "SeparatedStrands raw-sex import uses raw forward sex counts")
+expect_identical(as.integer(corr_ss_rt_raw_sex$sex_chromosome_reads[[2L]]),
+                 as.integer(rev_sex_raw),
+                 info = "SeparatedStrands raw-sex import uses raw reverse sex counts")
 
 # Verify forward and reverse multipliers are different (independence check)
 # The fwd had 1.15 multiplier, rev had 0.95 — if they got mixed up,

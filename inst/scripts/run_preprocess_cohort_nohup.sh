@@ -17,6 +17,8 @@ Arguments:
 Environment:
   FASTA     Reference FASTA (default: /mnt/data/niptseq/resources/genomes/human_g1k_v37.fasta)
   OUT_ROOT  Output root (default: /mnt/data/niptseq/testdata/<manifest-basename>)
+  OVERWRITE Set to 1 to force regeneration of existing outputs
+  NIPTER_GC_INCLUDE_SEX Set to 1 to GC-correct X/Y before NIPTeR BED export
 EOF
   exit 0
 fi
@@ -26,14 +28,19 @@ MANIFEST="${2:-/mnt/data/BixCTF/NiptSeqNeo/all_bam_list_sample_500.txt}"
 JOBS="${3:-4}"
 FASTA="${FASTA:-/mnt/data/niptseq/resources/genomes/human_g1k_v37.fasta}"
 OUT_ROOT="${OUT_ROOT:-/mnt/data/niptseq/testdata/$(basename "${MANIFEST}" .txt)}"
+OVERWRITE="${OVERWRITE:-0}"
+NIPTER_GC_INCLUDE_SEX="${NIPTER_GC_INCLUDE_SEX:-0}"
 
 mkdir -p "${OUT_ROOT}"
 mkdir -p "${OUT_ROOT}/logs"
 
 cd "${REPO_ROOT}"
 
-time  \
-  Rscript "${REPO_ROOT}/inst/scripts/preprocess_cohort.R" \
+# echo current process pid
+echo "Running preprocess_cohort.R with PID $$"
+
+cmd=(
+  Rscript "${REPO_ROOT}/inst/scripts/preprocess_cohort.R"
   --bam-list "${MANIFEST}" \
   --out-root "${OUT_ROOT}" \
   --fasta "${FASTA}" \
@@ -43,5 +50,15 @@ time  \
   --nipter-binsize 50000 \
   --nipter-mapq 40 \
   --nipter-exclude-flags 1024 \
-  --wcx-write-npz \
-  --overwrite
+  --wcx-write-npz
+)
+
+if [[ "${OVERWRITE}" == "1" ]]; then
+  cmd+=(--overwrite)
+fi
+
+if [[ "${NIPTER_GC_INCLUDE_SEX}" == "1" ]]; then
+  cmd+=(--nipter-gc-include-sex)
+fi
+
+time "${cmd[@]}"

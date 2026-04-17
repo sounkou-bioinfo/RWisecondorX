@@ -4,7 +4,14 @@
 \alias{bed_to_nipter_sample}
 \title{Read a NIPTeR-format BED file into a NIPTeRSample}
 \usage{
-bed_to_nipter_sample(bed, name = NULL, binsize = NULL, con = NULL)
+bed_to_nipter_sample(
+  bed,
+  name = NULL,
+  binsize = NULL,
+  autosomal_source = c("auto", "raw", "corrected"),
+  sex_source = c("match", "raw", "corrected"),
+  con = NULL
+)
 }
 \arguments{
 \item{bed}{Path to a bgzipped (or plain) BED file with a \code{.tbi} index.}
@@ -14,6 +21,16 @@ file basename (e.g. \code{"sample"} from \code{"sample.bed.gz"}).}
 
 \item{binsize}{Optional integer; bin size in base pairs. If \code{NULL} (default),
 inferred from the first row of the BED file.}
+
+\item{autosomal_source}{Which autosomal counts to realize in the returned
+sample. \code{"auto"} (default) uses corrected autosomal columns when present,
+otherwise raw counts. \code{"raw"} always uses raw count columns.
+\code{"corrected"} requires corrected columns to be present.}
+
+\item{sex_source}{Which sex-chromosome counts to realize in the returned
+sample. \code{"match"} (default) follows \code{autosomal_source}. \code{"raw"} always
+uses raw count columns. \code{"corrected"} requires corrected sex columns to be
+present.}
 
 \item{con}{Optional open DBI connection with duckhts already loaded.}
 }
@@ -41,12 +58,13 @@ produces a \code{CombinedStrands} sample. A 9-column BED (\code{chrom}, \code{st
 with independent forward/reverse count matrices. The number of columns is
 detected automatically.
 
-When the corrected columns contain non-NA values (i.e. the BED was written
-with a GC-corrected \code{corrected} argument), the returned sample's count
-matrices are replaced with the corrected values and the correction status is
-set to \code{"GC Corrected"}. For \code{SeparatedStrands}, the per-strand corrected
-values (\code{corrected_fwd}, \code{corrected_rev}) are used to populate the
-forward and reverse matrices independently.
+When corrected columns contain non-NA values (i.e. the BED was written with
+a GC-corrected \code{corrected} argument), \code{autosomal_source = "auto"} (default)
+realizes corrected autosomal counts and \code{sex_source = "match"} follows that
+same choice for X/Y. Callers can override this and request raw or corrected
+sex-chromosome values independently of the autosomes. For \code{SeparatedStrands},
+the per-strand corrected values (\code{corrected_fwd}, \code{corrected_rev}) are used
+when corrected sex counts are selected.
 }
 \examples{
 \dontrun{

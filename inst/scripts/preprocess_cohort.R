@@ -60,9 +60,25 @@ library(optparse)
   normalizePath(path, winslash = "/", mustWork = TRUE)
 }
 
+.normalize_legacy_wisecondorx_npz <- function(path) {
+  legacy_path <- paste0(path, ".npz")
+  if (!file.exists(path) && file.exists(legacy_path)) {
+    ok <- file.rename(legacy_path, path)
+    if (!isTRUE(ok) || !file.exists(path)) {
+      stop(
+        "Failed to rename legacy WisecondorX NPZ output:\n  ",
+        legacy_path, "\n  -> ", path,
+        call. = FALSE
+      )
+    }
+  }
+  invisible(path)
+}
+
 .run_one <- function(expr, label) {
   cat(sprintf("\n[%s] %s\n", format(Sys.time(), "%Y-%m-%d %H:%M:%S"), label))
   force(expr)
+  invisible(NULL)
 }
 
 .log_sample <- function(i, n, label, stem) {
@@ -77,29 +93,56 @@ library(optparse)
   if (length(bams) == 0L) {
     return(list())
   }
-  if (.Platform$OS.type == "unix" && jobs > 1L) {
-    return(parallel::mclapply(
+  res <- if (.Platform$OS.type == "unix" && jobs > 1L) {
+    parallel::mclapply(
       X = seq_along(bams),
       FUN = function(i) worker(i, bams[[i]]),
       mc.cores = jobs,
       mc.preschedule = FALSE
-    ))
+    )
+  } else {
+    lapply(seq_along(bams), function(i) worker(i, bams[[i]]))
   }
-  lapply(seq_along(bams), function(i) worker(i, bams[[i]]))
+
+  bad <- vapply(res, inherits, logical(1), what = "try-error")
+  if (any(bad)) {
+    msgs <- vapply(res[bad], as.character, character(1))
+    stop(
+      "Parallel stage failed:\n",
+      paste(sprintf("[[%d]] %s", which(bad), msgs), collapse = "\n"),
+      call. = FALSE
+    )
+  }
+
+  res
 }
 
-.with_duckhts_con <- function(expr) {
+.with_duckhts_con <- function(expr, envir = parent.frame()) {
   drv <- duckdb::duckdb(config = list(allow_unsigned_extensions = "true"))
   con <- DBI::dbConnect(drv)
   Rduckhts::rduckhts_load(con)
   on.exit(DBI::dbDisconnect(con, shutdown = TRUE), add = TRUE)
-  eval(substitute(expr), envir = environment())
+  eval(
+    substitute(expr),
+    envir = list2env(list(con = con), parent = envir)
+  )
 }
 
 .per_worker_threads <- function(total_threads, jobs) {
   total_threads <- as.integer(total_threads)
   jobs <- as.integer(jobs)
   max(1L, total_threads %/% max(1L, jobs))
+}
+
+.mosdepth_thread_args <- function(total_threads, jobs) {
+  worker_threads <- .per_worker_threads(total_threads, jobs)
+  if (worker_threads <= 1L) {
+    return(list(threads = 1L, processing_threads = 1L))
+  }
+  list(
+    threads = worker_threads - 1L,
+    processing_threads = 1L
+  )
 }
 
 option_list <- list(
@@ -121,6 +164,8 @@ option_list <- list(
               help = "NIPTeR MAPQ filter [default: %default]"),
   make_option("--nipter-exclude-flags", type = "integer", default = 1024L,
               help = "NIPTeR exclude flags [default: %default]"),
+  make_option("--nipter-gc-include-sex", action = "store_true", default = FALSE,
+              help = "Also GC-correct NIPTeR X/Y bins before BED export [default: %default]"),
   make_option("--nipter-separate-strands", action = "store_true", default = TRUE,
               help = "Write NIPTeR 9-column separated-strand BEDs [default: %default]"),
   make_option("--seqff", action = "store_true", default = TRUE,
@@ -166,11 +211,9 @@ dirs <- list(
 )
 
 staged_manifest <- file.path(dirs$manifests, basename(opts$`bam-list`))
-if (file.exists(staged_manifest) && !isTRUE(opts$overwrite)) {
-  stop("Staged manifest already exists: ", staged_manifest,
-       ". Use --overwrite to replace it.", call. = FALSE)
+if (!file.exists(staged_manifest) || isTRUE(opts$overwrite)) {
+  .write_manifest(bams, staged_manifest)
 }
-.write_manifest(bams, staged_manifest)
 
 gc_table <- file.path(
   dirs$gc,
@@ -260,9 +303,11 @@ if (isTRUE(opts$seqff)) {
 
 if (isTRUE(opts$`wcx-write-npz`)) {
   .run_one({
+    RWisecondorX:::.ensure_wisecondorx_env("wisecondorx")
     .run_stage_samples(bams, opts$jobs, function(i, bam) {
       stem <- sub("\\.(bam|cram)$", "", basename(bam), ignore.case = TRUE)
       out_npz <- file.path(dirs$wisecondorx_npz, paste0(stem, ".npz"))
+      .normalize_legacy_wisecondorx_npz(out_npz)
       if (file.exists(out_npz) && !isTRUE(opts$overwrite)) {
         return(invisible(NULL))
       }
@@ -298,7 +343,8 @@ if (isTRUE(opts$`wcx-write-npz`)) {
     )
     corrected_sample <- nipter_gc_correct(
       raw_sample,
-      gc_table = gc_table
+      gc_table = gc_table,
+      include_sex = isTRUE(opts$`nipter-gc-include-sex`)
     )
     nipter_sample_to_bed(
       sample = raw_sample,
@@ -311,7 +357,7 @@ if (isTRUE(opts$`wcx-write-npz`)) {
 }, sprintf("Convert %d BAMs to NIPTeR BED.gz", length(bams)))
 
 .run_one({
-  worker_threads <- .per_worker_threads(opts$threads, opts$jobs)
+  mosdepth_threads <- .mosdepth_thread_args(opts$threads, opts$jobs)
   .run_stage_samples(bams, opts$jobs, function(i, bam) {
     stem <- sub("\\.(bam|cram)$", "", basename(bam), ignore.case = TRUE)
 
@@ -327,8 +373,8 @@ if (isTRUE(opts$`wcx-write-npz`)) {
           by = "50000",
           fasta = opts$fasta,
           no_per_base = TRUE,
-          threads = worker_threads,
-          processing_threads = worker_threads,
+          threads = mosdepth_threads$threads,
+          processing_threads = mosdepth_threads$processing_threads,
           flag = 1796L,
           include_flag = 0L,
           fast_mode = TRUE,
@@ -350,8 +396,8 @@ if (isTRUE(opts$`wcx-write-npz`)) {
           by = "50000",
           fasta = opts$fasta,
           no_per_base = TRUE,
-          threads = worker_threads,
-          processing_threads = worker_threads,
+          threads = mosdepth_threads$threads,
+          processing_threads = mosdepth_threads$processing_threads,
           flag = bitwOr(1796L, 1024L),
           include_flag = 0L,
           fast_mode = TRUE,

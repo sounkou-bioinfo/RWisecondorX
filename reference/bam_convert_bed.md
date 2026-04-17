@@ -21,7 +21,8 @@ bam_convert_bed(
   rmdup = c("streaming", "flag", "none"),
   con = NULL,
   reference = NULL,
-  index = TRUE
+  index = TRUE,
+  metadata = NULL
 )
 ```
 
@@ -72,6 +73,12 @@ bam_convert_bed(
 
   Logical; when `TRUE` (default) a tabix index is created alongside the
   bgzipped output.
+
+- metadata:
+
+  Optional named list or named atomic vector of provenance metadata to
+  write as leading `##RWX_<key>=<value>` lines before the BED body. The
+  data rows remain headerless. Default `NULL` writes no metadata.
 
 ## Value
 

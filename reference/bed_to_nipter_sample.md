@@ -77,8 +77,9 @@ A 5-column BED (`chrom`, `start`, `end`, `count`, `corrected_count`)
 produces a `CombinedStrands` sample. A 9-column BED (`chrom`, `start`,
 `end`, `count`, `count_fwd`, `count_rev`, `corrected_count`,
 `corrected_fwd`, `corrected_rev`) produces a `SeparatedStrands` sample
-with independent forward/reverse count matrices. The number of columns
-is detected automatically.
+with independent forward/reverse count matrices. Optional leading
+`##RWX_<key>=<value>` metadata lines are ignored automatically. The
+number of columns is detected automatically.
 
 When corrected columns contain non-NA values (i.e. the BED was written
 with a GC-corrected `corrected` argument), `autosomal_source = "auto"`

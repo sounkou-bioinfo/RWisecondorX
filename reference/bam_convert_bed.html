@@ -63,7 +63,8 @@ any tabix-aware tool.</p>
 <span>  rmdup <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"streaming"</span>, <span class="st">"flag"</span>, <span class="st">"none"</span><span class="op">)</span>,</span>
 <span>  con <span class="op">=</span> <span class="cn">NULL</span>,</span>
 <span>  reference <span class="op">=</span> <span class="cn">NULL</span>,</span>
-<span>  index <span class="op">=</span> <span class="cn">TRUE</span></span>
+<span>  index <span class="op">=</span> <span class="cn">TRUE</span>,</span>
+<span>  metadata <span class="op">=</span> <span class="cn">NULL</span></span>
 <span><span class="op">)</span></span></code></pre></div>
     </div>
 
@@ -114,6 +115,12 @@ If <code>NULL</code> (default), a temporary in-memory DuckDB connection is creat
 <dt id="arg-index">index<a class="anchor" aria-label="anchor" href="#arg-index"></a></dt>
 <dd><p>Logical; when <code>TRUE</code> (default) a tabix index is created
 alongside the bgzipped output.</p></dd>
+
+
+<dt id="arg-metadata">metadata<a class="anchor" aria-label="anchor" href="#arg-metadata"></a></dt>
+<dd><p>Optional named list or named atomic vector of provenance
+metadata to write as leading <code>##RWX_&lt;key&gt;=&lt;value&gt;</code> lines before the BED
+body. The data rows remain headerless. Default <code>NULL</code> writes no metadata.</p></dd>
 
 </dl></div>
     <div class="section level2">

@@ -110,8 +110,9 @@ present.</p></dd>
 produces a <code>CombinedStrands</code> sample. A 9-column BED (<code>chrom</code>, <code>start</code>,
 <code>end</code>, <code>count</code>, <code>count_fwd</code>, <code>count_rev</code>, <code>corrected_count</code>,
 <code>corrected_fwd</code>, <code>corrected_rev</code>) produces a <code>SeparatedStrands</code> sample
-with independent forward/reverse count matrices. The number of columns is
-detected automatically.</p>
+with independent forward/reverse count matrices. Optional leading
+<code>##RWX_&lt;key&gt;=&lt;value&gt;</code> metadata lines are ignored automatically. The number
+of columns is detected automatically.</p>
 <p>When corrected columns contain non-NA values (i.e. the BED was written with
 a GC-corrected <code>corrected</code> argument), <code>autosomal_source = "auto"</code> (default)
 realizes corrected autosomal counts and <code>sex_source = "match"</code> follows that

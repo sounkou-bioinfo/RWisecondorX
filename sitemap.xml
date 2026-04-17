@@ -94,6 +94,8 @@
 <url><loc>https://sounkou-bioinfo.github.io/RWisecondorX/reference/nipter_control_group_from_beds.html</loc></url>
 <url><loc>https://sounkou-bioinfo.github.io/RWisecondorX/reference/nipter_control_group_qc.html</loc></url>
 <url><loc>https://sounkou-bioinfo.github.io/RWisecondorX/reference/nipter_diagnose_control_group.html</loc></url>
+<url><loc>https://sounkou-bioinfo.github.io/RWisecondorX/reference/nipter_drop_control_group_samples.html</loc></url>
+<url><loc>https://sounkou-bioinfo.github.io/RWisecondorX/reference/nipter_filter_control_group_qc.html</loc></url>
 <url><loc>https://sounkou-bioinfo.github.io/RWisecondorX/reference/nipter_gaunosome_report.html</loc></url>
 <url><loc>https://sounkou-bioinfo.github.io/RWisecondorX/reference/nipter_gaunosome_score.html</loc></url>
 <url><loc>https://sounkou-bioinfo.github.io/RWisecondorX/reference/nipter_gc_correct.html</loc></url>
@@ -103,6 +105,7 @@
 <url><loc>https://sounkou-bioinfo.github.io/RWisecondorX/reference/nipter_ncv_score.html</loc></url>
 <url><loc>https://sounkou-bioinfo.github.io/RWisecondorX/reference/nipter_ncv_sex_score.html</loc></url>
 <url><loc>https://sounkou-bioinfo.github.io/RWisecondorX/reference/nipter_predict_sex.html</loc></url>
+<url><loc>https://sounkou-bioinfo.github.io/RWisecondorX/reference/nipter_prune_control_group_outliers.html</loc></url>
 <url><loc>https://sounkou-bioinfo.github.io/RWisecondorX/reference/nipter_reference_frame.html</loc></url>
 <url><loc>https://sounkou-bioinfo.github.io/RWisecondorX/reference/nipter_regression.html</loc></url>
 <url><loc>https://sounkou-bioinfo.github.io/RWisecondorX/reference/nipter_regression_sex_score.html</loc></url>
@@ -120,6 +123,7 @@
 <url><loc>https://sounkou-bioinfo.github.io/RWisecondorX/reference/sex_matrix.html</loc></url>
 <url><loc>https://sounkou-bioinfo.github.io/RWisecondorX/reference/sra_runinfo.html</loc></url>
 <url><loc>https://sounkou-bioinfo.github.io/RWisecondorX/reference/strand_type.html</loc></url>
+<url><loc>https://sounkou-bioinfo.github.io/RWisecondorX/reference/tabix_metadata.html</loc></url>
 <url><loc>https://sounkou-bioinfo.github.io/RWisecondorX/reference/wisecondorx_convert.html</loc></url>
 <url><loc>https://sounkou-bioinfo.github.io/RWisecondorX/reference/wisecondorx_newref.html</loc></url>
 <url><loc>https://sounkou-bioinfo.github.io/RWisecondorX/reference/wisecondorx_predict.html</loc></url>

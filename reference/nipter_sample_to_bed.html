@@ -47,7 +47,8 @@ a bgzipped, tabix-indexed BED file without re-reading any BAM.</p>
 <span>  <span class="va">binsize</span>,</span>
 <span>  corrected <span class="op">=</span> <span class="cn">NULL</span>,</span>
 <span>  con <span class="op">=</span> <span class="cn">NULL</span>,</span>
-<span>  index <span class="op">=</span> <span class="cn">TRUE</span></span>
+<span>  index <span class="op">=</span> <span class="cn">TRUE</span>,</span>
+<span>  metadata <span class="op">=</span> <span class="cn">NULL</span></span>
 <span><span class="op">)</span></span></code></pre></div>
     </div>
 
@@ -81,6 +82,12 @@ those columns are <code>NA</code> otherwise.</p></dd>
 
 <dt id="arg-index">index<a class="anchor" aria-label="anchor" href="#arg-index"></a></dt>
 <dd><p>Logical; write a tabix index alongside the BED (default <code>TRUE</code>).</p></dd>
+
+
+<dt id="arg-metadata">metadata<a class="anchor" aria-label="anchor" href="#arg-metadata"></a></dt>
+<dd><p>Optional named list or named atomic vector of provenance
+metadata to write as leading <code>##RWX_&lt;key&gt;=&lt;value&gt;</code> lines before the BED
+body. The data rows remain headerless. Default <code>NULL</code> writes no metadata.</p></dd>
 
 </dl></div>
     <div class="section level2">

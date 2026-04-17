@@ -44,7 +44,11 @@ chromosome's fraction distribution.</p>
 
     <div class="section level2">
     <h2 id="ref-usage">Usage<a class="anchor" aria-label="anchor" href="#ref-usage"></a></h2>
-    <div class="sourceCode"><pre class="sourceCode r"><code><span><span class="fu">nipter_diagnose_control_group</span><span class="op">(</span><span class="va">control_group</span><span class="op">)</span></span></code></pre></div>
+    <div class="sourceCode"><pre class="sourceCode r"><code><span><span class="fu">nipter_diagnose_control_group</span><span class="op">(</span></span>
+<span>  <span class="va">control_group</span>,</span>
+<span>  collapse_strands <span class="op">=</span> <span class="cn">TRUE</span>,</span>
+<span>  z_cutoff <span class="op">=</span> <span class="fl">3</span></span>
+<span><span class="op">)</span></span></code></pre></div>
     </div>
 
     <div class="section level2">
@@ -54,17 +58,31 @@ chromosome's fraction distribution.</p>
 <dl><dt id="arg-control-group">control_group<a class="anchor" aria-label="anchor" href="#arg-control-group"></a></dt>
 <dd><p>A <code>NIPTeRControlGroup</code> object.</p></dd>
 
+
+<dt id="arg-collapse-strands">collapse_strands<a class="anchor" aria-label="anchor" href="#arg-collapse-strands"></a></dt>
+<dd><p>Logical; for <code>SeparatedStrands</code> control groups,
+collapse forward and reverse strand fractions into 22 autosomal fractions
+(<code>TRUE</code>, default) or keep the upstream-style 44-row strand-resolved
+diagnostics (<code>FALSE</code>). Ignored for <code>CombinedStrands</code>.</p></dd>
+
+
+<dt id="arg-z-cutoff">z_cutoff<a class="anchor" aria-label="anchor" href="#arg-z-cutoff"></a></dt>
+<dd><p>Absolute Z-score cutoff used to flag aberrant rows.
+Default <code>3</code>.</p></dd>
+
 </dl></div>
     <div class="section level2">
     <h2 id="value">Value<a class="anchor" aria-label="anchor" href="#value"></a></h2>
     <p>A list with three elements:</p><dl><dt>z_scores</dt>
 <dd><p>Chromosome-by-sample matrix of Z-scores (rows =
-chromosomes 1-22, columns = samples).</p></dd>
+chromosomes 1-22, or strand-resolved rows 1F-22F/1R-22R when
+<code>collapse_strands = FALSE</code> on a <code>SeparatedStrands</code>
+control group; columns = samples).</p></dd>
 
 <dt>aberrant_scores</dt>
 <dd><p>A <code>data.frame</code> with columns
 <code>chromosome</code>, <code>sample_name</code>, <code>z_score</code> for all
-|Z| &gt; 3, or <code>NULL</code> if none.</p></dd>
+<code>|Z| &gt; z_cutoff</code>, or <code>NULL</code> if none.</p></dd>
 
 <dt>statistics</dt>
 <dd><p>A matrix with rows per chromosome and columns

@@ -74,10 +74,12 @@ are <code>NULL</code>. This is the same format returned by <code><a href="bam_co
     <div class="section level2">
     <h2 id="details">Details<a class="anchor" aria-label="anchor" href="#details"></a></h2>
     <p>Only the first 4 tab-delimited columns are used: <code>chrom</code>, <code>start</code>, <code>end</code>,
-<code>count</code> (no header). Any trailing columns are ignored, so this reader stays
-strand-agnostic and can also consume NIPTeR BEDs by taking their total-count
-column. Coordinates are 0-based half-open intervals. The bin size is
-inferred from the first row (<code>end - start</code>) unless explicitly provided.</p>
+<code>count</code> (no column header row). Optional leading <code>##RWX_&lt;key&gt;=&lt;value&gt;</code>
+metadata lines are ignored automatically. Any trailing columns are ignored,
+so this reader stays strand-agnostic and can also consume NIPTeR BEDs by
+taking their total-count column. Coordinates are 0-based half-open
+intervals. The bin size is inferred from the first row (<code>end - start</code>)
+unless explicitly provided.</p>
     </div>
     <div class="section level2">
     <h2 id="see-also">See also<a class="anchor" aria-label="anchor" href="#see-also"></a></h2>

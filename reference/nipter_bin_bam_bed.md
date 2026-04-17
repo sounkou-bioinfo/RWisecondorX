@@ -20,7 +20,8 @@ nipter_bin_bam_bed(
   separate_strands = FALSE,
   con = NULL,
   reference = NULL,
-  index = TRUE
+  index = TRUE,
+  metadata = NULL
 )
 ```
 
@@ -75,6 +76,12 @@ nipter_bin_bam_bed(
 - index:
 
   Logical; create a tabix index (default `TRUE`).
+
+- metadata:
+
+  Optional named list or named atomic vector of provenance metadata to
+  write as leading `##RWX_<key>=<value>` lines before the BED body. The
+  data rows remain headerless. Default `NULL` writes no metadata.
 
 ## Value
 

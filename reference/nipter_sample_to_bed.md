@@ -12,7 +12,8 @@ nipter_sample_to_bed(
   binsize,
   corrected = NULL,
   con = NULL,
-  index = TRUE
+  index = TRUE,
+  metadata = NULL
 )
 ```
 
@@ -46,6 +47,12 @@ nipter_sample_to_bed(
 - index:
 
   Logical; write a tabix index alongside the BED (default `TRUE`).
+
+- metadata:
+
+  Optional named list or named atomic vector of provenance metadata to
+  write as leading `##RWX_<key>=<value>` lines before the BED body. The
+  data rows remain headerless. Default `NULL` writes no metadata.
 
 ## Value
 

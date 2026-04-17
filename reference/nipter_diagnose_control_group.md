@@ -7,7 +7,11 @@ each chromosome's fraction distribution.
 ## Usage
 
 ``` r
-nipter_diagnose_control_group(control_group)
+nipter_diagnose_control_group(
+  control_group,
+  collapse_strands = TRUE,
+  z_cutoff = 3
+)
 ```
 
 ## Arguments
@@ -16,19 +20,31 @@ nipter_diagnose_control_group(control_group)
 
   A `NIPTeRControlGroup` object.
 
+- collapse_strands:
+
+  Logical; for `SeparatedStrands` control groups, collapse forward and
+  reverse strand fractions into 22 autosomal fractions (`TRUE`, default)
+  or keep the upstream-style 44-row strand-resolved diagnostics
+  (`FALSE`). Ignored for `CombinedStrands`.
+
+- z_cutoff:
+
+  Absolute Z-score cutoff used to flag aberrant rows. Default `3`.
+
 ## Value
 
 A list with three elements:
 
 - z_scores:
 
-  Chromosome-by-sample matrix of Z-scores (rows = chromosomes 1-22,
-  columns = samples).
+  Chromosome-by-sample matrix of Z-scores (rows = chromosomes 1-22, or
+  strand-resolved rows 1F-22F/1R-22R when `collapse_strands = FALSE` on
+  a `SeparatedStrands` control group; columns = samples).
 
 - aberrant_scores:
 
   A `data.frame` with columns `chromosome`, `sample_name`, `z_score` for
-  all \|Z\| \> 3, or `NULL` if none.
+  all `|Z| > z_cutoff`, or `NULL` if none.
 
 - statistics:
 

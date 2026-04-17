@@ -62,6 +62,13 @@ also carries <code>YUniqueRatio</code>.</p>
 <span>  sex_source <span class="op">=</span> <span class="cn">NULL</span>,</span>
 <span>  sex_methods <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"y_fraction"</span>, <span class="st">"xy_fraction"</span><span class="op">)</span>,</span>
 <span>  y_unique_ratios <span class="op">=</span> <span class="cn">NULL</span>,</span>
+<span>  sample_qc <span class="op">=</span> <span class="cn">NULL</span>,</span>
+<span>  sample_qc_sample_col <span class="op">=</span> <span class="cn">NULL</span>,</span>
+<span>  sample_qc_total_unique_reads_col <span class="op">=</span> <span class="cn">NULL</span>,</span>
+<span>  sample_qc_gc_col <span class="op">=</span> <span class="cn">NULL</span>,</span>
+<span>  min_total_unique_reads <span class="op">=</span> <span class="cn">NULL</span>,</span>
+<span>  max_total_unique_reads <span class="op">=</span> <span class="cn">NULL</span>,</span>
+<span>  gc_mad_cutoff <span class="op">=</span> <span class="cn">NULL</span>,</span>
 <span>  build_params <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span><span class="op">)</span></span>
 <span><span class="op">)</span></span></code></pre></div>
     </div>
@@ -96,6 +103,47 @@ Default builds both.</p></dd>
 <dd><p>Optional named numeric vector of Y-unique ratios for
 building an additional <code>"y_unique"</code> sex model and storing
 <code>YUniqueRatio</code> in the reference frame.</p></dd>
+
+
+<dt id="arg-sample-qc">sample_qc<a class="anchor" aria-label="anchor" href="#arg-sample-qc"></a></dt>
+<dd><p>Optional data frame with per-sample QC metrics. When
+supplied together with one or more QC thresholds below, controls failing
+the read-depth and/or GC gates are removed before any reference models are
+fitted.</p></dd>
+
+
+<dt id="arg-sample-qc-sample-col">sample_qc_sample_col<a class="anchor" aria-label="anchor" href="#arg-sample-qc-sample-col"></a></dt>
+<dd><p>Optional sample-name column in
+<code>sample_qc</code>. When <code>NULL</code>, common names such as
+<code>sample_name</code> and <code>Sample</code> are inferred.</p></dd>
+
+
+<dt id="arg-sample-qc-total-unique-reads-col">sample_qc_total_unique_reads_col<a class="anchor" aria-label="anchor" href="#arg-sample-qc-total-unique-reads-col"></a></dt>
+<dd><p>Optional total-unique-reads column in
+<code>sample_qc</code>. Required when either unique-read threshold is enabled.
+When <code>NULL</code>, common names such as <code>TotalUniqueReads</code> are
+inferred.</p></dd>
+
+
+<dt id="arg-sample-qc-gc-col">sample_qc_gc_col<a class="anchor" aria-label="anchor" href="#arg-sample-qc-gc-col"></a></dt>
+<dd><p>Optional GC column in <code>sample_qc</code>. Required
+when <code>gc_mad_cutoff</code> is enabled. When <code>NULL</code>, common names such
+as <code>GCPCTAfterFiltering</code> are inferred.</p></dd>
+
+
+<dt id="arg-min-total-unique-reads">min_total_unique_reads<a class="anchor" aria-label="anchor" href="#arg-min-total-unique-reads"></a></dt>
+<dd><p>Optional minimum allowed total unique reads.
+Controls below this threshold are removed before fitting.</p></dd>
+
+
+<dt id="arg-max-total-unique-reads">max_total_unique_reads<a class="anchor" aria-label="anchor" href="#arg-max-total-unique-reads"></a></dt>
+<dd><p>Optional maximum allowed total unique reads.
+Controls above this threshold are removed before fitting.</p></dd>
+
+
+<dt id="arg-gc-mad-cutoff">gc_mad_cutoff<a class="anchor" aria-label="anchor" href="#arg-gc-mad-cutoff"></a></dt>
+<dd><p>Optional robust MAD cutoff for GC values. Controls more
+than this many MADs from the cohort median are removed before fitting.</p></dd>
 
 
 <dt id="arg-build-params">build_params<a class="anchor" aria-label="anchor" href="#arg-build-params"></a></dt>

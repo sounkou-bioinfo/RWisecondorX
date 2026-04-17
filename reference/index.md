@@ -101,6 +101,10 @@
   : Build a typed QC report for a NIPTeR control group
 - [`nipter_diagnose_control_group()`](https://sounkou-bioinfo.github.io/RWisecondorX/reference/nipter_diagnose_control_group.md)
   : Diagnose a NIPTeR control group
+- [`nipter_drop_control_group_samples()`](https://sounkou-bioinfo.github.io/RWisecondorX/reference/nipter_drop_control_group_samples.md)
+  : Drop samples from a NIPTeR control group by sample name
+- [`nipter_filter_control_group_qc()`](https://sounkou-bioinfo.github.io/RWisecondorX/reference/nipter_filter_control_group_qc.md)
+  : Filter control samples by read-depth and GC QC
 - [`nipter_gaunosome_report()`](https://sounkou-bioinfo.github.io/RWisecondorX/reference/nipter_gaunosome_report.md)
   : Score multiple samples against a typed gaunosome reference
 - [`nipter_gaunosome_score()`](https://sounkou-bioinfo.github.io/RWisecondorX/reference/nipter_gaunosome_score.md)
@@ -119,6 +123,8 @@
   : Score sex chromosomes with NCV models from a typed reference
 - [`nipter_predict_sex()`](https://sounkou-bioinfo.github.io/RWisecondorX/reference/nipter_predict_sex.md)
   : Predict fetal sex for a NIPTeR sample
+- [`nipter_prune_control_group_outliers()`](https://sounkou-bioinfo.github.io/RWisecondorX/reference/nipter_prune_control_group_outliers.md)
+  : Iteratively prune aberrant controls using chi-correction diagnostics
 - [`nipter_reference_frame()`](https://sounkou-bioinfo.github.io/RWisecondorX/reference/nipter_reference_frame.md)
   : Build a chromosome-level reference frame from a NIPTeR control group
 - [`nipter_regression()`](https://sounkou-bioinfo.github.io/RWisecondorX/reference/nipter_regression.md)
@@ -155,6 +161,8 @@
   : SRA Run Metadata Utilities
 - [`strand_type()`](https://sounkou-bioinfo.github.io/RWisecondorX/reference/strand_type.md)
   : Return the strand type of a NIPTSample
+- [`tabix_metadata()`](https://sounkou-bioinfo.github.io/RWisecondorX/reference/tabix_metadata.md)
+  : Read RWisecondorX tabix metadata headers
 - [`wisecondorx_convert()`](https://sounkou-bioinfo.github.io/RWisecondorX/reference/wisecondorx_convert.md)
   : Convert BAM/CRAM to WisecondorX NPZ format (upstream CLI wrapper)
 - [`wisecondorx_newref()`](https://sounkou-bioinfo.github.io/RWisecondorX/reference/wisecondorx_newref.md)

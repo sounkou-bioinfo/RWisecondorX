@@ -40,11 +40,12 @@ is the same format returned by
 ## Details
 
 Only the first 4 tab-delimited columns are used: `chrom`, `start`,
-`end`, `count` (no header). Any trailing columns are ignored, so this
-reader stays strand-agnostic and can also consume NIPTeR BEDs by taking
-their total-count column. Coordinates are 0-based half-open intervals.
-The bin size is inferred from the first row (`end - start`) unless
-explicitly provided.
+`end`, `count` (no column header row). Optional leading
+`##RWX_<key>=<value>` metadata lines are ignored automatically. Any
+trailing columns are ignored, so this reader stays strand-agnostic and
+can also consume NIPTeR BEDs by taking their total-count column.
+Coordinates are 0-based half-open intervals. The bin size is inferred
+from the first row (`end - start`) unless explicitly provided.
 
 ## See also
 

@@ -13,6 +13,8 @@ nipter_control_group_from_beds(
   bed_dir,
   pattern = "*.bed.gz",
   binsize = NULL,
+  autosomal_source = c("auto", "raw", "corrected"),
+  sex_counts = c("match", "raw", "corrected"),
   description = "General control group",
   sample_sex = NULL,
   sex_source = NULL,
@@ -36,6 +38,19 @@ nipter_control_group_from_beds(
 
   Optional integer; bin size in base pairs. If `NULL` (default),
   inferred from the first row of the first file.
+
+- autosomal_source:
+
+  Which autosomal counts to realize in each imported sample. `"auto"`
+  (default) uses corrected autosomal columns when present, otherwise raw
+  counts. `"raw"` always uses raw count columns. `"corrected"` requires
+  corrected columns.
+
+- sex_counts:
+
+  Which sex-chromosome counts to realize in each imported sample.
+  `"match"` (default) follows `autosomal_source`. `"raw"` always uses
+  raw count columns. `"corrected"` requires corrected sex columns.
 
 - description:
 
@@ -66,7 +81,10 @@ The column count (5 or 9) is detected automatically from the first file:
 5-column BEDs produce a `CombinedStrands` control group; 9-column BEDs
 (written by `nipter_bin_bam_bed(separate_strands = TRUE)`) produce a
 `SeparatedStrands` control group. All files in the directory must have
-the same column count.
+the same column count. When corrected BED columns are present,
+`autosomal_source` and `sex_counts` control whether the imported samples
+use raw or corrected values for each compartment before constructing the
+control group.
 
 ## See also
 

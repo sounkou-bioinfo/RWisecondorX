@@ -15,7 +15,14 @@ and
 ## Usage
 
 ``` r
-bed_to_nipter_sample(bed, name = NULL, binsize = NULL, con = NULL)
+bed_to_nipter_sample(
+  bed,
+  name = NULL,
+  binsize = NULL,
+  autosomal_source = c("auto", "raw", "corrected"),
+  sex_source = c("match", "raw", "corrected"),
+  con = NULL
+)
 ```
 
 ## Arguments
@@ -33,6 +40,20 @@ bed_to_nipter_sample(bed, name = NULL, binsize = NULL, con = NULL)
 
   Optional integer; bin size in base pairs. If `NULL` (default),
   inferred from the first row of the BED file.
+
+- autosomal_source:
+
+  Which autosomal counts to realize in the returned sample. `"auto"`
+  (default) uses corrected autosomal columns when present, otherwise raw
+  counts. `"raw"` always uses raw count columns. `"corrected"` requires
+  corrected columns to be present.
+
+- sex_source:
+
+  Which sex-chromosome counts to realize in the returned sample.
+  `"match"` (default) follows `autosomal_source`. `"raw"` always uses
+  raw count columns. `"corrected"` requires corrected sex columns to be
+  present.
 
 - con:
 
@@ -59,12 +80,14 @@ produces a `CombinedStrands` sample. A 9-column BED (`chrom`, `start`,
 with independent forward/reverse count matrices. The number of columns
 is detected automatically.
 
-When the corrected columns contain non-NA values (i.e. the BED was
-written with a GC-corrected `corrected` argument), the returned sample's
-count matrices are replaced with the corrected values and the correction
-status is set to `"GC Corrected"`. For `SeparatedStrands`, the
-per-strand corrected values (`corrected_fwd`, `corrected_rev`) are used
-to populate the forward and reverse matrices independently.
+When corrected columns contain non-NA values (i.e. the BED was written
+with a GC-corrected `corrected` argument), `autosomal_source = "auto"`
+(default) realizes corrected autosomal counts and `sex_source = "match"`
+follows that same choice for X/Y. Callers can override this and request
+raw or corrected sex-chromosome values independently of the autosomes.
+For `SeparatedStrands`, the per-strand corrected values
+(`corrected_fwd`, `corrected_rev`) are used when corrected sex counts
+are selected.
 
 ## See also
 

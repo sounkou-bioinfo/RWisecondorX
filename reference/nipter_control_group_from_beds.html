@@ -54,6 +54,8 @@ files are read in one pass.</p>
 <span>  <span class="va">bed_dir</span>,</span>
 <span>  pattern <span class="op">=</span> <span class="st">"*.bed.gz"</span>,</span>
 <span>  binsize <span class="op">=</span> <span class="cn">NULL</span>,</span>
+<span>  autosomal_source <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"auto"</span>, <span class="st">"raw"</span>, <span class="st">"corrected"</span><span class="op">)</span>,</span>
+<span>  sex_counts <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"match"</span>, <span class="st">"raw"</span>, <span class="st">"corrected"</span><span class="op">)</span>,</span>
 <span>  description <span class="op">=</span> <span class="st">"General control group"</span>,</span>
 <span>  sample_sex <span class="op">=</span> <span class="cn">NULL</span>,</span>
 <span>  sex_source <span class="op">=</span> <span class="cn">NULL</span>,</span>
@@ -79,6 +81,19 @@ files are read in one pass.</p>
 <dt id="arg-binsize">binsize<a class="anchor" aria-label="anchor" href="#arg-binsize"></a></dt>
 <dd><p>Optional integer; bin size in base pairs. If <code>NULL</code>
 (default), inferred from the first row of the first file.</p></dd>
+
+
+<dt id="arg-autosomal-source">autosomal_source<a class="anchor" aria-label="anchor" href="#arg-autosomal-source"></a></dt>
+<dd><p>Which autosomal counts to realize in each imported
+sample. <code>"auto"</code> (default) uses corrected autosomal columns when present,
+otherwise raw counts. <code>"raw"</code> always uses raw count columns.
+<code>"corrected"</code> requires corrected columns.</p></dd>
+
+
+<dt id="arg-sex-counts">sex_counts<a class="anchor" aria-label="anchor" href="#arg-sex-counts"></a></dt>
+<dd><p>Which sex-chromosome counts to realize in each imported
+sample. <code>"match"</code> (default) follows <code>autosomal_source</code>. <code>"raw"</code> always
+uses raw count columns. <code>"corrected"</code> requires corrected sex columns.</p></dd>
 
 
 <dt id="arg-description">description<a class="anchor" aria-label="anchor" href="#arg-description"></a></dt>
@@ -111,7 +126,10 @@ supplied as a named vector.</p></dd>
 5-column BEDs produce a <code>CombinedStrands</code> control group;
 9-column BEDs (written by <code>nipter_bin_bam_bed(separate_strands = TRUE)</code>)
 produce a <code>SeparatedStrands</code> control group. All files in the directory
-must have the same column count.</p>
+must have the same column count. When corrected BED columns are present,
+<code>autosomal_source</code> and <code>sex_counts</code> control whether the imported samples use
+raw or corrected values for each compartment before constructing the control
+group.</p>
     </div>
     <div class="section level2">
     <h2 id="see-also">See also<a class="anchor" aria-label="anchor" href="#see-also"></a></h2>

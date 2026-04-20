@@ -47,8 +47,10 @@ ratios. Exact port of upstream `CBS.R` logic.
 
 - parallel:
 
-  Logical; use ParDNAcopy when available (default `TRUE`). Falls back to
-  DNAcopy::segment() if ParDNAcopy is not installed.
+  Logical; use ParDNAcopy when `TRUE` (default). This requires the
+  `ParDNAcopy` package to be installed. Set `parallel = FALSE` to use
+  [`DNAcopy::segment()`](https://rdrr.io/pkg/DNAcopy/man/segment.html)
+  explicitly.
 
 - cpus:
 

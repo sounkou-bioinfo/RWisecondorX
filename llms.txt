@@ -552,6 +552,16 @@ roxygen2 comments.
   : Normalised Chromosome Value (NCV) score
 - [`nipter_ncv_sex_score()`](https://sounkou-bioinfo.github.io/RWisecondorX/reference/nipter_ncv_sex_score.md)
   : Score sex chromosomes with NCV models from a typed reference
+- [`nipter_plot_qc_bins()`](https://sounkou-bioinfo.github.io/RWisecondorX/reference/nipter_plot_qc_bins.md)
+  : Plot autosomal bin-level NIPTeR control-group QC
+- [`nipter_plot_qc_chromosomes()`](https://sounkou-bioinfo.github.io/RWisecondorX/reference/nipter_plot_qc_chromosomes.md)
+  : Plot chromosome-level NIPTeR control-group QC
+- [`nipter_plot_qc_samples()`](https://sounkou-bioinfo.github.io/RWisecondorX/reference/nipter_plot_qc_samples.md)
+  : Plot sample-level NIPTeR control-group QC
+- [`nipter_plot_reference_sex_boxplots()`](https://sounkou-bioinfo.github.io/RWisecondorX/reference/nipter_plot_reference_sex_boxplots.md)
+  : Plot reference sex-model distributions
+- [`nipter_plot_reference_sex_scatter()`](https://sounkou-bioinfo.github.io/RWisecondorX/reference/nipter_plot_reference_sex_scatter.md)
+  : Plot reference sex-model scatter spaces
 - [`nipter_predict_sex()`](https://sounkou-bioinfo.github.io/RWisecondorX/reference/nipter_predict_sex.md)
   : Predict fetal sex for a NIPTeR sample
 - [`nipter_prune_control_group_outliers()`](https://sounkou-bioinfo.github.io/RWisecondorX/reference/nipter_prune_control_group_outliers.md)
@@ -602,6 +612,8 @@ roxygen2 comments.
   : Predict copy-number aberrations with WisecondorX
 - [`write_nipter_gaunosome_output()`](https://sounkou-bioinfo.github.io/RWisecondorX/reference/write_nipter_gaunosome_output.md)
   : Write gaunosome summary output
+- [`write_nipter_reference_plots()`](https://sounkou-bioinfo.github.io/RWisecondorX/reference/write_nipter_reference_plots.md)
+  : Write NIPTeR reference QC plots
 - [`write_wisecondorx_output()`](https://sounkou-bioinfo.github.io/RWisecondorX/reference/write_wisecondorx_output.md)
   : Write prediction output files
 

@@ -85,8 +85,9 @@ Exact port of upstream <code>CBS.R</code> logic.</p>
 
 
 <dt id="arg-parallel">parallel<a class="anchor" aria-label="anchor" href="#arg-parallel"></a></dt>
-<dd><p>Logical; use ParDNAcopy when available (default <code>TRUE</code>).
-Falls back to DNAcopy::segment() if ParDNAcopy is not installed.</p></dd>
+<dd><p>Logical; use ParDNAcopy when <code>TRUE</code> (default). This
+requires the <code>ParDNAcopy</code> package to be installed. Set
+<code>parallel = FALSE</code> to use <code><a href="https://rdrr.io/pkg/DNAcopy/man/segment.html" class="external-link">DNAcopy::segment()</a></code> explicitly.</p></dd>
 
 
 <dt id="arg-cpus">cpus<a class="anchor" aria-label="anchor" href="#arg-cpus"></a></dt>

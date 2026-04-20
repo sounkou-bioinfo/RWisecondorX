@@ -15,6 +15,7 @@ nipter_prune_control_group_outliers(
   collapse_strands = FALSE,
   z_cutoff = 3,
   max_aberrant_chromosomes = 2L,
+  outlier_rule = c("any_aberrant_score", "bidirectional_or_multichromosome"),
   min_controls = 10L,
   max_iterations = 100L,
   verbose = FALSE
@@ -53,6 +54,15 @@ nipter_prune_control_group_outliers(
 
   Maximum number of distinct aberrant chromosomes allowed before a
   sample is dropped. Default `2L`.
+
+- outlier_rule:
+
+  Character scalar controlling how aberrant samples are dropped.
+  `"any_aberrant_score"` (default) removes any sample appearing in
+  `abberant_scores`, matching the upstream NIPTeR vignette.
+  `"bidirectional_or_multichromosome"` drops a sample only when both
+  strands of one chromosome are aberrant or when more than
+  `max_aberrant_chromosomes` distinct chromosomes are aberrant.
 
 - min_controls:
 

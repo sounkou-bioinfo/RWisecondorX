@@ -26,8 +26,8 @@ nipter_predict_sex(sample, ..., y_unique_ratio = NULL)
   Optional numeric scalar; a pre-computed Y-unique ratio (from
   [`nipter_y_unique_ratio`](https://sounkou-bioinfo.github.io/RWisecondorX/reference/nipter_y_unique_ratio.md))
   for the sample. This is only used when one of the models has
-  `method = "y_unique"`. If a `"y_unique"` model is present and this
-  argument is `NULL`, that model is skipped with a warning.
+  `method = "y_unique"`. If a `"y_unique"` model is present, this
+  argument is required.
 
 ## Value
 

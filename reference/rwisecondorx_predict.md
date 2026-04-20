@@ -91,9 +91,10 @@ rwisecondorx_predict(
 
   Logical; use
   [`ParDNAcopy::parSegment()`](https://rdrr.io/pkg/ParDNAcopy/man/parSegment.html)
-  for CBS when available. Default `TRUE`. Falls back to
+  for CBS when `TRUE` (default). Requires the `ParDNAcopy` package. Set
+  `parallel = FALSE` to use
   [`DNAcopy::segment()`](https://rdrr.io/pkg/DNAcopy/man/segment.html)
-  with a message if ParDNAcopy is not installed.
+  explicitly.
 
 - cpus:
 

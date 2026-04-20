@@ -54,6 +54,7 @@ or the minimum control size would be violated.</p>
 <span>  collapse_strands <span class="op">=</span> <span class="cn">FALSE</span>,</span>
 <span>  z_cutoff <span class="op">=</span> <span class="fl">3</span>,</span>
 <span>  max_aberrant_chromosomes <span class="op">=</span> <span class="fl">2L</span>,</span>
+<span>  outlier_rule <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"any_aberrant_score"</span>, <span class="st">"bidirectional_or_multichromosome"</span><span class="op">)</span>,</span>
 <span>  min_controls <span class="op">=</span> <span class="fl">10L</span>,</span>
 <span>  max_iterations <span class="op">=</span> <span class="fl">100L</span>,</span>
 <span>  verbose <span class="op">=</span> <span class="cn">FALSE</span></span>
@@ -92,6 +93,15 @@ autosomal fractions.</p></dd>
 <dt id="arg-max-aberrant-chromosomes">max_aberrant_chromosomes<a class="anchor" aria-label="anchor" href="#arg-max-aberrant-chromosomes"></a></dt>
 <dd><p>Maximum number of distinct aberrant
 chromosomes allowed before a sample is dropped. Default <code>2L</code>.</p></dd>
+
+
+<dt id="arg-outlier-rule">outlier_rule<a class="anchor" aria-label="anchor" href="#arg-outlier-rule"></a></dt>
+<dd><p>Character scalar controlling how aberrant samples are
+dropped. <code>"any_aberrant_score"</code> (default) removes any sample
+appearing in <code>abberant_scores</code>, matching the upstream NIPTeR
+vignette. <code>"bidirectional_or_multichromosome"</code> drops a sample only
+when both strands of one chromosome are aberrant or when more than
+<code>max_aberrant_chromosomes</code> distinct chromosomes are aberrant.</p></dd>
 
 
 <dt id="arg-min-controls">min_controls<a class="anchor" aria-label="anchor" href="#arg-min-controls"></a></dt>

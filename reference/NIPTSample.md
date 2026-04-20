@@ -10,6 +10,7 @@ and reverse counts stored independently).
 NIPTSample(
   sample_name = character(0),
   binsize = integer(0),
+  chrom_lengths = NULL,
   correction = NIPTCorrectionRecord()
 )
 ```

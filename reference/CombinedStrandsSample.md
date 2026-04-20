@@ -8,6 +8,7 @@ NIPTeR sample with combined forward+reverse read counts
 CombinedStrandsSample(
   sample_name = character(0),
   binsize = integer(0),
+  chrom_lengths = NULL,
   correction = NIPTCorrectionRecord(),
   auto_matrix = NULL,
   sex_matrix_ = NULL

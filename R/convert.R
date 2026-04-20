@@ -414,10 +414,12 @@ bam_convert_bed <- function(bam,
 
   out <- list(
     native_bin_stats = "gc,mq",
-    n_rows_stats = nrow(rows)
+    n_rows_stats = nrow(rows),
+    native_stats_source = "bam_bin_counts(gc,mq)"
   )
   if ("count_total" %in% names(rows)) {
     out$count_total_sum <- sum(as.numeric(rows$count_total), na.rm = TRUE)
+    out$total_read_starts_post <- out$count_total_sum
     out$n_nonzero_bins_post <- sum(as.numeric(rows$count_total) > 0, na.rm = TRUE)
   }
   if ("count_fwd" %in% names(rows)) {
@@ -428,24 +430,38 @@ bam_convert_bed <- function(bam,
   }
   if ("count_pre" %in% names(rows)) {
     out$count_pre_sum <- sum(as.numeric(rows$count_pre), na.rm = TRUE)
+    out$total_read_starts_pre <- out$count_pre_sum
   }
   if (all(c("gc_perc_pre", "count_pre") %in% names(rows))) {
     out$gc_perc_pre_weighted_mean <- .weighted_mean_or_na(
       as.numeric(rows$gc_perc_pre),
       as.numeric(rows$count_pre)
     )
+    out$gc_read_perc_pre <- out$gc_perc_pre_weighted_mean
+    out$GCPCTBeforeFiltering <- out$gc_perc_pre_weighted_mean
   }
   if (all(c("gc_perc_post", "count_total") %in% names(rows))) {
     out$gc_perc_post_weighted_mean <- .weighted_mean_or_na(
       as.numeric(rows$gc_perc_post),
       as.numeric(rows$count_total)
     )
+    out$gc_read_perc_post <- out$gc_perc_post_weighted_mean
+    out$GCPCTAfterFiltering <- out$gc_perc_post_weighted_mean
   }
   if (all(c("mean_mapq_post", "count_total") %in% names(rows))) {
     out$mean_mapq_post_weighted_mean <- .weighted_mean_or_na(
       as.numeric(rows$mean_mapq_post),
       as.numeric(rows$count_total)
     )
+    out$mean_mapq_post <- out$mean_mapq_post_weighted_mean
+  }
+  if (!is.null(out$count_pre_sum) &&
+      !is.null(out$count_total_sum) &&
+      is.finite(out$count_pre_sum) &&
+      out$count_pre_sum > 0 &&
+      is.finite(out$count_total_sum)) {
+    out$total_read_starts_retained_fraction <-
+      as.numeric(out$count_total_sum) / as.numeric(out$count_pre_sum)
   }
 
   out[!vapply(out, is.null, logical(1L))]

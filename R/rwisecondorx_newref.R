@@ -164,9 +164,11 @@ rwisecondorx_newref <- function(samples         = NULL,
   n_male   <- sum(genders == "M")
 
   if (n_female < 5L && isTRUE(nipt)) {
-    warning("A NIPT reference should have at least 5 female feti samples. ",
-            "Removing NIPT mode.", call. = FALSE)
-    nipt <- FALSE
+    stop(
+      "NIPT-mode RWisecondorX reference building requires at least 5 female feti samples. ",
+      "Refuse to silently disable NIPT mode.",
+      call. = FALSE
+    )
   }
 
   # ---------- Step 3: gender correction (non-NIPT) ----------

@@ -183,6 +183,23 @@ corr_total <- sum(corrected_auto)
 expect_true(abs(corr_total - orig_total) / orig_total < 0.05,
             info = "chi correction keeps total autosomal reads within 5%")
 
+zero_ctrl <- .sim_nipter_control_set(4L, seed = 222L)
+for (i in seq_along(zero_ctrl)) {
+  zero_ctrl[[i]]@auto_matrix["1", "1"] <- 0L
+}
+zero_cg <- nipter_as_control_group(zero_ctrl)
+zero_profile <- RWisecondorX:::.chi_profile(
+  zero_cg,
+  chi_cutoff = 3.5,
+  include_bin_stats = TRUE
+)
+expect_false(zero_profile$valid_bins[[1L]],
+             info = "chi profile marks zero-expected bins invalid")
+expect_true(is.na(zero_profile$chi_z[[1L]]),
+            info = "invalid chi bins have NA chi_z")
+expect_false(zero_profile$overdispersed[[1L]],
+             info = "invalid chi bins are not flagged overdispersed")
+
 mixed_ctrl <- ctrl_samples[1:2]
 mixed_ctrl[[1]] <- RWisecondorX:::.sample_append_correction_step(
   mixed_ctrl[[1]], "autosomal", RWisecondorX:::.nipt_gc_correction_step()
@@ -445,6 +462,9 @@ expect_true("ss_ctrl_01" %in% ss_pruned$dropped_samples,
             info = "iterative pruning drops a sample with both-strand aberrant chromosome fractions")
 expect_identical(length(ss_pruned$control_group$samples), 9L,
                  info = "iterative pruning removes the flagged outlier sample")
+expect_true(all(c("n_flagged_post_chi", "flagged_samples_post_chi") %in%
+                  names(ss_pruned$iteration_log)),
+            info = "iterative pruning records the legacy post-chi flagged counts")
 expect_true("Chi square corrected" %in%
               ss_pruned$chi_corrected_control_group$correction_status_autosomal,
             info = "iterative pruning returns the terminal chi-corrected control group")

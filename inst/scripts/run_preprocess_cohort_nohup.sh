@@ -19,19 +19,19 @@ Environment:
   OUT_ROOT  Output root (default: /mnt/data/niptseq/testdata/<manifest-basename>)
   OVERWRITE Set to 1 to force regeneration of existing outputs
   NIPTER_GC_INCLUDE_SEX Set to 1 to GC-correct X/Y before NIPTeR BED export
-  TABIX_METADATA Set to 1 to write optional ##RWX_<key>=<value> BED metadata headers
+  TABIX_METADATA Set to 0 to disable optional ##RWX_<key>=<value> BED metadata headers
 EOF
   exit 0
 fi
 
-THREADS="${1:-20}"
-MANIFEST="${2:-/mnt/data/BixCTF/NiptSeqNeo/all_bam_list_sample_500.txt}"
-JOBS="${3:-4}"
+THREADS="${1:-30}"
+MANIFEST="${2:-/mnt/data/BixCTF/NiptSeqNeo/all_bam_list_last_100_days.txt}"
+JOBS="${3:-6}"
 FASTA="${FASTA:-/mnt/data/niptseq/resources/genomes/human_g1k_v37.fasta}"
 OUT_ROOT="${OUT_ROOT:-/mnt/data/niptseq/testdata/$(basename "${MANIFEST}" .txt)}"
 OVERWRITE="${OVERWRITE:-0}"
 NIPTER_GC_INCLUDE_SEX="${NIPTER_GC_INCLUDE_SEX:-0}"
-TABIX_METADATA="${TABIX_METADATA:-0}"
+TABIX_METADATA="${TABIX_METADATA:-1}"
 
 mkdir -p "${OUT_ROOT}"
 mkdir -p "${OUT_ROOT}/logs"

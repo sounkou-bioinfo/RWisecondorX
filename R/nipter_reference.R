@@ -210,6 +210,33 @@ nipter_build_reference <- function(control_group,
   out
 }
 
+.group_reference_zscores <- function(values, ref_idx) {
+  out <- rep(NA_real_, length(values))
+  ref_idx <- which(ref_idx)
+  if (!length(ref_idx)) {
+    return(out)
+  }
+
+  for (i in seq_along(values)) {
+    ref_use <- ref_idx
+    if (i %in% ref_idx) {
+      ref_use <- ref_use[ref_use != i]
+    }
+    ref_vals <- values[ref_use]
+    ref_vals <- ref_vals[is.finite(ref_vals)]
+    if (length(ref_vals) < 2L || !is.finite(values[[i]])) {
+      next
+    }
+    ref_sd <- stats::sd(ref_vals)
+    if (!is.finite(ref_sd) || ref_sd <= .Machine$double.eps) {
+      next
+    }
+    out[[i]] <- (values[[i]] - mean(ref_vals)) / ref_sd
+  }
+
+  out
+}
+
 .predict_reference_sample_sex <- function(control_group,
                                           sex_models,
                                           y_unique_ratios = NULL) {
@@ -267,6 +294,10 @@ nipter_build_reference <- function(control_group,
   frame$RR_X_SexClassMAD <- NA_real_
   frame$RR_Y_SexClassMAD <- NA_real_
   frame$IsRefSexOutlier <- FALSE
+  frame$Z_X_XX <- NA_real_
+  frame$Z_X_XY <- NA_real_
+  frame$Z_Y_XX <- NA_real_
+  frame$Z_Y_XY <- NA_real_
 
   for (sex in c("female", "male")) {
     idx <- which(frame$ConsensusGender == sex)
@@ -284,6 +315,13 @@ nipter_build_reference <- function(control_group,
     is.finite(frame$RR_Y_SexClassMAD) &
       abs(frame$RR_Y_SexClassMAD) >= outlier_threshold
   )
+
+  female_ref <- frame$ConsensusGender == "female" & !frame$IsRefSexOutlier
+  male_ref <- frame$ConsensusGender == "male" & !frame$IsRefSexOutlier
+  frame$Z_X_XX <- .group_reference_zscores(frame$FrChrReads_X, female_ref)
+  frame$Z_Y_XX <- .group_reference_zscores(frame$FrChrReads_Y, female_ref)
+  frame$Z_X_XY <- .group_reference_zscores(frame$FrChrReads_X, male_ref)
+  frame$Z_Y_XY <- .group_reference_zscores(frame$FrChrReads_Y, male_ref)
 
   frame
 }

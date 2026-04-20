@@ -41,8 +41,9 @@
 #' @param alpha CBS breakpoint p-value threshold.
 #' @param binsize Reference bin size in bp.
 #' @param seed Optional RNG seed.
-#' @param parallel Logical; use ParDNAcopy when available (default \code{TRUE}).
-#'   Falls back to DNAcopy::segment() if ParDNAcopy is not installed.
+#' @param parallel Logical; use ParDNAcopy when \code{TRUE} (default). This
+#'   requires the \code{ParDNAcopy} package to be installed. Set
+#'   \code{parallel = FALSE} to use \code{DNAcopy::segment()} explicitly.
 #' @param cpus Integer; number of threads passed to \code{parSegment()}. Only
 #'   used when \code{parallel = TRUE} and ParDNAcopy is available.
 #'
@@ -109,7 +110,11 @@
   # Run CBS — ParDNAcopy when parallel = TRUE and available, else DNAcopy::segment().
   use_parallel <- isTRUE(parallel) && requireNamespace("ParDNAcopy", quietly = TRUE)
   if (isTRUE(parallel) && !use_parallel) {
-    message("ParDNAcopy not available; falling back to DNAcopy::segment().")
+    stop(
+      "parallel = TRUE requires the 'ParDNAcopy' package. ",
+      "Refuse to fall back to serial DNAcopy::segment(); either install ParDNAcopy or call with parallel = FALSE.",
+      call. = FALSE
+    )
   }
 
   if (use_parallel) {

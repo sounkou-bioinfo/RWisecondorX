@@ -101,6 +101,7 @@ nipter_chi_correct <- function(sample,
                          include_bin_stats = FALSE) {
   n_controls <- length(control_group$samples)
   n_bins <- ncol(autosomal_matrix(control_group$samples[[1L]]))
+  bin_layout <- .chi_bin_layout(control_group, n_bins)
 
   # Flatten each control sample's autosomal reads into a single vector.
   # autosomal_matrix() handles both S7 and S3 objects and sums strands for
@@ -120,13 +121,79 @@ nipter_chi_correct <- function(sample,
   })
 
   expected <- Reduce(`+`, scaled) / n_controls
-  chi_sum <- numeric(total_bins)
+  expected_finite <- is.finite(expected)
+  expected_positive <- expected > 0
+  scaled_finite <- rep(TRUE, total_bins)
   for (i in seq_len(n_controls)) {
-    chi_sum <- chi_sum + (expected - scaled[[i]])^2 / pmax(expected, .Machine$double.eps)
+    scaled_finite <- scaled_finite & is.finite(scaled[[i]])
+  }
+  valid_bins <- expected_finite & expected_positive & scaled_finite
+  if (!all(is.na(bin_layout$in_chromosome_range))) {
+    valid_bins <- valid_bins & bin_layout$in_chromosome_range
   }
 
-  chi_norm <- (chi_sum - df) / sqrt(2 * df)
-  overdispersed <- chi_norm > chi_cutoff
+  invalid_reason_detail <- rep("valid", total_bins)
+  invalid_reason <- rep("valid", total_bins)
+  invalid_idx <- which(!valid_bins)
+  if (length(invalid_idx)) {
+    detail_parts <- vector("list", length = total_bins)
+    if (!all(is.na(bin_layout$in_chromosome_range))) {
+      idx <- invalid_idx[!bin_layout$in_chromosome_range[invalid_idx]]
+      if (length(idx)) {
+        for (j in idx) detail_parts[[j]] <- c(detail_parts[[j]], "out_of_range")
+      }
+    }
+    idx <- invalid_idx[!scaled_finite[invalid_idx]]
+    if (length(idx)) {
+      for (j in idx) detail_parts[[j]] <- c(detail_parts[[j]], "nonfinite_scaled")
+    }
+    idx <- invalid_idx[!expected_finite[invalid_idx]]
+    if (length(idx)) {
+      for (j in idx) detail_parts[[j]] <- c(detail_parts[[j]], "nonfinite_expected")
+    }
+    idx <- invalid_idx[expected_finite[invalid_idx] & !expected_positive[invalid_idx]]
+    if (length(idx)) {
+      for (j in idx) detail_parts[[j]] <- c(detail_parts[[j]], "nonpositive_expected")
+    }
+
+    invalid_reason_detail[invalid_idx] <- vapply(invalid_idx, function(i) {
+      parts <- unique(detail_parts[[i]])
+      if (!length(parts)) "invalid_other" else paste(parts, collapse = ";")
+    }, character(1L))
+    invalid_reason[invalid_idx] <- vapply(invalid_idx, function(i) {
+      parts <- unique(detail_parts[[i]])
+      if (!length(parts)) {
+        return("invalid_other")
+      }
+      if ("out_of_range" %in% parts) {
+        return("out_of_range")
+      }
+      if ("nonfinite_scaled" %in% parts) {
+        return("nonfinite_scaled")
+      }
+      if ("nonfinite_expected" %in% parts) {
+        return("nonfinite_expected")
+      }
+      if ("nonpositive_expected" %in% parts) {
+        return("nonpositive_expected")
+      }
+      "invalid_other"
+    }, character(1L))
+  }
+
+  chi_sum <- rep(NA_real_, total_bins)
+  chi_norm <- rep(NA_real_, total_bins)
+  if (any(valid_bins)) {
+    chi_sum[valid_bins] <- 0
+    denom <- expected[valid_bins]
+    for (i in seq_len(n_controls)) {
+      chi_sum[valid_bins] <- chi_sum[valid_bins] +
+        (expected[valid_bins] - scaled[[i]][valid_bins])^2 / denom
+    }
+    chi_norm[valid_bins] <- (chi_sum[valid_bins] - df) / sqrt(2 * df)
+  }
+  overdispersed <- rep(FALSE, total_bins)
+  overdispersed[valid_bins] <- chi_norm[valid_bins] > chi_cutoff
   correction_factor <- rep(1.0, total_bins)
   correction_factor[overdispersed] <- chi_sum[overdispersed] / df
 
@@ -135,9 +202,20 @@ nipter_chi_correct <- function(sample,
     n_bins = n_bins,
     df = df,
     chi_cutoff = chi_cutoff,
+    binsize = bin_layout$binsize[[1L]],
+    chromosome_length_bp = bin_layout$chromosome_length_bp,
+    bin_start_bp = bin_layout$bin_start_bp,
+    bin_end_bp = bin_layout$bin_end_bp,
+    in_chromosome_range = bin_layout$in_chromosome_range,
     expected = expected,
+    expected_finite = expected_finite,
+    expected_positive = expected_positive,
+    scaled_finite = scaled_finite,
     chi_square = chi_sum,
     chi_z = chi_norm,
+    valid_bins = valid_bins,
+    invalid_reason = invalid_reason,
+    invalid_reason_detail = invalid_reason_detail,
     overdispersed = overdispersed,
     correction_factor = correction_factor
   )
@@ -147,14 +225,65 @@ nipter_chi_correct <- function(sample,
     sd_scaled <- apply(scaled_mat, 1L, stats::sd)
     mean_scaled <- expected
     cv_scaled <- rep(NA_real_, length(mean_scaled))
-    ok <- is.finite(mean_scaled) & abs(mean_scaled) > .Machine$double.eps
+    n_nonzero_scaled <- rowSums(scaled_mat != 0)
+    ok <- valid_bins & is.finite(mean_scaled) & abs(mean_scaled) > .Machine$double.eps
     cv_scaled[ok] <- 100 * sd_scaled[ok] / mean_scaled[ok]
     out$scaled_mean <- mean_scaled
     out$scaled_sd <- sd_scaled
     out$scaled_cv <- cv_scaled
+    out$scaled_n_nonzero <- as.integer(n_nonzero_scaled)
   }
 
   out
+}
+
+.chi_bin_layout <- function(control_group, n_bins) {
+  template <- control_group$samples[[1L]]
+  chr_names <- as.character(1:22)
+  binsize <- .sample_binsize(template)
+  if (!is.finite(binsize) || length(binsize) != 1L || is.na(binsize) || binsize < 1L) {
+    binsize <- NA_integer_
+  } else {
+    binsize <- as.integer(binsize)
+  }
+
+  chrom_lengths <- .sample_chrom_lengths(template)
+  chr_lengths <- rep(NA_integer_, length(chr_names))
+  names(chr_lengths) <- chr_names
+  if (!is.null(chrom_lengths)) {
+    matched <- match(chr_names, names(chrom_lengths))
+    keep <- !is.na(matched)
+    chr_lengths[keep] <- as.integer(chrom_lengths[matched[keep]])
+  }
+
+  chromosome <- rep(chr_names, each = n_bins)
+  bin <- rep(seq_len(n_bins), times = length(chr_names))
+  chromosome_length_bp <- rep(chr_lengths, each = n_bins)
+  if (is.na(binsize)) {
+    bin_start_bp <- rep(NA_integer_, length(bin))
+    bin_end_bp <- rep(NA_integer_, length(bin))
+    in_chromosome_range <- rep(NA, length(bin))
+  } else {
+    bin_offsets <- as.integer((seq_len(n_bins) - 1L) * binsize)
+    bin_start_bp <- rep(bin_offsets, times = length(chr_names))
+    in_chromosome_range <- !is.na(chromosome_length_bp) & bin_start_bp < chromosome_length_bp
+    bin_end_bp <- rep(NA_integer_, length(bin))
+    keep <- which(in_chromosome_range)
+    if (length(keep)) {
+      bin_end_bp[keep] <- pmin(bin_start_bp[keep] + binsize, chromosome_length_bp[keep])
+    }
+  }
+
+  data.frame(
+    chromosome = chromosome,
+    bin = as.integer(bin),
+    binsize = rep(binsize, length(bin)),
+    chromosome_length_bp = chromosome_length_bp,
+    bin_start_bp = bin_start_bp,
+    bin_end_bp = bin_end_bp,
+    in_chromosome_range = in_chromosome_range,
+    stringsAsFactors = FALSE
+  )
 }
 
 # Apply chi-squared correction factors to a single NIPTeRSample.

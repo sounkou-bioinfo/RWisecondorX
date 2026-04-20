@@ -48,6 +48,40 @@
   chi = "Chi square corrected"
 )
 
+.validate_nipt_chrom_lengths <- function(value) {
+  if (is.null(value)) {
+    return(NULL)
+  }
+  if (is.list(value) || is.matrix(value) || !is.atomic(value) || !is.numeric(value)) {
+    return("chrom_lengths must be NULL or a named numeric vector")
+  }
+  nms <- names(value)
+  if (is.null(nms) || anyNA(nms) || any(!nzchar(nms))) {
+    return("chrom_lengths must be named")
+  }
+  norm_names <- .normalize_chr_name(nms, xy_to_numeric = FALSE)
+  valid_names <- c(as.character(1:22), "X", "Y")
+  if (!all(norm_names %in% valid_names)) {
+    return("chrom_lengths names must be chromosomes 1-22, X, or Y")
+  }
+  if (anyDuplicated(norm_names)) {
+    return("chrom_lengths names must be unique after chromosome normalization")
+  }
+  if (any(!is.finite(as.numeric(value)) | as.numeric(value) < 0)) {
+    return("chrom_lengths values must be finite non-negative numbers")
+  }
+  NULL
+}
+
+.normalize_nipt_chrom_lengths <- function(value) {
+  if (is.null(value)) {
+    return(NULL)
+  }
+  norm_names <- .normalize_chr_name(names(value), xy_to_numeric = FALSE)
+  vals <- as.integer(as.numeric(value))
+  stats::setNames(vals, norm_names)
+}
+
 .validate_correction_code <- function(value) {
   if (length(value) != 1L || !value %in% .nipt_correction_codes) {
     sprintf("code must be one of: %s",
@@ -230,6 +264,11 @@ NIPTSample <- S7::new_class(
       validator = function(value) {
         if (length(value) != 1L || value < 1L) "binsize must be a positive integer"
       }
+    ),
+    chrom_lengths = S7::new_property(
+      S7::class_any,
+      default = quote(NULL),
+      validator = .validate_nipt_chrom_lengths
     ),
     correction = S7::new_property(
       NIPTCorrectionRecord,
@@ -421,7 +460,21 @@ S7::method(strand_type, SeparatedStrandsSample) <- function(x) "separated"
 }
 
 .sample_binsize <- function(x) {
-  if (.is_s7_nipt_sample(x)) x@binsize else NA_integer_
+  if (.is_s7_nipt_sample(x)) {
+    x@binsize
+  } else {
+    out <- .legacy_field(x, "binsize")
+    if (is.null(out)) NA_integer_ else as.integer(out)
+  }
+}
+
+.sample_chrom_lengths <- function(x) {
+  if (.is_s7_nipt_sample(x)) {
+    x@chrom_lengths
+  } else {
+    out <- .legacy_field(x, "chrom_lengths")
+    if (is.null(out)) NULL else out
+  }
 }
 
 .sample_correction_status <- function(x,
@@ -535,6 +588,7 @@ S7::method(strand_type, SeparatedStrandsSample) <- function(x) "separated"
     correction_status_sex       = .sample_correction_status(x, "sex"),
     sample_name                 = .sample_name(x),
     binsize                     = .sample_binsize(x),
+    chrom_lengths               = .sample_chrom_lengths(x),
     NULL
   )
 }
@@ -578,6 +632,15 @@ S7::method(strand_type, SeparatedStrandsSample) <- function(x) "separated"
         x@binsize <- value
       } else {
         x <- .legacy_set_field(x, "binsize", value)
+      }
+      x
+    },
+    chrom_lengths = {
+      value <- .normalize_nipt_chrom_lengths(value)
+      if (.is_s7_nipt_sample(x)) {
+        x@chrom_lengths <- value
+      } else {
+        x <- .legacy_set_field(x, "chrom_lengths", value)
       }
       x
     },
@@ -1139,8 +1202,12 @@ NCVTemplate <- S7::new_class(
       return(sprintf("NIPTReferenceFrame column '%s' must be numeric.", col))
     }
   }
-  optional_numeric <- c("RR_X", "RR_Y", "RR_X_SexClassMAD", "RR_Y_SexClassMAD",
-                        "YUniqueRatio")
+  optional_numeric <- c(
+    "RR_X", "RR_Y",
+    "RR_X_SexClassMAD", "RR_Y_SexClassMAD",
+    "Z_X_XX", "Z_X_XY", "Z_Y_XX", "Z_Y_XY",
+    "YUniqueRatio"
+  )
   for (col in optional_numeric) {
     if (col %in% names(x) && !is.numeric(x[[col]])) {
       return(sprintf("NIPTReferenceFrame column '%s' must be numeric.", col))
@@ -1788,6 +1855,16 @@ NIPTControlGroupQC <- S7::new_class(
           !is.logical(self$sex_summary$can_build_regression)) {
         return("NIPTControlGroupQC$sex_summary build flags must be logical.")
       }
+    }
+
+    if (!is.null(self$sex_model_summary)) {
+      msg <- .validate_qc_summary_df(
+        self$sex_model_summary,
+        c("reference_sex", "focus_chromosome", "method_family", "method_label",
+          "mean_value", "sd_value", "cv_percent", "model_status"),
+        "NIPTControlGroupQC$sex_model_summary"
+      )
+      if (!is.null(msg)) return(msg)
     }
 
     if (!is.null(self$bin_summary)) {

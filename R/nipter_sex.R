@@ -132,8 +132,7 @@ nipter_sex_model <- function(control_group,
 #' @param y_unique_ratio Optional numeric scalar; a pre-computed Y-unique
 #'   ratio (from \code{\link{nipter_y_unique_ratio}}) for the sample. This
 #'   is only used when one of the models has \code{method = "y_unique"}.
-#'   If a \code{"y_unique"} model is present and this argument is
-#'   \code{NULL}, that model is skipped with a warning.
+#'   If a \code{"y_unique"} model is present, this argument is required.
 #'
 #' @return A list-like \code{NIPTeRSexPrediction} S7 object with elements:
 #' \describe{
@@ -216,12 +215,12 @@ nipter_predict_sex <- function(sample, ..., y_unique_ratio = NULL) {
     mdl <- models[[i]]
 
     if (mdl$method == "y_unique") {
-      # Y-unique model needs a pre-computed ratio
       if (is.null(y_unique_ratio)) {
-        warning("y_unique model present but y_unique_ratio not provided; ",
-                "skipping this model.", call. = FALSE)
-        model_preds[i] <- NA_character_
-        next
+        stop(
+          "A y_unique sex model was supplied but 'y_unique_ratio' is NULL. ",
+          "Provide the sample's post-filter Y-unique ratio explicitly.",
+          call. = FALSE
+        )
       }
       newdata <- y_unique_ratio
     } else if (mdl$method == "y_fraction") {
@@ -237,15 +236,9 @@ nipter_predict_sex <- function(sample, ..., y_unique_ratio = NULL) {
     model_preds[i] <- if (cluster == mdl$male_cluster) "male" else "female"
   }
 
-  # Drop NAs from skipped models before voting
-  valid_preds <- model_preds[!is.na(model_preds)]
-  if (!length(valid_preds)) {
-    stop("No usable sex-model predictions remain after filtering.", call. = FALSE)
-  }
-
   # Consensus: majority vote (tie goes to "female" — conservative for NIPT)
-  n_male   <- sum(valid_preds == "male")
-  n_female <- sum(valid_preds == "female")
+  n_male   <- sum(model_preds == "male")
+  n_female <- sum(model_preds == "female")
   if (n_male == n_female) {
     warning(
       sprintf(
@@ -354,19 +347,25 @@ nipter_sex_model_y_unique <- function(ratios) {
 
 #' Compute Y-unique region read ratio from a BAM file
 #'
-#' Counts reads overlapping the 7 Y-chromosome unique gene regions
-#' (HSFY1, BPY2, BPY2B, BPY2C, XKRY, PRY, PRY2) and divides by total
+#' Counts reads overlapping a Y-chromosome interval set and divides by total
 #' nuclear genome reads (chromosomes 1--22, X, Y). This ratio is a strong
-#' univariate sex predictor used in clinical NIPT pipelines.
+#' univariate sex predictor used in the clinical NIPT pipeline mirrored here.
 #'
-#' The regions are defined in the bundled file
-#' \code{extdata/grch37_Y_UniqueRegions.txt} (GRCh37 coordinates). The BAM
-#' must be indexed (\code{.bai} or \code{.csi}).
+#' For GRCh37, the default interval set is the bundled legacy
+#' \code{extdata/grch37_Y_chrom_blacklist.bed}, which matches the historical
+#' \code{samtools stats -t human_g1k_v37.fasta_Y_chrom_blacklist.bed} path used
+#' by the production shell pipeline. A smaller 7-gene interval file can still
+#' be supplied explicitly through \code{regions_file}, but it is no longer the
+#' default because it does not reproduce the legacy \code{YUniqueRatioFiltered}
+#' semantics.
+#'
+#' The BAM must be indexed (\code{.bai} or \code{.csi}).
 #'
 #' Read counting uses DuckDB/duckhts with index-based region queries
-#' (\code{read_bam(region := ...)}) for the Y-unique intervals, and a
-#' separate full-genome scan for the nuclear total. Both queries apply the
-#' same MAPQ and flag filters.
+#' (\code{read_bam(region := ...)}) issued once per Y-unique interval, and a
+#' separate full-genome scan for the nuclear total. Interval chromosome names
+#' are matched to the BAM header so both \code{Y} and \code{chrY}-style
+#' contigs work. Both query paths apply the same MAPQ and flag filters.
 #'
 #' @param bam Path to an indexed BAM or CRAM file.
 #' @param mapq Minimum mapping quality. Default \code{1L}.
@@ -374,10 +373,12 @@ nipter_sex_model_y_unique <- function(ratios) {
 #'   are dropped (samtools \code{-F}). Default \code{0L}.
 #' @param require_flags Integer bitmask; only reads with all bits set are
 #'   kept (samtools \code{-f}). Default \code{0L}.
-#' @param regions_file Path to a TSV file of Y-unique regions with columns
-#'   \code{Chromosome}, \code{Start}, \code{End}, \code{GeneName}. Defaults
-#'   to the bundled GRCh37 file. Supply a custom file for GRCh38 or other
-#'   assemblies.
+#' @param regions_file Path to a Y-unique regions file. Headered TSV files
+#'   with columns \code{Chromosome}, \code{Start}, \code{End},
+#'   \code{GeneName} are accepted, as are headerless BED-like files whose
+#'   first 3 columns are chromosome/start/end and optional 4th column is a
+#'   gene or interval label. Defaults to the bundled GRCh37 file. Supply a
+#'   custom file for GRCh38 or other assemblies.
 #' @param con Optional open DBI connection with duckhts loaded. If
 #'   \code{NULL} (default) a temporary in-memory DuckDB connection is
 #'   created.
@@ -387,12 +388,13 @@ nipter_sex_model_y_unique <- function(ratios) {
 #' \describe{
 #'   \item{ratio}{Numeric; Y-unique reads / total nuclear reads. \code{0}
 #'     if total nuclear reads is zero.}
-#'   \item{y_unique_reads}{Integer; reads overlapping any of the 7 Y-unique
-#'     regions.}
+#'   \item{y_unique_reads}{Integer; reads overlapping the supplied Y interval
+#'     set.}
 #'   \item{total_nuclear_reads}{Integer; total reads on chromosomes 1--22,
 #'     X, Y.}
-#'   \item{regions}{Data frame of the regions used (columns:
+#'   \item{regions}{Data frame of the intervals used (columns:
 #'     \code{Chromosome}, \code{Start}, \code{End}, \code{GeneName}).}
+#'   \item{regions_file}{Normalized path to the regions file used.}
 #' }
 #'
 #' @seealso [nipter_sex_model()], [nipter_predict_sex()]
@@ -424,31 +426,24 @@ nipter_y_unique_ratio <- function(bam,
 
   # Load regions
   if (is.null(regions_file)) {
-    regions_file <- system.file("extdata", "grch37_Y_UniqueRegions.txt",
+    regions_file <- system.file("extdata", "grch37_Y_chrom_blacklist.bed",
                                 package = "RWisecondorX", mustWork = FALSE)
     if (!nzchar(regions_file) || !file.exists(regions_file)) {
-      # Fallback for devtools::load_all / sourced context
       candidates <- c(
-        file.path("inst", "extdata", "grch37_Y_UniqueRegions.txt"),
-        file.path("..", "..", "inst", "extdata", "grch37_Y_UniqueRegions.txt")
+        file.path("inst", "extdata", "grch37_Y_chrom_blacklist.bed"),
+        file.path("..", "..", "inst", "extdata", "grch37_Y_chrom_blacklist.bed")
       )
       regions_file <- candidates[file.exists(candidates)][1L]
       if (is.na(regions_file)) {
-        stop("Cannot find grch37_Y_UniqueRegions.txt. ",
+        stop("Cannot find a bundled GRCh37 Y-interval file. ",
              "Provide a path via the 'regions_file' argument.",
              call. = FALSE)
       }
     }
   }
   stopifnot(file.exists(regions_file))
-  regions <- utils::read.delim(regions_file, stringsAsFactors = FALSE)
-  stopifnot(all(c("Chromosome", "Start", "End") %in% names(regions)))
-
-  # Build region string for read_bam(region := ...) — comma-separated
-  # htslib format: "Y:start-end,Y:start-end,..."
-  region_strs <- sprintf("%s:%d-%d", regions$Chromosome,
-                         regions$Start, regions$End)
-  region_param <- paste(region_strs, collapse = ",")
+  regions <- .read_y_unique_regions_file(regions_file)
+  regions_file <- normalizePath(regions_file, winslash = "/", mustWork = TRUE)
 
   # Manage connection
   own_con <- is.null(con)
@@ -470,15 +465,41 @@ nipter_y_unique_ratio <- function(bam,
   exc_clause <- if (exclude_flags > 0L)
     sprintf("AND (flag & %d) = 0", exclude_flags) else ""
 
-  # Count reads in Y-unique regions (index-based region query)
-  sql_y_unique <- sprintf(
-    "SELECT COUNT(*)::INTEGER AS n
-     FROM read_bam('%s', region := '%s'%s)
-     WHERE mapq >= %d %s %s",
-    bam_escaped, region_param, ref_clause,
-    mapq, req_clause, exc_clause
-  )
-  y_unique_reads <- DBI::dbGetQuery(con, sql_y_unique)$n[1L]
+  header_chr <- tryCatch({
+    hdr <- Rduckhts::rduckhts_hts_header(con, bam)
+    hdr <- hdr[hdr$record_type == "SQ" & nzchar(hdr$key_values), , drop = FALSE]
+    if (!nrow(hdr)) {
+      character()
+    } else {
+      sub("^SN, LN, ([^,]+),.*$", "\\1", hdr$key_values)
+    }
+  }, error = function(e) character())
+  header_chr_norm <- .normalize_chr_name(header_chr, xy_to_numeric = FALSE)
+  regions$ChromosomeQuery <- vapply(regions$Chromosome, function(chr) {
+    chr_norm <- .normalize_chr_name(chr, xy_to_numeric = FALSE)
+    hit <- match(chr_norm, header_chr_norm)
+    if (is.na(hit)) chr else header_chr[[hit]]
+  }, character(1L))
+
+  # Count reads in Y-unique regions (index-based region query, one interval at
+  # a time so the function does not depend on multi-region parser support).
+  region_counts <- vapply(seq_len(nrow(regions)), function(i) {
+    region_param <- sprintf(
+      "%s:%d-%d",
+      regions$ChromosomeQuery[[i]],
+      as.integer(regions$Start[[i]]),
+      as.integer(regions$End[[i]])
+    )
+    sql_y_unique <- sprintf(
+      "SELECT COUNT(*)::INTEGER AS n
+       FROM read_bam('%s', region := '%s'%s)
+       WHERE mapq >= %d %s %s",
+      bam_escaped, region_param, ref_clause,
+      mapq, req_clause, exc_clause
+    )
+    DBI::dbGetQuery(con, sql_y_unique)$n[1L]
+  }, integer(1L))
+  y_unique_reads <- sum(region_counts)
 
   # Count total nuclear reads (chromosomes 1-22, X, Y — no region filter,
   # full scan with rname filtering)
@@ -503,7 +524,8 @@ nipter_y_unique_ratio <- function(bam,
     ratio               = ratio,
     y_unique_reads      = y_unique_reads,
     total_nuclear_reads = total_nuclear_reads,
-    regions             = regions
+    regions             = regions,
+    regions_file        = regions_file
   )
 }
 

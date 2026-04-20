@@ -241,7 +241,9 @@ nipter_regression <- function(sample,
       cv_type          = cv_type,
       predictors       = selected,
       shapiro_p_value  = shap_p,
-      control_z_scores = ctrl_z
+      control_z_scores = ctrl_z,
+      n_training_samples = length(train_idx),
+      n_stat_samples = length(ctrl_z)
     )
   }
 
@@ -445,7 +447,9 @@ nipter_regression <- function(sample,
       cv_type          = cv_type,
       predictors       = selected,
       shapiro_p_value  = shap_p,
-      control_z_scores = ctrl_z
+      control_z_scores = ctrl_z,
+      n_training_samples = length(train_idx),
+      n_stat_samples = length(ctrl_z)
     )
   }
 

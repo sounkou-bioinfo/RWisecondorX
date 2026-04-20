@@ -508,16 +508,22 @@ nipter_filter_control_group_qc <- function(control_group,
 
 .flag_control_group_outliers <- function(diagnostics,
                                          collapse_strands = TRUE,
-                                         max_aberrant_chromosomes = 2L) {
+                                         max_aberrant_chromosomes = 2L,
+                                         outlier_rule = c("any_aberrant_score", "bidirectional_or_multichromosome")) {
   stopifnot(is.list(diagnostics))
   stopifnot(is.logical(collapse_strands), length(collapse_strands) == 1L)
   stopifnot(is.numeric(max_aberrant_chromosomes),
             length(max_aberrant_chromosomes) == 1L,
             max_aberrant_chromosomes >= 0)
+  outlier_rule <- match.arg(outlier_rule)
 
   ab <- diagnostics$aberrant_scores
   if (is.null(ab) || !nrow(ab)) {
     return(character())
+  }
+
+  if (identical(outlier_rule, "any_aberrant_score")) {
+    return(unique(as.character(ab$sample_name)))
   }
 
   if (isTRUE(collapse_strands)) {
@@ -569,6 +575,12 @@ nipter_filter_control_group_qc <- function(control_group,
 #'   [nipter_diagnose_control_group()].
 #' @param max_aberrant_chromosomes Maximum number of distinct aberrant
 #'   chromosomes allowed before a sample is dropped. Default \code{2L}.
+#' @param outlier_rule Character scalar controlling how aberrant samples are
+#'   dropped. \code{"any_aberrant_score"} (default) removes any sample
+#'   appearing in \code{abberant_scores}, matching the upstream NIPTeR
+#'   vignette. \code{"bidirectional_or_multichromosome"} drops a sample only
+#'   when both strands of one chromosome are aberrant or when more than
+#'   \code{max_aberrant_chromosomes} distinct chromosomes are aberrant.
 #' @param min_controls Minimum allowed retained control count. The iteration
 #'   stops before dropping samples if doing so would leave fewer controls than
 #'   this threshold.
@@ -603,6 +615,7 @@ nipter_prune_control_group_outliers <- function(control_group,
                                                 collapse_strands = FALSE,
                                                 z_cutoff = 3,
                                                 max_aberrant_chromosomes = 2L,
+                                                outlier_rule = c("any_aberrant_score", "bidirectional_or_multichromosome"),
                                                 min_controls = 10L,
                                                 max_iterations = 100L,
                                                 verbose = FALSE) {
@@ -614,6 +627,7 @@ nipter_prune_control_group_outliers <- function(control_group,
   stopifnot(is.numeric(max_aberrant_chromosomes),
             length(max_aberrant_chromosomes) == 1L,
             max_aberrant_chromosomes >= 0)
+  outlier_rule <- match.arg(outlier_rule)
   stopifnot(is.numeric(min_controls), length(min_controls) == 1L, min_controls >= 2L)
   stopifnot(is.numeric(max_iterations), length(max_iterations) == 1L,
             max_iterations >= 1L)
@@ -642,15 +656,19 @@ nipter_prune_control_group_outliers <- function(control_group,
       collapse_strands = collapse_strands,
       z_cutoff = z_cutoff
     )
-    flagged <- .flag_control_group_outliers(
+    flagged_chi <- .flag_control_group_outliers(
       diag,
       collapse_strands = collapse_strands,
-      max_aberrant_chromosomes = max_aberrant_chromosomes
+      max_aberrant_chromosomes = max_aberrant_chromosomes,
+      outlier_rule = outlier_rule
     )
+    flagged <- flagged_chi
 
     iter_log[[iter]] <- data.frame(
       iteration = iter,
       n_controls = n_controls(current_raw),
+      n_flagged_post_chi = length(flagged_chi),
+      flagged_samples_post_chi = paste(flagged_chi, collapse = ";"),
       n_flagged = length(flagged),
       flagged_samples = paste(flagged, collapse = ";"),
       stringsAsFactors = FALSE
@@ -659,8 +677,8 @@ nipter_prune_control_group_outliers <- function(control_group,
     if (isTRUE(verbose)) {
       message(
         sprintf(
-          "nipter_prune_control_group_outliers iter %d: %d controls, %d flagged",
-          iter, n_controls(current_raw), length(flagged)
+          "nipter_prune_control_group_outliers iter %d: %d controls, %d flagged post-chi",
+          iter, n_controls(current_raw), length(flagged_chi)
         )
       )
     }

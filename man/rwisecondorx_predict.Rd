@@ -57,8 +57,8 @@ regions to mask.}
 \item{seed}{Optional integer; RNG seed for CBS reproducibility.}
 
 \item{parallel}{Logical; use \code{ParDNAcopy::parSegment()} for CBS when
-available. Default \code{TRUE}. Falls back to \code{DNAcopy::segment()} with a
-message if ParDNAcopy is not installed.}
+\code{TRUE} (default). Requires the \code{ParDNAcopy} package. Set
+\code{parallel = FALSE} to use \code{DNAcopy::segment()} explicitly.}
 
 \item{cpus}{Integer; number of threads for parallel CBS (\code{parSegment}) and
 any other OpenMP-accelerated steps. Default \code{4L}.}

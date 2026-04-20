@@ -201,28 +201,35 @@ scale_sample <- function(sample, from_size, to_size) {
   if (!is.null(yfrac)) {
     cutoff <- yfrac
   } else {
-    fit <- .mclust_gender_fit(y_fractions)
+    fit <- tryCatch(
+      .mclust_gender_fit(y_fractions),
+      error = function(e) e
+    )
 
-    if (is.null(fit)) {
-      # Mclust returned NULL (rare edge case). Use the gap between the
-      # smallest nonzero fraction and zero as the cutoff.
-      nonzero <- y_fractions[y_fractions > 0]
-      cutoff <- if (length(nonzero) > 0L) min(nonzero) / 2 else 0.001
-      warning("GMM gender model did not converge; using fallback cutoff ", cutoff,
-              ". Verify gender assignments before trusting gonosomal CNV calls.",
-              call. = FALSE)
-    } else {
-      # Find local minimum of the density on a fine grid [0, 0.02]
-      gmm_x <- seq(0, 0.02, length.out = 5000)
-      gmm_y <- .gmm_density(fit, gmm_x)
-
-      local_mins <- which(diff(sign(diff(gmm_y))) == 2) + 1L
-      if (length(local_mins) == 0L) {
-        cutoff <- mean(fit$parameters$mean)
-      } else {
-        cutoff <- gmm_x[local_mins[1]]
-      }
+    if (inherits(fit, "error") || is.null(fit)) {
+      stop(
+        "Failed to train the RWisecondorX gender model from Y fractions. ",
+        "Refuse to invent a fallback cutoff. ",
+        "Provide 'yfrac' explicitly or rebuild the reference with a cohort that contains separable male/female Y-fraction signal.",
+        if (inherits(fit, "error")) paste0(" Underlying error: ", conditionMessage(fit)) else "",
+        call. = FALSE
+      )
     }
+
+    # Find local minimum of the density on a fine grid [0, 0.02]
+    gmm_x <- seq(0, 0.02, length.out = 5000)
+    gmm_y <- .gmm_density(fit, gmm_x)
+
+    local_mins <- which(diff(sign(diff(gmm_y))) == 2) + 1L
+    if (length(local_mins) == 0L) {
+      stop(
+        "RWisecondorX gender-model density has no separating local minimum. ",
+        "Refuse to substitute an arbitrary cutoff. ",
+        "Provide 'yfrac' explicitly or rebuild the reference with a cohort that contains clearer male/female separation.",
+        call. = FALSE
+      )
+    }
+    cutoff <- gmm_x[local_mins[1]]
   }
 
   genders <- ifelse(y_fractions > cutoff, "M", "F")

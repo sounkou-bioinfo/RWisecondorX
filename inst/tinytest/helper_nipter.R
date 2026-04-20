@@ -75,10 +75,15 @@
 
   sex_mat <- matrix(0L, nrow = 2L, ncol = n_bins,
                     dimnames = list(c("X", "Y"), col_names))
+  chrom_lengths <- setNames(
+    rep.int(as.integer(50000L) * n_bins, 24L),
+    c(as.character(1:22), "X", "Y")
+  )
 
   CombinedStrandsSample(
     sample_name = name,
     binsize = as.integer(50000L),
+    chrom_lengths = chrom_lengths,
     auto_matrix = auto_mat,
     sex_matrix_ = sex_mat
   )
@@ -131,10 +136,15 @@
                     dimnames = list(c("XF", "YF"), col_names))
   rev_sex <- matrix(0L, nrow = 2L, ncol = n_bins,
                     dimnames = list(c("XR", "YR"), col_names))
+  chrom_lengths <- setNames(
+    rep.int(as.integer(50000L) * n_bins, 24L),
+    c(as.character(1:22), "X", "Y")
+  )
 
   SeparatedStrandsSample(
     sample_name = name,
     binsize = as.integer(50000L),
+    chrom_lengths = chrom_lengths,
     auto_fwd = fwd_auto,
     auto_rev = rev_auto,
     sex_fwd = fwd_sex,

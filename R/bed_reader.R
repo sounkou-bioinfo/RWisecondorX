@@ -366,6 +366,19 @@ bed_to_nipter_sample <- function(bed,
   result
 }
 
+.bed_rows_chrom_lengths <- function(rows) {
+  if (!nrow(rows)) {
+    return(NULL)
+  }
+  chrom <- .normalize_chr_name(rows$chrom, xy_to_numeric = FALSE)
+  keep <- chrom %in% c(as.character(1:22), "X", "Y")
+  if (!any(keep)) {
+    return(NULL)
+  }
+  ends <- tapply(as.integer(rows$end_pos[keep]), chrom[keep], max)
+  .normalize_nipt_chrom_lengths(ends)
+}
+
 
 # Core: build a CombinedStrandsSample from a pre-fetched data frame.
 # rows must have columns: chrom, start_pos, end_pos, count, corrected_count.
@@ -385,6 +398,7 @@ bed_to_nipter_sample <- function(bed,
   auto_keys  <- as.character(1:22)
   sex_labels <- c("X", "Y")
   sex_keys   <- c("23", "24")
+  chrom_lengths <- .bed_rows_chrom_lengths(rows)
 
   chrom   <- .normalize_chr_name(rows$chrom)
   bin_idx <- as.integer(rows$start_pos / binsize)
@@ -465,6 +479,7 @@ bed_to_nipter_sample <- function(bed,
     CombinedStrandsSample(
       sample_name = name,
       binsize     = binsize,
+      chrom_lengths = chrom_lengths,
       auto_matrix = if (use_corr_auto) corr_auto else auto_mat,
       sex_matrix_ = if (use_corr_sex) corr_sex else sex_mat,
       correction  = .bed_correction_record(use_corr_auto, use_corr_sex)
@@ -473,6 +488,7 @@ bed_to_nipter_sample <- function(bed,
     CombinedStrandsSample(
       sample_name = name,
       binsize     = binsize,
+      chrom_lengths = chrom_lengths,
       auto_matrix = auto_mat,
       sex_matrix_ = sex_mat
     )
@@ -496,6 +512,7 @@ bed_to_nipter_sample <- function(bed,
 
   auto_keys <- as.character(1:22)
   sex_keys  <- c("23", "24")
+  chrom_lengths <- .bed_rows_chrom_lengths(rows)
 
   chrom   <- .normalize_chr_name(rows$chrom)
   bin_idx <- as.integer(rows$start_pos / binsize)
@@ -595,6 +612,7 @@ bed_to_nipter_sample <- function(bed,
     SeparatedStrandsSample(
       sample_name = name,
       binsize     = binsize,
+      chrom_lengths = chrom_lengths,
       auto_fwd    = if (use_corr_auto) corr_fwd_auto else fwd_auto,
       auto_rev    = if (use_corr_auto) corr_rev_auto else rev_auto,
       sex_fwd     = if (use_corr_sex) corr_fwd_sex else fwd_sex,
@@ -605,6 +623,7 @@ bed_to_nipter_sample <- function(bed,
     SeparatedStrandsSample(
       sample_name = name,
       binsize     = binsize,
+      chrom_lengths = chrom_lengths,
       auto_fwd    = fwd_auto,
       auto_rev    = rev_auto,
       sex_fwd     = fwd_sex,

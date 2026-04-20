@@ -135,7 +135,7 @@ library(optparse)
   )
   value_col <- .match_col(
     df,
-    c("y_unique_ratio", "YUniqueRatio", "YUniqueRatioFiltered", "ratio", "Ratio"),
+    c("y_unique_ratio_post"),
     "Y-unique ratio"
   )
   vals <- suppressWarnings(as.numeric(df[[value_col]]))
@@ -290,6 +290,9 @@ library(optparse)
   if (!is.null(qc$sex_summary)) {
     .write_tsv(qc$sex_summary, paste0(prefix, ".sex_summary.tsv"))
   }
+  if (!is.null(qc$sex_model_summary)) {
+    .write_tsv(qc$sex_model_summary, paste0(prefix, ".sex_model_summary.tsv"))
+  }
   if (!is.null(qc$bin_summary)) {
     .write_tsv(qc$bin_summary, paste0(prefix, ".bin_summary.tsv"))
   }
@@ -363,6 +366,10 @@ option_list <- list(
               help = "Optional output prefix for NIPTeR control-group QC files in nipter mode. Defaults to <out stem>_qc."),
   make_option("--include-bin-qc", action = "store_true", default = FALSE,
               help = "Include per-bin chi/CV QC output for NIPTeR control groups [default: %default]"),
+  make_option("--write-qc-plots", action = "store_true", default = FALSE,
+              help = "Write PNG plots for the NIPTeR QC bundle and sex-model reference spaces [default: %default]"),
+  make_option("--qc-plot-dpi", type = "integer", default = 150L,
+              help = "PNG DPI for --write-qc-plots in nipter mode [default: %default]"),
   make_option("--description", type = "character", default = "General control group",
               help = "Description for the NIPTeR control group [default: %default]"),
   make_option("--include-samples", type = "character", default = NULL,
@@ -382,7 +389,7 @@ option_list <- list(
   make_option("--sample-sex-source", type = "character", default = NULL,
               help = "Optional provenance string for sample sex annotations in nipter mode."),
   make_option("--y-unique-tsv", type = "character", default = NULL,
-              help = "Optional TSV/CSV with per-sample Y-unique ratios for nipter mode. Must contain sample and Y-unique ratio columns."),
+              help = "Optional TSV/CSV with per-sample Y-unique ratios for nipter mode. Must contain sample_name/sample and y_unique_ratio_post columns."),
   make_option("--sample-qc-tsv", type = "character", default = NULL,
               help = "Optional TSV/CSV with per-sample QC metrics for nipter mode. Used for hard filtering by read depth and/or GC."),
   make_option("--sample-qc-sample-col", type = "character", default = NULL,
@@ -407,6 +414,8 @@ option_list <- list(
               help = "nipter mode: chi cutoff for iterative outlier pruning [default: %default]"),
   make_option("--prune-z-cutoff", type = "double", default = 3,
               help = "nipter mode: absolute z-score cutoff for iterative outlier pruning [default: %default]"),
+  make_option("--prune-outlier-rule", type = "character", default = "any_aberrant_score",
+              help = "nipter mode: outlier pruning rule: 'any_aberrant_score' or 'bidirectional_or_multichromosome' [default: %default]"),
   make_option("--prune-max-aberrant-chromosomes", type = "integer", default = 2L,
               help = "nipter mode: max distinct aberrant chromosomes allowed before dropping a control [default: %default]"),
   make_option("--prune-min-controls", type = "integer", default = 10L,
@@ -663,6 +672,7 @@ if (mode == "rwisecondorx") {
       chi_cutoff = opts$`prune-chi-cutoff`,
       collapse_strands = isTRUE(opts$`prune-collapse-strands`),
       z_cutoff = opts$`prune-z-cutoff`,
+      outlier_rule = opts$`prune-outlier-rule`,
       max_aberrant_chromosomes = as.integer(opts$`prune-max-aberrant-chromosomes`),
       min_controls = as.integer(opts$`prune-min-controls`),
       max_iterations = as.integer(opts$`prune-max-iterations`),
@@ -704,9 +714,11 @@ if (mode == "rwisecondorx") {
       source_type = if (has_bed_dir) "bed_dir" else "bed_list",
       autosomal_source = autosomal_source,
       sex_counts = sex_counts,
-      prune_outliers = isTRUE(opts$`prune-outliers`)
+      prune_outliers = isTRUE(opts$`prune-outliers`),
+      prune_outlier_rule = opts$`prune-outlier-rule`
     )
   )
+  ctrl <- ref_model$control_group
 
   sex_outliers <- character()
   if (isTRUE(opts$`drop-ref-sex-outliers`)) {
@@ -739,12 +751,17 @@ if (mode == "rwisecondorx") {
           autosomal_source = autosomal_source,
           sex_counts = sex_counts,
           prune_outliers = isTRUE(opts$`prune-outliers`),
+          prune_outlier_rule = opts$`prune-outlier-rule`,
           dropped_reference_sex_outliers = sex_outliers
         )
       )
+      ctrl <- ref_model$control_group
     }
   }
 
+  ref_model <- nipter_build_gaunosome_models(ref_model)
+  .ensure_parent_dir(opts$out)
+  saveRDS(ctrl, opts$out)
   .ensure_parent_dir(model_rds)
   saveRDS(ref_model, model_rds)
   qc_prefix <- if (is.null(opts$`control-qc-prefix`)) {
@@ -756,6 +773,11 @@ if (mode == "rwisecondorx") {
   qc <- nipter_control_group_qc(
     ctrl,
     sample_sex = if (is.null(sample_sex)) reference_sex else sample_sex[control_names(ctrl)],
+    reference_model = ref_model,
+    z_cutoff = opts$`prune-z-cutoff`,
+    collapse_strands = isTRUE(opts$`prune-collapse-strands`),
+    max_aberrant_chromosomes = as.integer(opts$`prune-max-aberrant-chromosomes`),
+    outlier_rule = opts$`prune-outlier-rule`,
     include_bins = isTRUE(opts$`include-bin-qc`)
   )
   qc$settings <- c(
@@ -775,6 +797,14 @@ if (mode == "rwisecondorx") {
     )
   )
   .write_nipter_qc_bundle(qc, qc_prefix)
+  if (isTRUE(opts$`write-qc-plots`)) {
+    write_nipter_reference_plots(
+      qc = qc,
+      reference = ref_model,
+      outprefix = qc_prefix,
+      dpi = as.integer(opts$`qc-plot-dpi`)
+    )
+  }
 
   retained_out <- if (is.null(opts$`retained-samples-out`)) {
     paste0(qc_prefix, ".retained_samples.txt")

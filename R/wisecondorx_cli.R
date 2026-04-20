@@ -271,6 +271,7 @@ wisecondorx_predict <- function(npz,
   stopifnot(is.character(ref), length(ref) == 1L, file.exists(ref))
   stopifnot(is.character(output_prefix), length(output_prefix) == 1L, nzchar(output_prefix))
 
+  .validate_wisecondorx_predict_threshold(ref, minrefbins)
   .ensure_wisecondorx_env(env_name)
 
   args <- .wisecondorx_predict_args(
@@ -382,6 +383,121 @@ wisecondorx_predict <- function(npz,
   force(expr)
 }
 
+.bundled_wisecondorx_cbs_script <- function() {
+  path <- system.file("extdata", "wisecondorx_CBS.R", package = "RWisecondorX")
+  if (is.character(path) && length(path) == 1L && nzchar(path) && file.exists(path)) {
+    return(normalizePath(path, winslash = "/", mustWork = TRUE))
+  }
+
+  ns_path <- tryCatch(
+    getNamespaceInfo(asNamespace("RWisecondorX"), "path"),
+    error = function(e) NULL
+  )
+  if (is.character(ns_path) && length(ns_path) == 1L && nzchar(ns_path)) {
+    cand <- file.path(ns_path, "inst", "extdata", "wisecondorx_CBS.R")
+    if (file.exists(cand)) {
+      return(normalizePath(cand, winslash = "/", mustWork = TRUE))
+    }
+  }
+
+  stop(
+    "Bundled WisecondorX CBS.R helper is missing from the RWisecondorX package.",
+    call. = FALSE
+  )
+}
+
+.wisecondorx_site_package_dir <- function(env_name) {
+  env_dir <- condathis::get_env_dir(env_name)
+  hits <- Sys.glob(file.path(
+    env_dir,
+    "lib",
+    "python*",
+    "site-packages",
+    "wisecondorx",
+    "__init__.py"
+  ))
+  if (!length(hits)) {
+    stop(
+      "Could not locate the installed wisecondorx Python package under conda env '",
+      env_name, "'.",
+      call. = FALSE
+    )
+  }
+  normalizePath(dirname(hits[[1L]]), winslash = "/", mustWork = TRUE)
+}
+
+.prepare_wisecondorx_predict_shadow <- function(env_name) {
+  key <- paste0("predict_shadow__", env_name)
+  cached <- get0(key, envir = .wisecondorx_env_state, inherits = FALSE)
+  if (is.character(cached) && length(cached) == 1L &&
+      nzchar(cached) && dir.exists(file.path(cached, "wisecondorx"))) {
+    return(cached)
+  }
+
+  pkg_dir <- .wisecondorx_site_package_dir(env_name)
+  cbs_src <- .bundled_wisecondorx_cbs_script()
+  shadow_root <- file.path(tempdir(), sprintf("rwisecondorx-wcx-shadow-%s", env_name))
+  shadow_pkg_root <- file.path(shadow_root, "wisecondorx")
+
+  if (dir.exists(shadow_root)) {
+    unlink(shadow_root, recursive = TRUE, force = TRUE)
+  }
+  dir.create(shadow_root, recursive = TRUE, showWarnings = FALSE)
+
+  ok <- file.copy(pkg_dir, shadow_root, recursive = TRUE)
+  if (!isTRUE(ok) || !dir.exists(shadow_pkg_root)) {
+    stop(
+      "Failed to create temporary shadow copy of the wisecondorx Python package.",
+      call. = FALSE
+    )
+  }
+
+  include_dir <- file.path(shadow_pkg_root, "include")
+  dir.create(include_dir, recursive = TRUE, showWarnings = FALSE)
+  ok <- file.copy(cbs_src, file.path(include_dir, "CBS.R"), overwrite = TRUE)
+  if (!isTRUE(ok)) {
+    stop("Failed to stage bundled CBS.R into the temporary wisecondorx shadow package.",
+         call. = FALSE)
+  }
+
+  assign(key, shadow_root, envir = .wisecondorx_env_state)
+  shadow_root
+}
+
+.with_wisecondorx_predict_patch <- function(expr, env_name) {
+  shadow_root <- .prepare_wisecondorx_predict_shadow(env_name)
+  mpl_dir <- file.path(tempdir(), sprintf("rwisecondorx-mpl-%s", env_name))
+  dir.create(mpl_dir, recursive = TRUE, showWarnings = FALSE)
+
+  old_pythonpath <- Sys.getenv("PYTHONPATH", unset = NA_character_)
+  old_mplconfig <- Sys.getenv("MPLCONFIGDIR", unset = NA_character_)
+  on.exit(
+    {
+      if (is.na(old_pythonpath)) {
+        Sys.unsetenv("PYTHONPATH")
+      } else {
+        Sys.setenv(PYTHONPATH = old_pythonpath)
+      }
+      if (is.na(old_mplconfig)) {
+        Sys.unsetenv("MPLCONFIGDIR")
+      } else {
+        Sys.setenv(MPLCONFIGDIR = old_mplconfig)
+      }
+    },
+    add = TRUE
+  )
+
+  pythonpath <- shadow_root
+  if (!is.na(old_pythonpath) && nzchar(old_pythonpath)) {
+    pythonpath <- paste(shadow_root, old_pythonpath, sep = .Platform$path.sep)
+  }
+  Sys.setenv(
+    PYTHONPATH = pythonpath,
+    MPLCONFIGDIR = mpl_dir
+  )
+  force(expr)
+}
+
 .ensure_wisecondorx_env <- function(env_name) {
   if (isTRUE(get0(env_name, envir = .wisecondorx_env_state, inherits = FALSE))) {
     return(invisible(NULL))
@@ -411,12 +527,20 @@ wisecondorx_predict <- function(npz,
 }
 
 .run_wisecondorx_cli <- function(args, env_name) {
-  .with_condathis_cache(
-    do.call(
-      condathis::run,
-      c(list("wisecondorx"), as.list(args), list(env_name = env_name))
+  runner <- function() {
+    .with_condathis_cache(
+      do.call(
+        condathis::run,
+        c(list("wisecondorx"), as.list(args), list(env_name = env_name))
+      )
     )
-  )
+  }
+
+  if (length(args) >= 1L && identical(args[[1L]], "predict")) {
+    .with_wisecondorx_predict_patch(runner(), env_name = env_name)
+  } else {
+    runner()
+  }
 }
 
 .wisecondorx_convert_args <- function(bam,
@@ -518,6 +642,97 @@ wisecondorx_predict <- function(npz,
   args <- .append_flag(args, "--cairo", isTRUE(cairo))
   args <- .append_optional_scalar(args, "--seed", seed)
   c(args, extra_args)
+}
+
+.validate_wisecondorx_predict_threshold <- function(ref, minrefbins) {
+  stopifnot(is.numeric(minrefbins), length(minrefbins) == 1L, minrefbins >= 1L)
+
+  refsize <- .wisecondorx_npz_refsize(ref)
+  if (is.na(refsize) || minrefbins <= refsize) {
+    return(invisible(NULL))
+  }
+
+  stop(
+    sprintf(
+      "Invalid WisecondorX predict settings: minrefbins=%d exceeds the reference refsize=%d. ",
+      as.integer(minrefbins),
+      as.integer(refsize)
+    ),
+    "No target bin can retain enough reference bins under this combination. ",
+    "Lower 'minrefbins' or rebuild the reference with a larger 'refsize'.",
+    call. = FALSE
+  )
+}
+
+.wisecondorx_npz_refsize <- function(ref) {
+  stopifnot(is.character(ref), length(ref) == 1L, file.exists(ref))
+
+  entries <- utils::unzip(ref, list = TRUE)
+  if (!nrow(entries)) {
+    return(NA_integer_)
+  }
+
+  hit <- entries$Name[grepl("^indexes(\\.[FM])?\\.npy$", basename(entries$Name))]
+  if (!length(hit)) {
+    return(NA_integer_)
+  }
+
+  dims <- vapply(hit, function(name) {
+    con <- unz(ref, name, open = "rb")
+    on.exit(close(con), add = TRUE)
+    shape <- .npy_shape(con)
+    if (!length(shape)) {
+      return(NA_integer_)
+    }
+    if (length(shape) == 1L) {
+      return(as.integer(shape[[1L]]))
+    }
+    as.integer(shape[[2L]])
+  }, integer(1L))
+
+  dims <- dims[is.finite(dims) & dims > 0L]
+  if (!length(dims)) {
+    return(NA_integer_)
+  }
+  max(dims)
+}
+
+.npy_shape <- function(con) {
+  magic <- readBin(con, what = "raw", n = 6L)
+  if (length(magic) != 6L ||
+      !identical(magic[[1L]], as.raw(0x93)) ||
+      !identical(rawToChar(magic[2:6]), "NUMPY")) {
+    return(integer())
+  }
+
+  ver <- readBin(con, what = "integer", size = 1L, n = 2L,
+                 signed = FALSE, endian = "little")
+  if (length(ver) != 2L) {
+    return(integer())
+  }
+  major <- ver[[1L]]
+  header_len_size <- if (major <= 1L) 2L else 4L
+  header_len <- readBin(con, what = "integer", size = header_len_size, n = 1L,
+                        signed = FALSE, endian = "little")
+  if (!length(header_len) || !is.finite(header_len) || header_len <= 0L) {
+    return(integer())
+  }
+
+  header <- rawToChar(readBin(con, what = "raw", n = header_len), multiple = FALSE)
+  m <- regexec("shape[^\\(]*\\(([^\\)]*)\\)", header)
+  reg <- regmatches(header, m)[[1L]]
+  if (length(reg) < 2L) {
+    return(integer())
+  }
+
+  parts <- strsplit(reg[[2L]], ",", fixed = TRUE)[[1L]]
+  parts <- trimws(parts)
+  parts <- parts[nzchar(parts)]
+  if (!length(parts)) {
+    return(integer())
+  }
+
+  suppressWarnings(as.integer(parts))
 }
 
 .append_value <- function(args, flag, value) {

@@ -147,6 +147,82 @@ if (nzchar(.helper_nipter)) {
   )
 }
 
+.check_sample_metrics_metadata_roundtrip <- function() {
+  sample <- .sim_nipter_sample(
+    c("1" = 40L, "2" = 20L),
+    name = "metric_sample",
+    n_bins = 4L
+  )
+
+  regions_tsv <- tempfile(fileext = ".tsv")
+  bed_gz <- tempfile(fileext = ".bed.gz")
+  on.exit(unlink(c(regions_tsv, bed_gz, paste0(bed_gz, ".tbi"))), add = TRUE)
+
+  regions <- data.frame(
+    Chromosome = c("Y", "Y"),
+    Start = c(100L, 300L),
+    End = c(200L, 400L),
+    GeneName = c("GENE1", "GENE2"),
+    stringsAsFactors = FALSE
+  )
+  utils::write.table(
+    regions,
+    file = regions_tsv,
+    sep = "\t",
+    row.names = FALSE,
+    col.names = TRUE,
+    quote = FALSE
+  )
+
+  seqff <- RWisecondorX:::.seqff_metric_record(
+    pre = c(SeqFF = 0.07, Enet = 0.06, WRSC = 0.08),
+    post = c(SeqFF = 0.06, Enet = 0.05, WRSC = 0.07),
+    source = "computed"
+  )
+  y_unique <- RWisecondorX:::.y_unique_metric_record(
+    pre = list(ratio = 0.001, y_unique_reads = 10L, total_nuclear_reads = 10000L),
+    post = list(ratio = 0.0008, y_unique_reads = 8L, total_nuclear_reads = 10000L),
+    regions_file = regions_tsv,
+    source = "computed"
+  )
+
+  .with_duckhts_con(function(con) {
+    nipter_sample_to_bed(
+      sample = sample,
+      bed = bed_gz,
+      binsize = 50000L,
+      con = con,
+      metadata = RWisecondorX:::.sample_metrics_tabix_metadata(
+        seqff = seqff,
+        y_unique = y_unique,
+        filters_pre = list(mapq = 0L, require_flags = 0L, exclude_flags = 0L),
+        filters_post = list(mapq = 40L, require_flags = 0L, exclude_flags = 1024L)
+      )
+    )
+  })
+
+  meta <- .with_duckhts_con(function(con) tabix_metadata(bed_gz, con = con))
+  expect_identical(meta[["ff_seqff_pre"]], "0.07",
+                   info = "sample metrics metadata includes nonfiltered SeqFF")
+  expect_identical(meta[["ff_seqff_post"]], "0.06",
+                   info = "sample metrics metadata includes filtered SeqFF")
+  expect_identical(meta[["y_unique_ratio_pre"]], "0.001",
+                   info = "sample metrics metadata includes nonfiltered Y-unique ratio")
+  expect_identical(meta[["y_unique_ratio_post"]], "8e-04",
+                   info = "sample metrics metadata includes filtered Y-unique ratio")
+  expect_identical(meta[["metrics_post_exclude_flags"]], "1024",
+                   info = "sample metrics metadata includes filtered flag provenance")
+  expect_true(
+    identical(meta[["y_unique_genes"]], "GENE1;GENE2"),
+    info = "sample metrics metadata includes Y-unique gene labels"
+  )
+  expect_true(
+    grepl("Y:100-200\\(GENE1\\);Y:300-400\\(GENE2\\)", meta[["y_unique_regions"]]),
+    info = "sample metrics metadata includes explicit Y-unique intervals"
+  )
+}
+
 .check_generic_metadata_roundtrip()
 .check_nipter_metadata_roundtrip()
 .check_bam_convert_native_stats_metadata()
+.check_sample_metrics_metadata_roundtrip()

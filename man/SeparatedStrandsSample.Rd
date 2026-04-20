@@ -7,6 +7,7 @@
 SeparatedStrandsSample(
   sample_name = character(0),
   binsize = integer(0),
+  chrom_lengths = NULL,
   correction = NIPTCorrectionRecord(),
   auto_fwd = NULL,
   auto_rev = NULL,

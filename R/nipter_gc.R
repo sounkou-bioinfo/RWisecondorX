@@ -302,6 +302,18 @@ nipter_gc_correct <- function(object,
 }
 
 
+.clamp_nonnegative_read_matrices <- function(mats) {
+  lapply(mats, function(mat) {
+    out <- mat
+    bad <- !is.finite(out) | out < 0
+    if (any(bad)) {
+      out[bad] <- 0
+    }
+    out
+  })
+}
+
+
 # LOESS GC correction for a single NIPTeRSample.
 .gc_correct_loess <- function(sample, gc_table, span, include_sex) {
   auto_list <- .sample_autosomal_reads(sample)
@@ -329,9 +341,14 @@ nipter_gc_correct <- function(object,
   # all-N/empty bins, but true 0.0 GC bins should still be excluded here.
   valid <- !is.na(gc_auto) & gc_auto > 0 & reads_flat > 0
   if (sum(valid) < 10L) {
-    warning("Too few valid bins for LOESS GC correction; returning uncorrected.",
-            call. = FALSE)
-    return(sample)
+    stop(
+      "Too few valid autosomal bins for LOESS GC correction in sample '",
+      .sample_name(sample),
+      "' (valid bins = ",
+      sum(valid),
+      "). Refuse to return an uncorrected sample.",
+      call. = FALSE
+    )
   }
 
   median_reads <- stats::median(reads_flat[valid])
@@ -340,9 +357,8 @@ nipter_gc_correct <- function(object,
   fitted_vals <- stats::predict(fit)
 
   # Correction factor: median / fitted (so bins normalise to the median).
-  # Do not clamp negative LOESS fits to epsilon: that turns a modest negative
-  # prediction into an enormous positive multiplier. Keep upstream semantics
-  # and only replace non-finite or exact-zero fitted values.
+  # Keep the upstream fit-selection semantics (gc > 0 and count > 0), but do
+  # not allow non-finite or exact-zero fitted values to propagate.
   correction <- rep(1.0, length(reads_flat))
   safe_fitted <- fitted_vals
   bad_fitted <- !is.finite(safe_fitted) | safe_fitted == 0
@@ -359,6 +375,7 @@ nipter_gc_correct <- function(object,
     }
     corrected
   })
+  corrected_auto <- .clamp_nonnegative_read_matrices(corrected_auto)
 
   sample <- .sample_with_reads(sample, autosomal = corrected_auto)
   sample <- .sample_append_correction_step(sample, "autosomal", .nipt_gc_correction_step())
@@ -403,6 +420,7 @@ nipter_gc_correct <- function(object,
       }
       corrected
     })
+    corrected_sex <- .clamp_nonnegative_read_matrices(corrected_sex)
 
     sample <- .sample_with_reads(sample, sex = corrected_sex)
     sample <- .sample_append_correction_step(sample, "sex", .nipt_gc_correction_step())
@@ -455,8 +473,12 @@ nipter_gc_correct <- function(object,
   total_reads   <- sum(reads_flat)
   total_nonzero <- sum(reads_flat > 0)
   if (total_nonzero == 0L) {
-    warning("No non-zero autosomal bins; returning uncorrected.", call. = FALSE)
-    return(sample)
+    stop(
+      "No non-zero autosomal bins remain for GC correction in sample '",
+      .sample_name(sample),
+      "'. Refuse to return an uncorrected sample.",
+      call. = FALSE
+    )
   }
   global_mean <- total_reads / total_nonzero
 
@@ -480,6 +502,7 @@ nipter_gc_correct <- function(object,
     }
     corrected
   })
+  corrected_auto <- .clamp_nonnegative_read_matrices(corrected_auto)
 
   sample <- .sample_with_reads(sample, autosomal = corrected_auto)
   sample <- .sample_append_correction_step(sample, "autosomal", .nipt_gc_correction_step())
@@ -508,6 +531,7 @@ nipter_gc_correct <- function(object,
       }
       corrected
     })
+    corrected_sex <- .clamp_nonnegative_read_matrices(corrected_sex)
 
     sample <- .sample_with_reads(sample, sex = corrected_sex)
     sample <- .sample_append_correction_step(sample, "sex", .nipt_gc_correction_step())

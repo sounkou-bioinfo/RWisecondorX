@@ -94,23 +94,34 @@ nipter_bin_bam <- function(bam,
   require_flags <- as.integer(require_flags)
   exclude_flags <- as.integer(exclude_flags)
 
-  bins <- bam_convert(bam,
-                      binsize          = binsize,
-                      mapq             = mapq,
-                      require_flags    = require_flags,
-                      exclude_flags    = exclude_flags,
-                      rmdup            = rmdup,
-                      separate_strands = separate_strands,
-                      con              = con,
-                      reference        = reference)
+  own_con <- is.null(con)
+  if (own_con) {
+    drv <- duckdb::duckdb(config = list(allow_unsigned_extensions = "true"))
+    con <- DBI::dbConnect(drv)
+    Rduckhts::rduckhts_load(con)
+    on.exit(DBI::dbDisconnect(con, shutdown = TRUE), add = TRUE)
+  }
+
+  rows <- .bam_bin_count_rows(
+    con = con,
+    bam = bam,
+    binsize = binsize,
+    mapq = mapq,
+    require_flags = require_flags,
+    exclude_flags = exclude_flags,
+    rmdup = rmdup,
+    reference = reference
+  )
+  chr_lengths <- .bam_chr_lengths(con, bam)
 
   name <- sub("\\.cram$|\\.bam$", "", basename(bam), ignore.case = TRUE)
-
-  if (isTRUE(separate_strands)) {
-    .stranded_bins_to_nipter_sample(bins$fwd, bins$rev, binsize, name)
-  } else {
-    .bins_to_nipter_sample(bins, binsize, name)
-  }
+  .nipter_rows_to_sample(
+    rows = rows,
+    chr_lengths = chr_lengths,
+    binsize = binsize,
+    name = name,
+    separate_strands = separate_strands
+  )
 }
 
 
@@ -294,21 +305,38 @@ nipter_bin_bam_bed <- function(bam,
     on.exit(DBI::dbDisconnect(con, shutdown = TRUE), add = TRUE)
   }
 
-  sample <- nipter_bin_bam(bam,
-                            binsize          = binsize,
-                            mapq             = mapq,
-                            require_flags    = require_flags,
-                            exclude_flags    = exclude_flags,
-                            rmdup            = match.arg(rmdup),
-                            separate_strands = separate_strands,
-                            con              = con,
-                            reference        = reference)
+  rmdup <- match.arg(rmdup)
+  needs_native_stats <- !is.null(metadata)
+  rows <- .bam_bin_count_rows(
+    con = con,
+    bam = bam,
+    binsize = as.integer(binsize),
+    mapq = as.integer(mapq),
+    require_flags = as.integer(require_flags),
+    exclude_flags = as.integer(exclude_flags),
+    rmdup = rmdup,
+    reference = reference,
+    stats = if (needs_native_stats) "gc,mq" else NULL,
+    include_unmapped = isTRUE(needs_native_stats)
+  )
+  chr_lengths <- .bam_chr_lengths(con, bam)
+  name <- sub("\\.cram$|\\.bam$", "", basename(bam), ignore.case = TRUE)
+  sample <- .nipter_rows_to_sample(
+    rows = rows,
+    chr_lengths = chr_lengths,
+    binsize = as.integer(binsize),
+    name = name,
+    separate_strands = separate_strands
+  )
 
   nipter_sample_to_bed(sample, bed,
                         binsize   = binsize,
                         con       = con,
                         index     = index,
-                        metadata  = metadata)
+                        metadata  = .merge_tabix_metadata(
+                          metadata,
+                          if (needs_native_stats) .bam_bin_stats_metadata(rows) else NULL
+                        ))
 }
 
 
@@ -320,7 +348,7 @@ nipter_bin_bam_bed <- function(bam,
 # NIPTeRSample stores reads as matrices: rows = chromosomes, cols = bins.
 # All chromosomes share the same n_bins (widest chromosome determines width;
 # narrower chromosomes are zero-padded on the right).
-.bins_to_nipter_sample <- function(bins, binsize, name) {
+.bins_to_nipter_sample <- function(bins, binsize, name, chrom_lengths = NULL) {
   auto_keys <- as.character(1:22)
   sex_keys  <- c("23", "24")   # internal: X=23, Y=24
 
@@ -350,6 +378,7 @@ nipter_bin_bam_bed <- function(bam,
   CombinedStrandsSample(
     sample_name = name,
     binsize     = binsize,
+    chrom_lengths = .normalize_nipt_chrom_lengths(chrom_lengths),
     auto_matrix = auto_mat,
     sex_matrix_ = sex_mat
   )
@@ -361,7 +390,8 @@ nipter_bin_bam_bed <- function(bam,
 # Produces two matrices per chromosome set: [[1]] = forward, [[2]] = reverse.
 # Rownames follow NIPTeR convention: "1F".."22F"/"1R".."22R" for autosomes,
 # "XF"/"YF" and "XR"/"YR" for sex chromosomes.
-.stranded_bins_to_nipter_sample <- function(fwd_bins, rev_bins, binsize, name) {
+.stranded_bins_to_nipter_sample <- function(fwd_bins, rev_bins, binsize, name,
+                                            chrom_lengths = NULL) {
   auto_keys <- as.character(1:22)
   sex_keys  <- c("23", "24")
   all_keys  <- c(auto_keys, sex_keys)
@@ -407,11 +437,78 @@ nipter_bin_bam_bed <- function(bam,
   SeparatedStrandsSample(
     sample_name = name,
     binsize     = binsize,
+    chrom_lengths = .normalize_nipt_chrom_lengths(chrom_lengths),
     auto_fwd    = fwd_auto,
     auto_rev    = rev_auto,
     sex_fwd     = fwd_sex,
     sex_rev     = rev_sex
   )
+}
+
+.nipter_rows_to_sample <- function(rows,
+                                   chr_lengths,
+                                   binsize,
+                                   name,
+                                   separate_strands = FALSE) {
+  if (isTRUE(separate_strands)) {
+    fwd_bins <- .count_rows_to_bins(
+      rows,
+      "count_fwd",
+      chr_lengths = chr_lengths,
+      binsize = binsize
+    )
+    rev_bins <- .count_rows_to_bins(
+      rows,
+      "count_rev",
+      chr_lengths = chr_lengths,
+      binsize = binsize
+    )
+    return(.stranded_bins_to_nipter_sample(
+      fwd_bins,
+      rev_bins,
+      binsize,
+      name,
+      chrom_lengths = .nipter_sample_chrom_lengths(chr_lengths)
+    ))
+  }
+
+  bins <- .count_rows_to_bins(
+    rows,
+    "count_total",
+    chr_lengths = chr_lengths,
+    binsize = binsize
+  )
+  .bins_to_nipter_sample(
+    bins,
+    binsize,
+    name,
+    chrom_lengths = .nipter_sample_chrom_lengths(chr_lengths)
+  )
+}
+
+.nipter_sample_chrom_lengths <- function(chr_lengths) {
+  if (is.null(chr_lengths) || !length(chr_lengths)) {
+    return(NULL)
+  }
+  nm <- names(chr_lengths)
+  if (is.null(nm)) {
+    return(NULL)
+  }
+  out_names <- vapply(nm, .bin_chr_name, character(1L))
+  keep <- out_names %in% c(as.character(1:22), "X", "Y") & !duplicated(out_names)
+  .normalize_nipt_chrom_lengths(stats::setNames(as.integer(chr_lengths[keep]), out_names[keep]))
+}
+
+.require_nipter_bed_chrom_lengths <- function(sample) {
+  chrom_lengths <- .sample_chrom_lengths(sample)
+  required <- c(as.character(1:22), "X", "Y")
+  if (is.null(chrom_lengths) || !all(required %in% names(chrom_lengths))) {
+    stop(
+      "NIPTeR BED export requires explicit chromosome lengths for chromosomes 1-22, X, and Y.",
+      call. = FALSE
+    )
+  }
+  chrom_lengths[required]
 }
 
 
@@ -425,24 +522,43 @@ nipter_bin_bam_bed <- function(bam,
 
   chr_names <- c(as.character(1:22), "X", "Y")
   n_bins    <- ncol(combined)
-  starts    <- as.integer(seq(0L, by = binsize, length.out = n_bins))
-
-  df <- data.frame(
-    chrom           = rep(chr_names, each = n_bins),
-    start           = rep(starts, times = 24L),
-    end             = rep(starts + binsize, times = 24L),
-    count           = as.integer(t(combined)),
-    corrected_count = NA_real_,
-    stringsAsFactors = FALSE
-  )
-
+  chrom_lengths <- .require_nipter_bed_chrom_lengths(sample)
+  corr_combined <- NULL
   if (!is.null(corrected)) {
     corr_auto <- .sample_autosomal_reads(corrected)[[1L]]
     corr_sex  <- .sample_sex_reads(corrected)[[1L]]
-    df$corrected_count <- as.numeric(t(rbind(corr_auto, corr_sex)))
+    corr_combined <- rbind(corr_auto, corr_sex)
   }
 
-  df
+  frames <- vector("list", length(chr_names))
+  for (i in seq_along(chr_names)) {
+    chr_length <- chrom_lengths[[chr_names[[i]]]]
+    n_chr_bins <- .chr_n_bins_dense(chr_length, binsize)
+    if (n_chr_bins > n_bins) {
+      stop(
+        sprintf(
+          "Sample '%s' stores only %d bins for chromosome %s, but chrom_lengths requires %d bins at binsize %d.",
+          .sample_name(sample),
+          n_bins,
+          chr_names[[i]],
+          n_chr_bins,
+          binsize
+        ),
+        call. = FALSE
+      )
+    }
+    starts <- as.integer(seq(0L, by = binsize, length.out = n_chr_bins))
+    frames[[i]] <- data.frame(
+      chrom = rep(chr_names[[i]], n_chr_bins),
+      start = starts,
+      end = pmin(starts + binsize, as.integer(chr_length)),
+      count = as.integer(combined[i, seq_len(n_chr_bins)]),
+      corrected_count = if (is.null(corr_combined)) rep(NA_real_, n_chr_bins) else as.numeric(corr_combined[i, seq_len(n_chr_bins)]),
+      stringsAsFactors = FALSE
+    )
+  }
+
+  do.call(rbind, frames)
 }
 
 
@@ -464,31 +580,48 @@ nipter_bin_bam_bed <- function(bam,
 
   chr_names <- c(as.character(1:22), "X", "Y")
   n_bins    <- ncol(total)
-  starts    <- as.integer(seq(0L, by = binsize, length.out = n_bins))
-
-  df <- data.frame(
-    chrom           = rep(chr_names, each = n_bins),
-    start           = rep(starts, times = 24L),
-    end             = rep(starts + binsize, times = 24L),
-    count           = as.integer(t(total)),
-    count_fwd       = as.integer(t(fwd_combined)),
-    count_rev       = as.integer(t(rev_combined)),
-    corrected_count = NA_real_,
-    corrected_fwd   = NA_real_,
-    corrected_rev   = NA_real_,
-    stringsAsFactors = FALSE
-  )
+  chrom_lengths <- .require_nipter_bed_chrom_lengths(sample)
 
   # Corrected counts from a GC-corrected SeparatedStrands sample
+  corr_fwd <- corr_rev <- NULL
   if (!is.null(corrected) && .strand_type_of(corrected) == "separated") {
     corrected_auto <- .sample_autosomal_reads(corrected)
     corrected_sex  <- .sample_sex_reads(corrected)
     corr_fwd <- rbind(corrected_auto[[1L]], corrected_sex[[1L]])
     corr_rev <- rbind(corrected_auto[[2L]], corrected_sex[[2L]])
-    df$corrected_count <- as.numeric(t(corr_fwd + corr_rev))
-    df$corrected_fwd   <- as.numeric(t(corr_fwd))
-    df$corrected_rev   <- as.numeric(t(corr_rev))
   }
 
-  df
+  frames <- vector("list", length(chr_names))
+  for (i in seq_along(chr_names)) {
+    chr_length <- chrom_lengths[[chr_names[[i]]]]
+    n_chr_bins <- .chr_n_bins_dense(chr_length, binsize)
+    if (n_chr_bins > n_bins) {
+      stop(
+        sprintf(
+          "Sample '%s' stores only %d bins for chromosome %s, but chrom_lengths requires %d bins at binsize %d.",
+          .sample_name(sample),
+          n_bins,
+          chr_names[[i]],
+          n_chr_bins,
+          binsize
+        ),
+        call. = FALSE
+      )
+    }
+    starts <- as.integer(seq(0L, by = binsize, length.out = n_chr_bins))
+    frames[[i]] <- data.frame(
+      chrom = rep(chr_names[[i]], n_chr_bins),
+      start = starts,
+      end = pmin(starts + binsize, as.integer(chr_length)),
+      count = as.integer(total[i, seq_len(n_chr_bins)]),
+      count_fwd = as.integer(fwd_combined[i, seq_len(n_chr_bins)]),
+      count_rev = as.integer(rev_combined[i, seq_len(n_chr_bins)]),
+      corrected_count = if (is.null(corr_fwd)) rep(NA_real_, n_chr_bins) else as.numeric((corr_fwd + corr_rev)[i, seq_len(n_chr_bins)]),
+      corrected_fwd = if (is.null(corr_fwd)) rep(NA_real_, n_chr_bins) else as.numeric(corr_fwd[i, seq_len(n_chr_bins)]),
+      corrected_rev = if (is.null(corr_rev)) rep(NA_real_, n_chr_bins) else as.numeric(corr_rev[i, seq_len(n_chr_bins)]),
+      stringsAsFactors = FALSE
+    )
+  }
+
+  do.call(rbind, frames)
 }

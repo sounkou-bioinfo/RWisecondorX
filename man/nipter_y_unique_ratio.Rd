@@ -25,10 +25,12 @@ kept (samtools \code{-f}). Default \code{0L}.}
 \item{exclude_flags}{Integer bitmask; reads with any of these flags set
 are dropped (samtools \code{-F}). Default \code{0L}.}
 
-\item{regions_file}{Path to a TSV file of Y-unique regions with columns
-\code{Chromosome}, \code{Start}, \code{End}, \code{GeneName}. Defaults
-to the bundled GRCh37 file. Supply a custom file for GRCh38 or other
-assemblies.}
+\item{regions_file}{Path to a Y-unique regions file. Headered TSV files
+with columns \code{Chromosome}, \code{Start}, \code{End},
+\code{GeneName} are accepted, as are headerless BED-like files whose
+first 3 columns are chromosome/start/end and optional 4th column is a
+gene or interval label. Defaults to the bundled GRCh37 file. Supply a
+custom file for GRCh38 or other assemblies.}
 
 \item{con}{Optional open DBI connection with duckhts loaded. If
 \code{NULL} (default) a temporary in-memory DuckDB connection is
@@ -41,29 +43,36 @@ A list with elements:
 \describe{
 \item{ratio}{Numeric; Y-unique reads / total nuclear reads. \code{0}
 if total nuclear reads is zero.}
-\item{y_unique_reads}{Integer; reads overlapping any of the 7 Y-unique
-regions.}
+\item{y_unique_reads}{Integer; reads overlapping the supplied Y interval
+set.}
 \item{total_nuclear_reads}{Integer; total reads on chromosomes 1--22,
 X, Y.}
-\item{regions}{Data frame of the regions used (columns:
+\item{regions}{Data frame of the intervals used (columns:
 \code{Chromosome}, \code{Start}, \code{End}, \code{GeneName}).}
+\item{regions_file}{Normalized path to the regions file used.}
 }
 }
 \description{
-Counts reads overlapping the 7 Y-chromosome unique gene regions
-(HSFY1, BPY2, BPY2B, BPY2C, XKRY, PRY, PRY2) and divides by total
+Counts reads overlapping a Y-chromosome interval set and divides by total
 nuclear genome reads (chromosomes 1--22, X, Y). This ratio is a strong
-univariate sex predictor used in clinical NIPT pipelines.
+univariate sex predictor used in the clinical NIPT pipeline mirrored here.
 }
 \details{
-The regions are defined in the bundled file
-\code{extdata/grch37_Y_UniqueRegions.txt} (GRCh37 coordinates). The BAM
-must be indexed (\code{.bai} or \code{.csi}).
+For GRCh37, the default interval set is the bundled legacy
+\code{extdata/grch37_Y_chrom_blacklist.bed}, which matches the historical
+\code{samtools stats -t human_g1k_v37.fasta_Y_chrom_blacklist.bed} path used
+by the production shell pipeline. A smaller 7-gene interval file can still
+be supplied explicitly through \code{regions_file}, but it is no longer the
+default because it does not reproduce the legacy \code{YUniqueRatioFiltered}
+semantics.
+
+The BAM must be indexed (\code{.bai} or \code{.csi}).
 
 Read counting uses DuckDB/duckhts with index-based region queries
-(\code{read_bam(region := ...)}) for the Y-unique intervals, and a
-separate full-genome scan for the nuclear total. Both queries apply the
-same MAPQ and flag filters.
+(\code{read_bam(region := ...)}) issued once per Y-unique interval, and a
+separate full-genome scan for the nuclear total. Interval chromosome names
+are matched to the BAM header so both \code{Y} and \code{chrY}-style
+contigs work. Both query paths apply the same MAPQ and flag filters.
 }
 \examples{
 \dontrun{

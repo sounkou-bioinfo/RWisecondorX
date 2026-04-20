@@ -422,6 +422,17 @@ if (has_mclust && has_dnacopy) {
     )
   ))
 
+  expect_error(
+    rwisecondorx_predict(
+      sample = test_sample_f,
+      reference = ref,
+      minrefbins = 11L,
+      parallel = FALSE
+    ),
+    "minrefbins=11 exceeds the reference refsize=10",
+    info = "predict rejects impossible minrefbins/refsize combinations early"
+  )
+
   expect_true(is.list(pred),
               info = "rwisecondorx_predict returns a list-like prediction object")
   expect_true(S7::S7_inherits(pred, WisecondorXPrediction),

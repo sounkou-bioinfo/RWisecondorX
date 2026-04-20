@@ -216,6 +216,7 @@ corr_sex  <- sex_raw * 1.1
 nipter_corr <- CombinedStrandsSample(
   sample_name = nipter_orig@sample_name,
   binsize     = nipter_orig@binsize,
+  chrom_lengths = nipter_orig$chrom_lengths,
   auto_matrix = corr_auto,
   sex_matrix_ = corr_sex,
   correction  = RWisecondorX:::.nipt_gc_both_correction_record()
@@ -291,6 +292,7 @@ corr_rev_sex  <- rev_sex_raw * 0.95
 nipter_ss_corr <- SeparatedStrandsSample(
   sample_name = nipter_ss_orig@sample_name,
   binsize     = nipter_ss_orig@binsize,
+  chrom_lengths = nipter_ss_orig$chrom_lengths,
   auto_fwd    = corr_fwd_auto,
   auto_rev    = corr_rev_auto,
   sex_fwd     = corr_fwd_sex,
@@ -376,3 +378,4 @@ if (length(fwd_auto_nz) > 0L) {
 bins_scaled <- scale_sample(bins_rt, from_size = 5000L, to_size = 10000L)
 expect_true(is.list(bins_scaled),
             info = "bed_to_sample() output works with scale_sample()")
+

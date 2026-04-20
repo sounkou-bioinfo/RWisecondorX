@@ -7,7 +7,12 @@
 nipter_control_group_qc(
   control_group,
   sample_sex = NULL,
+  reference_model = NULL,
   chi_cutoff = 3.5,
+  z_cutoff = 3,
+  collapse_strands = FALSE,
+  max_aberrant_chromosomes = 2L,
+  outlier_rule = c("any_aberrant_score", "bidirectional_or_multichromosome"),
   include_bins = FALSE
 )
 }
@@ -18,8 +23,32 @@ nipter_control_group_qc(
 on \code{control_group}. Accepted values are \code{"female"},
 \code{"male"}, \code{"ambiguous"}, and \code{"unknown"}.}
 
+\item{reference_model}{Optional \code{NIPTReferenceModel} built from the
+same controls. When supplied, the QC bundle also extracts the explicit
+XX/XY sex-chromosome Z, NCV, and regression model summaries from it.}
+
 \item{chi_cutoff}{Numeric scalar used to flag overdispersed bins in the
 optional chi profile. Default \code{3.5}.}
+
+\item{z_cutoff}{Absolute post-chi z-score threshold used when counting
+aberrant chromosome rows in the sample summary. Default \code{3}.}
+
+\item{collapse_strands}{Logical; when \code{FALSE} (default), separated
+strands retain their legacy F/R-specific diagnostic rows and the sample
+summary reports both distinct chromosomes and bidirectional aberrations.
+When \code{TRUE}, sample-level aberration counts collapse to 22 autosomes.}
+
+\item{max_aberrant_chromosomes}{Maximum number of distinct aberrant
+chromosomes allowed before \code{is_chromosomal_outlier} is set in the
+sample summary. Default \code{2L}.}
+
+\item{outlier_rule}{Character scalar describing how to convert
+\code{abberant_scores} into sample-level outlier flags.
+\code{"any_aberrant_score"} (default) removes any sample with at least
+one post-chi chromosome row beyond \code{z_cutoff}.
+\code{"bidirectional_or_multichromosome"} drops a sample only when both
+strands of one chromosome are aberrant or when too many distinct
+chromosomes are aberrant.}
 
 \item{include_bins}{Logical; when \code{TRUE}, compute the autosomal
 bin-level scaled-count CV and chi profile. Default \code{FALSE}.}
@@ -31,12 +60,19 @@ A typed \code{NIPTControlGroupQC} object.
 Summarises the stability of a \code{NIPTControlGroup} at the chromosome,
 sample, and optional autosomal-bin level. The chromosome summary exposes the
 mean, standard deviation, coefficient of variation, and Shapiro-Wilk
-normality statistic for each autosome. The sample summary adds SSD-based
-matching scores so aberrant controls can be identified before scoring. When
-sex labels are available, the report also includes sex-stratified
+normality statistic for each autosome, across multiple scoring spaces in
+one long table: post-chi chromosomal fractions, NCV, and the four RBZ
+predictor sets. The sample summary adds SSD-based matching scores plus
+strand-aware chromosomal alert counts from the post-chi diagnostic pass.
+When sex labels are available, the sample summary is enriched with the same
+per-sample sex-cluster metrics written into the typed reference frame
+(\code{ConsensusGender}, sex-outlier flag, and \code{Z_X_XX}/\code{Z_X_XY}/
+\code{Z_Y_XX}/\code{Z_Y_XY}), and the report also includes sex-stratified
 \code{RR_X}/\code{RR_Y} spread metrics relevant for gaunosome model
-readiness. Optional bin-level output exposes the scaled-count CV and
-chi-correction profile that underlies \code{\link{nipter_chi_correct}}.
+readiness plus a dedicated long-form sex-model summary for XX/XY
+sex-chromosome Z, NCV, and regression models. Optional bin-level output
+exposes the scaled-count CV and chi-correction profile that underlies
+\code{\link{nipter_chi_correct}}.
 }
 \seealso{
 \code{\link[=nipter_diagnose_control_group]{nipter_diagnose_control_group()}}, \code{\link[=nipter_match_matrix]{nipter_match_matrix()}},

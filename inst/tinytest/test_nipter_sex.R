@@ -71,6 +71,10 @@ library(mclust)
   CombinedStrandsSample(
     sample_name = name,
     binsize = as.integer(50000L),
+    chrom_lengths = setNames(
+      rep.int(as.integer(50000L) * n_bins, 24L),
+      c(as.character(1:22), "X", "Y")
+    ),
     auto_matrix = auto_mat,
     sex_matrix_ = sex_mat
   )
@@ -386,11 +390,11 @@ pred_3m <- nipter_predict_sex(test_male, model_y, model_xy, model_yu,
 expect_identical(pred_3m$prediction, "male",
                  info = "3-model consensus predicts male correctly")
 
-# y_unique model without ratio → warning + hard error because no usable model
+# y_unique model without ratio -> hard error
 expect_error(
-  suppressWarnings(nipter_predict_sex(test_female, model_yu)),
-  pattern = "No usable sex-model predictions remain",
-  info = "predict errors when every candidate model is skipped"
+  nipter_predict_sex(test_female, model_yu),
+  pattern = "y_unique_ratio",
+  info = "predict errors when a y_unique model is supplied without an explicit ratio"
 )
 
 
@@ -430,6 +434,7 @@ expect_identical(ref_model$reference_frame$ConsensusGender,
                  unname(sex_labels[ref_model$reference_frame$Sample_name]),
                  info = "reference model frame resolves consensus sex labels")
 expect_true(all(c("RR_X", "RR_Y", "RR_X_SexClassMAD", "RR_Y_SexClassMAD",
+                  "Z_X_XX", "Z_X_XY", "Z_Y_XX", "Z_Y_XY",
                   "IsRefSexOutlier", "YUniqueRatio") %in%
                   names(ref_model$reference_frame)),
             info = "reference model frame includes sex-scoring metadata columns")
@@ -444,6 +449,47 @@ expect_equal(ref_model$reference_frame$YUniqueRatio,
              info = "reference model frame aligns Y-unique ratios to samples")
 expect_true(is.logical(ref_model$reference_frame$IsRefSexOutlier),
             info = "reference model frame stores logical sex-outlier flags")
+expect_true(all(is.finite(ref_model$reference_frame$Z_X_XX[
+  ref_model$reference_frame$ConsensusGender == "female"
+])),
+info = "reference model frame stores finite XX-reference X z-scores for female controls")
+expect_true(all(is.finite(ref_model$reference_frame$Z_Y_XY[
+  ref_model$reference_frame$ConsensusGender == "male"
+])),
+info = "reference model frame stores finite XY-reference Y z-scores for male controls")
+
+female_frame <- as.data.frame(ref_model$reference_frame, stringsAsFactors = FALSE)
+female_non_outlier <- female_frame[
+  female_frame$ConsensusGender == "female" & !female_frame$IsRefSexOutlier,
+  ,
+  drop = FALSE
+]
+female_target <- female_non_outlier$Sample_name[[1L]]
+female_others <- female_non_outlier[
+  female_non_outlier$Sample_name != female_target,
+  ,
+  drop = FALSE
+]
+manual_female_z_x_xx <- (female_non_outlier$FrChrReads_X[[1L]] -
+  mean(female_others$FrChrReads_X)) / stats::sd(female_others$FrChrReads_X)
+expect_equal(
+  female_frame$Z_X_XX[female_frame$Sample_name == female_target],
+  manual_female_z_x_xx,
+  tolerance = 1e-10,
+  info = "reference-frame Z_X_XX uses leave-one-out scoring within the female cluster"
+)
+
+male_target <- female_frame$Sample_name[female_frame$ConsensusGender == "male"][[1L]]
+manual_male_z_x_xx <- (
+  female_frame$FrChrReads_X[female_frame$Sample_name == male_target] -
+    mean(female_non_outlier$FrChrReads_X)
+) / stats::sd(female_non_outlier$FrChrReads_X)
+expect_equal(
+  female_frame$Z_X_XX[female_frame$Sample_name == male_target],
+  manual_male_z_x_xx,
+  tolerance = 1e-10,
+  info = "reference-frame Z_X_XX scores male controls against the female cluster without leave-one-out"
+)
 
 nonbinary_labels <- sex_labels
 nonbinary_labels[["female_1"]] <- "ambiguous"

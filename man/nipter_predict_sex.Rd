@@ -16,8 +16,7 @@ models, or one \code{NIPTReferenceModel} containing pre-built
 \item{y_unique_ratio}{Optional numeric scalar; a pre-computed Y-unique
 ratio (from \code{\link{nipter_y_unique_ratio}}) for the sample. This
 is only used when one of the models has \code{method = "y_unique"}.
-If a \code{"y_unique"} model is present and this argument is
-\code{NULL}, that model is skipped with a warning.}
+If a \code{"y_unique"} model is present, this argument is required.}
 }
 \value{
 A list-like \code{NIPTeRSexPrediction} S7 object with elements:

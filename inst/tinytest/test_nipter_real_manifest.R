@@ -81,7 +81,7 @@ expect_identical(n_controls(cg), length(paths),
                  info = "control group includes every manifest BAM")
 expect_identical(length(qc$sample_names), length(paths),
                  info = "QC report includes every manifest BAM")
-expect_true(nrow(qc$chromosome_summary) == 22L,
+expect_true(all(as.character(1:22) %in% qc$chromosome_summary$chromosome),
             info = "QC chromosome summary covers all autosomes")
 expect_true(nrow(qc$sample_summary) == length(paths),
             info = "QC sample summary has one row per manifest BAM")

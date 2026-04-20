@@ -12,6 +12,10 @@
 #   Rscript convert_sample.R --mode nipter --bam sample.bam --out sample.bed.gz
 #   Rscript convert_sample.R --mode nipter --bam sample.bam --out sample.bed.gz --gc-table hg38_gc.tsv.bgz
 #   Rscript convert_sample.R --mode nipter --bam sample.bam --out sample.bed.gz --fasta hg38.fa
+#   Rscript convert_sample.R --mode nipter --bam sample.bam --out sample.bed.gz --tabix-metadata \
+#     --compute-seqff --compute-y-unique --sample-metrics-out sample.metrics.tsv
+#   Rscript convert_sample.R --mode nipter --bam sample.bam --out sample.bed.gz --tabix-metadata \
+#     --seqff-tsv cohort.seqff.tsv --y-unique-tsv cohort.y_unique.tsv --y-regions-file grch37_Y_chrom_blacklist.bed
 
 if (!requireNamespace("optparse", quietly = TRUE)) {
   stop("optparse is required. Install it with: install.packages('optparse')",
@@ -70,7 +74,47 @@ option_list <- list(
                             "Guarded off by default for compatibility [default: %default]")),
   make_option("--tabix-metadata", action = "store_true", default = FALSE,
               help = paste0("BED outputs only: write optional ##RWX_<key>=<value> provenance lines ",
-                            "into the bgzipped tabix file [default: %default]"))
+                            "into the bgzipped tabix file [default: %default]")),
+
+  # --- Optional per-sample FF / Y-unique metrics ---
+  make_option("--compute-seqff", action = "store_true", default = FALSE,
+              help = paste0("Compute SeqFF FF metrics twice (nonfiltered + filtered) for this sample. ",
+                            "Can be written to --sample-metrics-out and/or BED metadata [default: %default]")),
+  make_option("--compute-y-unique", action = "store_true", default = FALSE,
+              help = paste0("Compute Y-unique ratios twice (nonfiltered + filtered) for this sample. ",
+                            "Can be written to --sample-metrics-out and/or BED metadata [default: %default]")),
+  make_option("--seqff-tsv", type = "character", default = NULL,
+              help = paste0("Optional TSV/CSV with per-sample SeqFF metrics. ",
+                            "Must contain the explicit *_pre/*_post columns written by RWisecondorX.")),
+  make_option("--y-unique-tsv", type = "character", default = NULL,
+              help = paste0("Optional TSV/CSV with per-sample Y-unique metrics. ",
+                            "Must contain the explicit *_pre/*_post columns written by RWisecondorX.")),
+  make_option("--sample-metrics-out", type = "character", default = NULL,
+              help = "Optional one-row TSV path to write the resolved sample metrics for this conversion."),
+  make_option("--y-regions-file", type = "character", default = NULL,
+              help = paste0("Optional Y-unique regions file used for --compute-y-unique and metadata provenance. ",
+                            "Accepts headered TSV or headerless BED-like files.")),
+  make_option("--metrics-pre-mapq", type = "integer", default = 0L,
+              help = "MAPQ used for nonfiltered SeqFF/Y-unique metrics [default: %default]"),
+  make_option("--metrics-pre-require-flags", type = "integer", default = 0L,
+              help = "Required flags used for nonfiltered SeqFF/Y-unique metrics [default: %default]"),
+  make_option("--metrics-pre-exclude-flags", type = "integer", default = 0L,
+              help = "Excluded flags used for nonfiltered SeqFF/Y-unique metrics [default: %default]"),
+  make_option("--metrics-post-mapq", type = "integer", default = NULL,
+              help = paste0(
+                "MAPQ used for filtered SeqFF/Y-unique metrics. ",
+                "Defaults to 40 in nipter mode and to the main conversion --mapq otherwise."
+              )),
+  make_option("--metrics-post-require-flags", type = "integer", default = NULL,
+              help = paste0(
+                "Required flags used for filtered SeqFF/Y-unique metrics. ",
+                "Defaults to 0 in nipter mode and to the main conversion --require-flags otherwise."
+              )),
+  make_option("--metrics-post-exclude-flags", type = "integer", default = NULL,
+              help = paste0(
+                "Excluded flags used for filtered SeqFF/Y-unique metrics. ",
+                "Defaults to 1024 in nipter mode and to the main conversion --exclude-flags otherwise."
+              ))
 )
 
 parser <- OptionParser(
@@ -101,6 +145,15 @@ parser <- OptionParser(
     "",
     "  # NIPTeR with pre-filtering (MAPQ 40, exclude duplicates)",
     "  %prog --mode nipter --bam sample.bam --out sample.bed.gz --mapq 40 --exclude-flags 1024",
+    "",
+    "  # NIPTeR BED with FF/Y-unique computed on the fly and written both to header metadata and a sidecar TSV",
+    "  %prog --mode nipter --bam sample.bam --out sample.bed.gz --tabix-metadata \\",
+    "    --compute-seqff --compute-y-unique --sample-metrics-out sample.metrics.tsv",
+    "",
+    "  # NIPTeR BED with FF/Y-unique loaded from cohort summary tables and explicit Y-region provenance",
+    "  %prog --mode nipter --bam sample.bam --out sample.bed.gz --tabix-metadata \\",
+    "    --seqff-tsv cohort.seqff.tsv --y-unique-tsv cohort.y_unique.tsv \\",
+    "    --y-regions-file grch37_Y_chrom_blacklist.bed",
     sep = "\n"
   ),
   option_list = option_list
@@ -165,6 +218,13 @@ if (isTRUE(opts$`tabix-metadata`) && (mode == "wisecondorx" || isTRUE(opts$npz))
   stop("--tabix-metadata is only valid for BED outputs.", call. = FALSE)
 }
 
+for (path_opt in c("seqff-tsv", "y-unique-tsv", "y-regions-file")) {
+  path_val <- opts[[path_opt]]
+  if (!is.null(path_val) && !file.exists(path_val)) {
+    stop("--", path_opt, " does not exist: ", path_val, call. = FALSE)
+  }
+}
+
 # ---------------------------------------------------------------------------
 # Set mode-dependent defaults
 # ---------------------------------------------------------------------------
@@ -185,12 +245,139 @@ if (mode == "rwisecondorx") {
 
 library(RWisecondorX)
 
+.resolve_y_regions_file <- function(path = NULL) {
+  if (!is.null(path)) {
+    return(normalizePath(path, winslash = "/", mustWork = TRUE))
+  }
+  bundled <- system.file(
+    "extdata",
+    "grch37_Y_chrom_blacklist.bed",
+    package = "RWisecondorX",
+    mustWork = FALSE
+  )
+  if (!nzchar(bundled) || !file.exists(bundled)) {
+    stop(
+      "Cannot resolve the bundled legacy Y-interval file. ",
+      "Pass --y-regions-file explicitly.",
+      call. = FALSE
+    )
+  }
+  normalizePath(bundled, winslash = "/", mustWork = TRUE)
+}
+
 # ---------------------------------------------------------------------------
 # Convert
 # ---------------------------------------------------------------------------
 
 bam <- opts$bam
 out <- opts$out
+sample_name <- sub("\\.cram$|\\.bam$", "", basename(bam), ignore.case = TRUE)
+
+gc_fasta <- if (mode == "nipter") opts$fasta else NULL
+metrics_reference <- if (is.null(opts$reference)) gc_fasta else opts$reference
+y_regions_file <- if (!is.null(opts$`y-unique-tsv`) || isTRUE(opts$`compute-y-unique`)) {
+  .resolve_y_regions_file(opts$`y-regions-file`)
+} else {
+  NULL
+}
+metrics_post_defaults <- if (identical(mode, "nipter")) {
+  list(mapq = 40L, require_flags = 0L, exclude_flags = 1024L)
+} else {
+  list(
+    mapq = as.integer(mapq),
+    require_flags = as.integer(opts$`require-flags`),
+    exclude_flags = as.integer(opts$`exclude-flags`)
+  )
+}
+metrics_pre_filters <- list(
+  mapq = as.integer(opts$`metrics-pre-mapq`),
+  require_flags = as.integer(opts$`metrics-pre-require-flags`),
+  exclude_flags = as.integer(opts$`metrics-pre-exclude-flags`)
+)
+metrics_post_filters <- list(
+  mapq = as.integer(if (is.null(opts$`metrics-post-mapq`)) metrics_post_defaults$mapq else opts$`metrics-post-mapq`),
+  require_flags = as.integer(if (is.null(opts$`metrics-post-require-flags`)) metrics_post_defaults$require_flags else opts$`metrics-post-require-flags`),
+  exclude_flags = as.integer(if (is.null(opts$`metrics-post-exclude-flags`)) metrics_post_defaults$exclude_flags else opts$`metrics-post-exclude-flags`)
+)
+
+needs_sample_metrics <- !is.null(opts$`sample-metrics-out`) ||
+  isTRUE(opts$`tabix-metadata`) ||
+  !is.null(opts$`seqff-tsv`) || !is.null(opts$`y-unique-tsv`) ||
+  isTRUE(opts$`compute-seqff`) || isTRUE(opts$`compute-y-unique`)
+
+seqff_metrics <- NULL
+y_unique_metrics <- NULL
+sample_metrics_row <- NULL
+
+if (needs_sample_metrics) {
+  if (!is.null(opts$`seqff-tsv`)) {
+    seqff_metrics <- RWisecondorX:::.seqff_metric_record(
+      record = RWisecondorX:::.match_metric_row(opts$`seqff-tsv`, sample_name),
+      source = paste0("file:", basename(opts$`seqff-tsv`))
+    )
+  } else if (isTRUE(opts$`compute-seqff`)) {
+    seqff_metrics <- RWisecondorX:::.seqff_metric_record(
+      pre = seqff_predict(
+        input = bam,
+        input_type = "bam",
+        mapq = metrics_pre_filters$mapq,
+        require_flags = metrics_pre_filters$require_flags,
+        exclude_flags = metrics_pre_filters$exclude_flags,
+        reference = metrics_reference
+      ),
+      post = seqff_predict(
+        input = bam,
+        input_type = "bam",
+        mapq = metrics_post_filters$mapq,
+        require_flags = metrics_post_filters$require_flags,
+        exclude_flags = metrics_post_filters$exclude_flags,
+        reference = metrics_reference
+      ),
+      source = "computed"
+    )
+  }
+
+  if (!is.null(opts$`y-unique-tsv`)) {
+    y_unique_metrics <- RWisecondorX:::.y_unique_metric_record(
+      record = RWisecondorX:::.match_metric_row(opts$`y-unique-tsv`, sample_name),
+      regions_file = y_regions_file,
+      source = paste0("file:", basename(opts$`y-unique-tsv`))
+    )
+  } else if (isTRUE(opts$`compute-y-unique`)) {
+    y_unique_metrics <- RWisecondorX:::.y_unique_metric_record(
+      pre = nipter_y_unique_ratio(
+        bam = bam,
+        mapq = metrics_pre_filters$mapq,
+        require_flags = metrics_pre_filters$require_flags,
+        exclude_flags = metrics_pre_filters$exclude_flags,
+        regions_file = y_regions_file,
+        reference = metrics_reference
+      ),
+      post = nipter_y_unique_ratio(
+        bam = bam,
+        mapq = metrics_post_filters$mapq,
+        require_flags = metrics_post_filters$require_flags,
+        exclude_flags = metrics_post_filters$exclude_flags,
+        regions_file = y_regions_file,
+        reference = metrics_reference
+      ),
+      regions_file = y_regions_file,
+      source = "computed"
+    )
+  }
+
+  if (!is.null(seqff_metrics) || !is.null(y_unique_metrics)) {
+    sample_metrics_row <- RWisecondorX:::.sample_metrics_row(
+      sample_name = sample_name,
+      bam = bam,
+      seqff = seqff_metrics,
+      y_unique = y_unique_metrics,
+      filters_pre = metrics_pre_filters,
+      filters_post = metrics_post_filters
+    )
+  }
+
+}
 
 if (mode == "rwisecondorx") {
   bed_metadata <- if (isTRUE(opts$`tabix-metadata`) && !isTRUE(opts$npz)) {
@@ -206,6 +393,17 @@ if (mode == "rwisecondorx") {
     ))
   } else {
     NULL
+  }
+  if (!is.null(bed_metadata) && !is.null(sample_metrics_row)) {
+    bed_metadata <- RWisecondorX:::.merge_tabix_metadata(
+      bed_metadata,
+      RWisecondorX:::.sample_metrics_tabix_metadata(
+        seqff = seqff_metrics,
+        y_unique = y_unique_metrics,
+        filters_pre = metrics_pre_filters,
+        filters_post = metrics_post_filters
+      )
+    )
   }
 
   if (opts$npz) {
@@ -276,24 +474,63 @@ if (mode == "rwisecondorx") {
               if (opts$`separate-strands`) " 9-col" else " 5-col",
               binsize, mapq, rmdup))
 
-  if (!is.null(gc_table) || !is.null(gc_fasta)) {
-    drv <- duckdb::duckdb(config = list(allow_unsigned_extensions = "true"))
-    con <- DBI::dbConnect(drv)
-    Rduckhts::rduckhts_load(con)
-    on.exit(DBI::dbDisconnect(con, shutdown = TRUE), add = TRUE)
+  drv <- duckdb::duckdb(config = list(allow_unsigned_extensions = "true"))
+  con <- DBI::dbConnect(drv)
+  Rduckhts::rduckhts_load(con)
+  on.exit(DBI::dbDisconnect(con, shutdown = TRUE), add = TRUE)
 
-    raw_sample <- nipter_bin_bam(
-      bam              = bam,
-      binsize          = binsize,
-      mapq             = mapq,
-      require_flags    = opts$`require-flags`,
-      exclude_flags    = opts$`exclude-flags`,
-      rmdup            = rmdup,
-      separate_strands = opts$`separate-strands`,
-      con              = con,
-      reference        = opts$reference
+  native_rows <- RWisecondorX:::.bam_bin_count_rows(
+    con = con,
+    bam = bam,
+    binsize = binsize,
+    mapq = mapq,
+    require_flags = as.integer(opts$`require-flags`),
+    exclude_flags = as.integer(opts$`exclude-flags`),
+    rmdup = rmdup,
+    reference = opts$reference,
+    stats = "gc,mq",
+    include_unmapped = TRUE
+  )
+  native_metrics <- RWisecondorX:::.native_bin_metric_record(
+    rows = native_rows,
+    source = "bam_bin_counts(gc,mq)"
+  )
+  chr_lengths <- RWisecondorX:::.bam_chr_lengths(con, bam)
+  raw_sample <- RWisecondorX:::.nipter_rows_to_sample(
+    rows = native_rows,
+    chr_lengths = chr_lengths,
+    binsize = binsize,
+    name = sub("\\.cram$|\\.bam$", "", basename(bam), ignore.case = TRUE),
+    separate_strands = isTRUE(opts$`separate-strands`)
+  )
+  sample_metrics_row <- RWisecondorX:::.sample_metrics_row(
+    sample_name = sample_name,
+    bam = bam,
+    seqff = seqff_metrics,
+    y_unique = y_unique_metrics,
+    native = native_metrics,
+    filters_pre = metrics_pre_filters,
+    filters_post = metrics_post_filters
+  )
+  if (!is.null(bed_metadata)) {
+    bed_metadata <- RWisecondorX:::.merge_tabix_metadata(
+      bed_metadata,
+      RWisecondorX:::.sample_metrics_tabix_metadata(
+        seqff = seqff_metrics,
+        y_unique = y_unique_metrics,
+        native = native_metrics,
+        filters_pre = metrics_pre_filters,
+        filters_post = metrics_post_filters
+      )
     )
+    bed_metadata <- RWisecondorX:::.merge_tabix_metadata(
+      bed_metadata,
+      RWisecondorX:::.bam_bin_stats_metadata(native_rows)
+    )
+  }
 
+  corrected_sample <- NULL
+  if (!is.null(gc_table) || !is.null(gc_fasta)) {
     cat("Applying GC correction ...\n")
     corrected_sample <- if (!is.null(gc_table)) {
       nipter_gc_correct(
@@ -311,29 +548,33 @@ if (mode == "rwisecondorx") {
         con = con
       )
     }
+  }
 
-    nipter_sample_to_bed(
-      sample    = raw_sample,
-      bed       = out,
-      binsize   = binsize,
-      corrected = corrected_sample,
-      con       = con,
-      metadata  = bed_metadata
-    )
-  } else {
-    nipter_bin_bam_bed(
-      bam              = bam,
-      bed              = out,
-      binsize          = binsize,
-      mapq             = mapq,
-      require_flags    = opts$`require-flags`,
-      exclude_flags    = opts$`exclude-flags`,
-      rmdup            = rmdup,
-      separate_strands = opts$`separate-strands`,
-      reference        = opts$reference,
-      metadata         = bed_metadata
+  nipter_sample_to_bed(
+    sample = raw_sample,
+    bed = out,
+    binsize = binsize,
+    corrected = corrected_sample,
+    con = con,
+    metadata = bed_metadata
+  )
+}
+
+if (!is.null(opts$`sample-metrics-out`)) {
+  if (is.null(sample_metrics_row)) {
+    stop(
+      "--sample-metrics-out was requested but no metrics were resolved for this mode/sample.",
+      call. = FALSE
     )
   }
+  utils::write.table(
+    sample_metrics_row,
+    file = opts$`sample-metrics-out`,
+    sep = "\t",
+    row.names = FALSE,
+    col.names = TRUE,
+    quote = FALSE
+  )
 }
 
 cat("Done.\n")

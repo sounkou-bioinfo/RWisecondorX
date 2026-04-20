@@ -51,8 +51,8 @@
 #' @param gender Optional character; force gender (`"F"` or `"M"`).
 #' @param seed Optional integer; RNG seed for CBS reproducibility.
 #' @param parallel Logical; use `ParDNAcopy::parSegment()` for CBS when
-#'   available. Default `TRUE`. Falls back to `DNAcopy::segment()` with a
-#'   message if ParDNAcopy is not installed.
+#'   `TRUE` (default). Requires the `ParDNAcopy` package. Set
+#'   `parallel = FALSE` to use `DNAcopy::segment()` explicitly.
 #' @param cpus Integer; number of threads for parallel CBS (`parSegment`) and
 #'   any other OpenMP-accelerated steps. Default `4L`.
 #'
@@ -98,6 +98,7 @@ rwisecondorx_predict <- function(sample,
   if (!is.null(beta)) stopifnot(beta > 0, beta <= 1)
   if (!is.null(gender)) stopifnot(gender %in% c("F", "M"))
   if (!is.null(blacklist)) stopifnot(file.exists(blacklist))
+  .validate_rwisecondorx_predict_threshold(reference, minrefbins)
 
   binsize <- as.integer(reference$binsize)
 
@@ -126,13 +127,17 @@ rwisecondorx_predict <- function(sample,
   # Handle missing gonosomal references
   if (!is_nipt) {
     if (!isTRUE(reference$has_male) && ref_gender == "M") {
-      warning("Sample is male but reference lacks male gonosomal reference. ",
-              "Using female gonosomal reference.", call. = FALSE)
-      ref_gender <- "F"
+      stop(
+        "Sample was classified as male but the reference lacks a male gonosomal partition. ",
+        "Refuse to substitute the female partition.",
+        call. = FALSE
+      )
     } else if (!isTRUE(reference$has_female) && ref_gender == "F") {
-      warning("Sample is female but reference lacks female gonosomal reference. ",
-              "Using male gonosomal reference.", call. = FALSE)
-      ref_gender <- "M"
+      stop(
+        "Sample was classified as female but the reference lacks a female gonosomal partition. ",
+        "Refuse to substitute the male partition.",
+        call. = FALSE
+      )
     }
   }
 
@@ -236,8 +241,11 @@ rwisecondorx_predict <- function(sample,
   results_w <- results_w / mean(results_w, na.rm = TRUE)
 
   if (any(!is.finite(results_w))) {
-    warning("Non-numeric values in weights. Using uniform weights.", call. = FALSE)
-    results_w <- rep(1, length(results_w))
+    stop(
+      "RWisecondorX normalization produced non-finite bin weights. ",
+      "Refuse to replace them with uniform weights.",
+      call. = FALSE
+    )
   }
 
   ref_sizes <- c(aut_rs_remapped, gon_ref_sizes)
@@ -339,6 +347,40 @@ rwisecondorx_predict <- function(sample,
   }
 
   prediction
+}
+
+.validate_rwisecondorx_predict_threshold <- function(reference, minrefbins) {
+  stopifnot(is.list(reference))
+  stopifnot(is.numeric(minrefbins), length(minrefbins) == 1L, minrefbins >= 1L)
+
+  index_keys <- grep("^indexes(\\.|$)", names(reference), value = TRUE)
+  if (!length(index_keys)) {
+    return(invisible(NULL))
+  }
+
+  refsize <- max(vapply(index_keys, function(key) {
+    idx <- reference[[key]]
+    dims <- dim(idx)
+    if (is.null(dims) || length(dims) < 2L) {
+      return(as.integer(length(idx)))
+    }
+    as.integer(dims[[2L]])
+  }, integer(1L)))
+
+  if (!is.finite(refsize) || minrefbins <= refsize) {
+    return(invisible(NULL))
+  }
+
+  stop(
+    sprintf(
+      "Invalid RWisecondorX predict settings: minrefbins=%d exceeds the reference refsize=%d. ",
+      as.integer(minrefbins),
+      as.integer(refsize)
+    ),
+    "No target bin can retain enough reference bins under this combination. ",
+    "Lower 'minrefbins' or rebuild the reference with a larger 'refsize'.",
+    call. = FALSE
+  )
 }
 
 

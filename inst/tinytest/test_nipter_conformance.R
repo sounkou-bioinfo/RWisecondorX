@@ -12,11 +12,12 @@
 #     see AGENTS.md for the exact constraints and the known NIPTeR bugs that
 #     impose them)
 #
-# Known divergence: nipter_gc_correct() uses rduckhts_fasta_nuc() computed
-# on-the-fly, whereas NIPTeR uses bundled sysdata.rda GC tables. GC
-# correction results are therefore expected to differ; both functions are
-# tested for structural correctness (returns NIPTeRSample, status updated)
-# rather than numeric equality.
+# Known divergence: nipter_gc_correct() derives GC on-the-fly from
+# rduckhts_fasta_nuc() nucleotide counts, excluding N/ambiguous bases from
+# the denominator, whereas NIPTeR uses bundled sysdata.rda GC tables.
+# Minor numeric differences may remain; both functions are tested for
+# structural correctness (returns NIPTeRSample, status updated) rather than
+# numeric equality.
 
 library(tinytest)
 library(RWisecondorX)
@@ -593,8 +594,9 @@ if (!is.null(our_gc) && !is.na(Sys.getenv("RWXCONF_FASTA", unset = NA_character_
     expect_true(.is_nipter_sample(nipter_gc),
                 info = "NIPTeR gc_correct returns a sample-like result (structural check)")
     message(
-      "[GC conformance note] nipter_gc_correct uses rduckhts_fasta_nuc(); ",
-      "NIPTeR uses bundled GC tables. Numeric divergence is expected and documented."
+      "[GC conformance note] nipter_gc_correct derives GC from ",
+      "rduckhts_fasta_nuc() nucleotide counts, while NIPTeR uses bundled GC ",
+      "tables. Minor numeric divergence may remain and is documented."
     )
   }
 }

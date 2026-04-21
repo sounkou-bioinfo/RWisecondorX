@@ -18,7 +18,9 @@
 #' \code{chrom}, \code{start}, \code{end}, \code{pct_gc}, \code{seq_len}.
 #' Coordinates are 0-based half-open intervals (BED convention). Chromosomes
 #' use no \code{chr} prefix (\code{1}--\code{22}, \code{X}, \code{Y}).
-#' Bins where all bases are N are written with \code{pct_gc = NA}.
+#' GC is computed on callable \code{A/C/G/T} sequence only, excluding
+#' \code{N}/ambiguous bases from the denominator. Bins with no callable
+#' sequence are written with \code{pct_gc = NA}.
 #'
 #' @seealso [nipter_gc_correct()]
 #'
@@ -263,7 +265,8 @@ nipter_gc_correct <- function(object,
 
 # Fetch GC percentages for bins tiling all chromosomes directly from FASTA.
 # Returns a named list: keys "1"-"22","X","Y", each a numeric vector of
-# pct_gc values (one per bin), with NA for bins with no sequence or all-N.
+# pct_gc values (one per bin), computed on callable A/C/G/T sequence only,
+# with NA for bins with no callable sequence.
 .get_gc_table <- function(fasta, binsize, con) {
   own_con <- is.null(con)
   if (own_con) {
@@ -290,11 +293,22 @@ nipter_gc_correct <- function(object,
       next
     }
     sub_nuc <- sub_nuc[order(sub_nuc$start), , drop = FALSE]
-    gc <- as.numeric(sub_nuc$pct_gc)
-    # Mark bins with all Ns or no sequence as NA
-    seq_len_col <- as.numeric(sub_nuc$seq_len)
-    num_n <- as.numeric(sub_nuc$num_n)
-    gc[seq_len_col == 0L | num_n == seq_len_col] <- NA_real_
+    required_cols <- c("num_a", "num_c", "num_g", "num_t")
+    missing_cols <- setdiff(required_cols, names(sub_nuc))
+    if (length(missing_cols) > 0L) {
+      stop(
+        "rduckhts_fasta_nuc() must provide nucleotide-count columns for GC ",
+        "table construction; missing: ",
+        paste(missing_cols, collapse = ", "),
+        call. = FALSE
+      )
+    }
+    gc_denom <- as.numeric(sub_nuc$num_a) +
+      as.numeric(sub_nuc$num_c) +
+      as.numeric(sub_nuc$num_g) +
+      as.numeric(sub_nuc$num_t)
+    gc <- (as.numeric(sub_nuc$num_c) + as.numeric(sub_nuc$num_g)) / gc_denom
+    gc[!is.finite(gc) | gc_denom <= 0] <- NA_real_
     gc_list[[chr]] <- gc
   }
 

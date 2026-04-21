@@ -1,5 +1,18 @@
 # wisecondorx_npz.R — WisecondorX-compatible NPZ serialization
 #
+.wcx_upstream_n_bins <- function(chr_length, binsize) {
+  as.integer(as.double(chr_length) / as.double(binsize)) + 1L
+}
+
+.compat_npz_writer_script <- function() {
+  normalizePath(
+    system.file("extdata", "write_compat_npz.py",
+                package = "RWisecondorX", mustWork = TRUE),
+    winslash = "/",
+    mustWork = TRUE
+  )
+}
+
 #' Convert BAM/CRAM to WisecondorX NPZ format
 #'
 #' Runs [bam_convert()] and serialises the resulting bin-count list to a
@@ -8,6 +21,10 @@
 #' `wisecondorx newref` can load it; this function therefore requires
 #' `reticulate` and a Python environment with `numpy` installed; any numpy
 #' version from 1.16 onward works.
+#'
+#' This function exists for Python WisecondorX CLI conformance and
+#' interoperability. The native R pipeline uses [bam_convert_bed()] together
+#' with [rwisecondorx_newref()] and [rwisecondorx_predict()].
 #'
 #' The resulting NPZ has three top-level keys:
 #' \describe{
@@ -51,7 +68,8 @@
 #'
 #' @return `npz` (invisibly).
 #'
-#' @seealso [bam_convert()], [wisecondorx_newref()], [wisecondorx_predict()]
+#' @seealso [bam_convert()], [bam_convert_bed()], [rwisecondorx_newref()],
+#'   [rwisecondorx_predict()], [wisecondorx_newref()], [wisecondorx_predict()]
 #'
 #' @examples
 #' \dontrun{
@@ -69,6 +87,9 @@ bam_convert_npz <- function(bam,
                             con     = NULL,
                             np      = NULL,
                             reference = NULL) {
+  # This function is needed ONLY for Python WisecondorX CLI conformance.
+  # For the native R pipeline, use bam_convert_bed() + rwisecondorx_newref().
+
   rmdup <- match.arg(rmdup)
   stopifnot(is.character(npz), length(npz) == 1L, nzchar(npz))
   stopifnot(is.numeric(binsize), length(binsize) == 1L, binsize >= 1L)
@@ -131,7 +152,7 @@ bam_convert_npz <- function(bam,
   for (nm in names(bins)) {
     chr_length <- chr_lengths[[nm]]
     if (!is.null(chr_length)) {
-      n_bins <- as.integer(as.double(chr_length) / as.double(binsize)) + 1L
+      n_bins <- .wcx_upstream_n_bins(chr_length, binsize)
       if (is.null(bins[[nm]])) {
         bins[[nm]] <- integer(n_bins)
       } else if (length(bins[[nm]]) < n_bins) {
@@ -176,34 +197,14 @@ bam_convert_npz <- function(bam,
     quality_dict[qk] <- 0L
   }
 
-  # Write the NPZ using a custom Python writer that produces pickle bytestreams
-  # compatible with both numpy 1.x and 2.x.  numpy >= 2.0 changed its internal
-  # module layout (numpy._core vs numpy.core); when savez_compressed pickles a
-  # dict-valued 0-d object array, the pickle references the writer's module path.
-  # A numpy 1.x reader cannot unpickle numpy._core references.  The writer below
-  # patches the pickle bytes (protocol 2, then s/numpy._core./numpy.core./) so
-  # that the NPZ is universally readable.
-  reticulate::py_run_string("
-import numpy as _np, zipfile as _zf, io as _io, pickle as _pkl
-
-def _write_compat_npz(path, sample, quality, binsize):
-    '''Write NPZ with numpy 1.x/2.x cross-compatible pickle.'''
-    with _zf.ZipFile(path, 'w', compression=_zf.ZIP_DEFLATED) as zf:
-        for key, val in [('sample', sample), ('quality', quality),
-                         ('binsize', _np.array(binsize))]:
-            arr = _np.asarray(val)
-            buf = _io.BytesIO()
-            if arr.dtype == object:
-                _np.lib.format.write_array_header_2_0(
-                    buf,
-                    _np.lib.format.header_data_from_array_1_0(arr))
-                pkl = _pkl.dumps(arr, protocol=2)
-                pkl = pkl.replace(b'numpy._core.', b'numpy.core.')
-                buf.write(pkl)
-            else:
-                _np.lib.format.write_array(buf, arr, allow_pickle=False)
-            zf.writestr(key + '.npy', buf.getvalue())
-", convert = FALSE)
+  # Write the NPZ using a packaged Python helper that produces pickle
+  # bytestreams compatible with both numpy 1.x and 2.x. numpy >= 2.0 changed
+  # its internal module layout (numpy._core vs numpy.core); when
+  # savez_compressed pickles a dict-valued 0-d object array, the pickle
+  # references the writer's module path. A numpy 1.x reader cannot unpickle
+  # numpy._core references, so the helper patches the pickle bytes to
+  # numpy.core for cross-version readability.
+  reticulate::py_run_file(.compat_npz_writer_script(), local = FALSE)
 
   writer <- reticulate::py_eval("_write_compat_npz", convert = FALSE)
   writer(npz, sample_dict, quality_dict, as.integer(binsize))

@@ -4,7 +4,7 @@
 \alias{.mclust_gender_fit}
 \title{Fit a 2-component GMM using mclust (gender model)}
 \usage{
-.mclust_gender_fit(y_fractions)
+.mclust_gender_fit(y_fractions, modelNames = "V")
 }
 \arguments{
 \item{y_fractions}{Numeric vector of Y-chromosome fractions.}

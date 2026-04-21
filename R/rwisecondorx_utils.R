@@ -61,6 +61,20 @@ scale_sample <- function(sample, from_size, to_size) {
   if (.is_wcx_sample(sample)) .as_wcx_sample(result) else result
 }
 
+.ref_key <- function(base, suffix) {
+  paste0(base, suffix)
+}
+
+.wcx_population_sd <- function(x) {
+  vals <- as.numeric(x)
+  vals <- vals[is.finite(vals)]
+  n <- length(vals)
+  if (n == 0L) {
+    return(NaN)
+  }
+  mu <- mean(vals)
+  sqrt(sum((vals - mu)^2) / n)
+}
 
 #' Correct gonosomal read counts for male samples
 #'
@@ -128,12 +142,14 @@ scale_sample <- function(sample, from_size, to_size) {
 #'   }
 #'
 #' @keywords internal
-.get_mask <- function(samples, ref_bins_per_chr = NULL) {
+.get_mask <- function(samples,
+                      ref_bins_per_chr = NULL,
+                      min_median_coverage_fraction = 0.05) {
   n_samples <- length(samples)
   bins_per_chr <- integer(24L)
   by_chr <- vector("list", 24L)
 
-  for (chr in 1:24) {
+  for (chr in seq_len(24L)) {
     chr_key <- as.character(chr)
     max_len <- max(vapply(samples, function(s) {
       x <- s[[chr_key]]
@@ -163,7 +179,7 @@ scale_sample <- function(sample, from_size, to_size) {
 
   sum_per_bin <- rowSums(all_data)
   median_cov <- stats::median(sum_per_bin[sum_per_bin > 0])
-  mask <- sum_per_bin > (0.05 * median_cov)
+  mask <- sum_per_bin > (as.numeric(min_median_coverage_fraction) * median_cov)
 
   list(mask = mask, bins_per_chr = bins_per_chr)
 }
@@ -189,7 +205,12 @@ scale_sample <- function(sample, from_size, to_size) {
 #'   }
 #'
 #' @keywords internal
-.train_gender_model <- function(samples, yfrac = NULL) {
+.train_gender_model <- function(samples,
+                                yfrac = NULL,
+                                gender_model_names = "V",
+                                density_grid_min = 0,
+                                density_grid_max = 0.02,
+                                density_grid_length = 5000L) {
   y_fractions <- vapply(samples, function(s) {
     total <- sum(vapply(s, function(x) {
       if (is.null(x)) 0 else sum(as.numeric(x))
@@ -202,7 +223,7 @@ scale_sample <- function(sample, from_size, to_size) {
     cutoff <- yfrac
   } else {
     fit <- tryCatch(
-      .mclust_gender_fit(y_fractions),
+      .mclust_gender_fit(y_fractions, modelNames = gender_model_names),
       error = function(e) e
     )
 
@@ -217,7 +238,11 @@ scale_sample <- function(sample, from_size, to_size) {
     }
 
     # Find local minimum of the density on a fine grid [0, 0.02]
-    gmm_x <- seq(0, 0.02, length.out = 5000)
+    gmm_x <- seq(
+      as.numeric(density_grid_min),
+      as.numeric(density_grid_max),
+      length.out = as.integer(density_grid_length)
+    )
     gmm_y <- .gmm_density(fit, gmm_x)
 
     local_mins <- which(diff(sign(diff(gmm_y))) == 2) + 1L
@@ -242,13 +267,12 @@ scale_sample <- function(sample, from_size, to_size) {
 #' @param y_fractions Numeric vector of Y-chromosome fractions.
 #' @return mclust model object.
 #' @keywords internal
-.mclust_gender_fit <- function(y_fractions) {
-  # Use the same namespace trick as .mclust_fit() in nipter_sex.R
-  env <- list2env(
-    list(data = matrix(y_fractions, ncol = 1)),
-    parent = asNamespace("mclust")
+.mclust_gender_fit <- function(y_fractions, modelNames = "V") {
+  .mclust_fit_in_namespace(
+    data = matrix(y_fractions, ncol = 1L),
+    G = 2L,
+    modelNames = modelNames
   )
-  evalq(Mclust(data, G = 2, modelNames = "V"), envir = env)
 }
 
 
@@ -259,6 +283,14 @@ scale_sample <- function(sample, from_size, to_size) {
 #' @return Numeric vector of density values.
 #' @keywords internal
 .gmm_density <- function(fit, x) {
+  if (!identical(fit$modelName, "V")) {
+    stop(
+      "RWisecondorX gender-model density evaluation currently expects ",
+      "mclust modelName 'V'; got '", fit$modelName, "'.",
+      call. = FALSE
+    )
+  }
+
   params <- fit$parameters
   n_comp <- length(params$pro)
   dens <- numeric(length(x))
@@ -343,8 +375,6 @@ scale_sample <- function(sample, from_size, to_size) {
 
   # Ratio correction: data / reconstruction
   corrected <- t_data / reconstructed
-  # Handle NaN/Inf from division
-  corrected[!is.finite(corrected)] <- 0
 
   list(
     corrected  = t(corrected),  # back to (n_bins, n_samples)
@@ -374,7 +404,5 @@ scale_sample <- function(sample, from_size, to_size) {
   # Reconstruct
   reconstructed <- drop(transformed %*% pca_components) + pca_mean
 
-  result <- sample_data / reconstructed
-  result[!is.finite(result)] <- 0
-  result
+  sample_data / reconstructed
 }

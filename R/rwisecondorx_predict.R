@@ -26,7 +26,10 @@
 #'
 #' CBS is performed using the DNAcopy Bioconductor package (or optionally
 #' ParDNAcopy for parallel segmentation). Both must be available in
-#' `Suggests`.
+#' `Suggests`. Unlike [wisecondorx_predict()], this function's `parallel`
+#' argument controls native R CBS execution through `ParDNAcopy::parSegment()`;
+#' the upstream Python CLI wrapper delegates segmentation to upstream
+#' WisecondorX and does not expose this native switch.
 #'
 #' @param sample Named list of integer vectors keyed by chromosome
 #'   (`"1"`--`"24"`), as returned by [bam_convert()].
@@ -44,6 +47,18 @@
 #'   Default `5L`.
 #' @param alpha Numeric; CBS breakpoint p-value threshold. Default `1e-4`.
 #' @param zscore Numeric; Z-score cutoff for aberration calling. Default `5`.
+#' @param optimal_cutoff_sd_multiplier Numeric; number of population standard
+#'   deviations added to the mean distance when iteratively deriving the
+#'   optimal within-reference cutoff. Default `3`.
+#' @param within_sample_mask_iterations Integer; number of iterative
+#'   within-sample masking passes. Default `3L`.
+#' @param within_sample_mask_quantile Numeric scalar in `(0, 1)`; bins with
+#'   \code{|z| >= qnorm(within_sample_mask_quantile)} are excluded from the
+#'   next within-sample normalization pass. Default `0.99`.
+#' @param cbs_split_min_gap_bp Integer; NA stretches spanning more than this
+#'   many base pairs trigger CBS segment splitting. Default `2000000L`.
+#' @param segment_zscore_cap Numeric; absolute cap applied to segment z-scores
+#'   after they are derived from the null-ratio distributions. Default `1000`.
 #' @param beta Optional numeric; if given, ratio-based cutoff is used instead
 #'   of Z-score. Should approximate purity (0, 1]. Default `NULL`.
 #' @param blacklist Optional character; path to a headerless BED file of
@@ -66,6 +81,8 @@
 #'     \item{aberrations}{Data frame of called aberrations.}
 #'     \item{statistics}{Data frame of per-chromosome statistics.}
 #'     \item{gender}{Predicted (or forced) gender.}
+#'     \item{algorithm_params}{Named list of native prediction parameters used
+#'       for this result.}
 #'     \item{n_reads}{Total read count.}
 #'     \item{binsize}{Reference bin size.}
 #'   }
@@ -81,6 +98,11 @@ rwisecondorx_predict <- function(sample,
                                 maskrepeats     = 5L,
                                 alpha           = 1e-4,
                                 zscore          = 5,
+                                optimal_cutoff_sd_multiplier = 3,
+                                within_sample_mask_iterations = 3L,
+                                within_sample_mask_quantile = 0.99,
+                                cbs_split_min_gap_bp = 2000000L,
+                                segment_zscore_cap = 1000,
                                 beta            = NULL,
                                 blacklist       = NULL,
                                 gender          = NULL,
@@ -93,8 +115,25 @@ rwisecondorx_predict <- function(sample,
   stopifnot(is.list(sample), is.list(reference))
   minrefbins  <- as.integer(minrefbins)
   maskrepeats <- as.integer(maskrepeats)
+  within_sample_mask_iterations <- as.integer(within_sample_mask_iterations)
+  cbs_split_min_gap_bp <- as.integer(cbs_split_min_gap_bp)
   stopifnot(alpha > 0, alpha <= 1)
   stopifnot(zscore > 0)
+  stopifnot(
+    is.numeric(optimal_cutoff_sd_multiplier),
+    length(optimal_cutoff_sd_multiplier) == 1L,
+    is.finite(optimal_cutoff_sd_multiplier),
+    optimal_cutoff_sd_multiplier > 0
+  )
+  stopifnot(within_sample_mask_iterations >= 1L)
+  stopifnot(within_sample_mask_quantile > 0, within_sample_mask_quantile < 1)
+  stopifnot(cbs_split_min_gap_bp >= 1L)
+  stopifnot(
+    is.numeric(segment_zscore_cap),
+    length(segment_zscore_cap) == 1L,
+    is.finite(segment_zscore_cap),
+    segment_zscore_cap > 0
+  )
   if (!is.null(beta)) stopifnot(beta > 0, beta <= 1)
   if (!is.null(gender)) stopifnot(gender %in% c("F", "M"))
   if (!is.null(blacklist)) stopifnot(file.exists(blacklist))
@@ -142,10 +181,26 @@ rwisecondorx_predict <- function(sample,
   }
 
   # ---------- Step 3: normalize autosomes ----------
-  aut <- .normalize(sample, reference, "A", maskrepeats)
+  aut <- .normalize(
+    sample,
+    reference,
+    "A",
+    maskrepeats,
+    optimal_cutoff_sd_multiplier = optimal_cutoff_sd_multiplier,
+    within_sample_mask_iterations = within_sample_mask_iterations,
+    within_sample_mask_quantile = within_sample_mask_quantile
+  )
 
   # ---------- Step 4: normalize gonosomes ----------
-  gon <- .normalize(sample, reference, ref_gender, maskrepeats)
+  gon <- .normalize(
+    sample,
+    reference,
+    ref_gender,
+    maskrepeats,
+    optimal_cutoff_sd_multiplier = optimal_cutoff_sd_multiplier,
+    within_sample_mask_iterations = within_sample_mask_iterations,
+    within_sample_mask_quantile = within_sample_mask_quantile
+  )
 
   # .normalize() with ref_gender="F"/"M" already returns ONLY the gonosomal
   # bins (it sets ct = masked_bins_per_chr_cum.{F/M}[22] internally and starts
@@ -158,75 +213,20 @@ rwisecondorx_predict <- function(sample,
   gon_ref_sizes   <- gon$ref_sizes
 
   # ---------- Step 4b: remap autosomal results to gonosomal mask space ----------
-  # The A and F/M partitions can have different autosomal masked bin counts
-  # after PCA filtering (each partition filters independently). The combined
-  # results (autosomal + gonosomal) must align with the gonosomal partition's
-  # mask for inflation. Remap A-partition autosomal results into the F/M
-  # partition's autosomal masked coordinate space. Bins present in F/M but
-  # not in A get zero; bins present in A but not in F/M are dropped.
-  gon_ap <- paste0(".", ref_gender)
-  gon_mbpc_cum <- reference[[paste0("masked_bins_per_chr_cum", gon_ap)]]
-  n_aut_gon <- gon_mbpc_cum[22]  # autosomal masked bins in the gonosomal partition
-  n_aut_a   <- reference$masked_bins_per_chr_cum[22]  # autosomal masked bins in A
-
-  if (n_aut_a != n_aut_gon) {
-    # Build mapping via the unmasked autosomal position space.
-    # A-partition: mask covers first sum(bins_per_chr[1:22]) positions.
-    # F/M-partition: mask covers first sum(bins_per_chr.G[1:22]) positions.
-    # Both bins_per_chr are the same for chromosomes 1-22 (same genome),
-    # so the unmasked space is identical — only which positions are TRUE differs.
-    n_aut_unmask <- sum(reference$bins_per_chr[1:22])
-    mask_a   <- reference$mask[seq_len(n_aut_unmask)]
-    mask_gon <- reference[[paste0("mask", gon_ap)]][seq_len(n_aut_unmask)]
-
-    # Map: for each TRUE in mask_gon, find its position among mask_a TRUEs.
-    # If it's also TRUE in mask_a, copy the A result; otherwise zero.
-    a_idx <- which(mask_a)      # unmasked positions that are TRUE in A
-    g_idx <- which(mask_gon)    # unmasked positions that are TRUE in F/M
-
-    # For each gon-masked position, find if it exists in a_idx
-    a_rank <- integer(n_aut_unmask)
-    a_rank[a_idx] <- seq_along(a_idx)  # rank within A masked positions
-
-    remap_aut <- function(aut_vec) {
-      out <- numeric(n_aut_gon)
-      for (j in seq_along(g_idx)) {
-        a_r <- a_rank[g_idx[j]]
-        if (a_r > 0L) out[j] <- aut_vec[a_r]
-      }
-      out
-    }
-
-    aut_r_remapped <- remap_aut(aut$results_r)
-    aut_z_remapped <- remap_aut(aut$results_z)
-    aut_w_remapped <- remap_aut(aut$results_w)
-    aut_rs_remapped <- remap_aut(aut$ref_sizes)
-  } else {
-    aut_r_remapped  <- aut$results_r
-    aut_z_remapped  <- aut$results_z
-    aut_w_remapped  <- aut$results_w
-    aut_rs_remapped <- aut$ref_sizes
-  }
+  aut_mapped <- .remap_autosomal_to_partition(aut, reference, ref_gender)
+  aut_r_remapped <- aut_mapped$r
+  aut_z_remapped <- aut_mapped$z
+  aut_w_remapped <- aut_mapped$w
+  aut_rs_remapped <- aut_mapped$ref_sizes
 
   # Null ratios: autosomal from "A", gonosomal from gender-specific (sliced).
   # Upstream slices gonosomal null_ratios at len(null_ratios_aut), which
   # implicitly assumes A_aut == F_aut. When they differ, use the gonosomal
   # partition's own autosomal cum count for a correct split.
-  null_ratios_aut_full <- reference$null_ratios
-  null_ratios_gon_key <- paste0("null_ratios.", ref_gender)
+  null_ratios_gon_key <- .ref_key("null_ratios.", ref_gender)
   null_ratios_gon_full <- reference[[null_ratios_gon_key]]
-  null_ratios_gon <- null_ratios_gon_full[-(seq_len(n_aut_gon)), , drop = FALSE]
-
-  # Remap autosomal null ratios the same way if needed
-  if (n_aut_a != n_aut_gon) {
-    null_ratios_aut <- matrix(0, nrow = n_aut_gon, ncol = ncol(null_ratios_aut_full))
-    for (j in seq_along(g_idx)) {
-      a_r <- a_rank[g_idx[j]]
-      if (a_r > 0L) null_ratios_aut[j, ] <- null_ratios_aut_full[a_r, ]
-    }
-  } else {
-    null_ratios_aut <- null_ratios_aut_full
-  }
+  null_ratios_gon <- null_ratios_gon_full[-seq_len(aut_mapped$n_aut_gon), , drop = FALSE]
+  null_ratios_aut <- aut_mapped$null_ratios_aut
 
   # Align null ratio column counts (partitions may have different sample counts)
   n_null_min <- min(ncol(null_ratios_aut), ncol(null_ratios_gon))
@@ -253,10 +253,10 @@ rwisecondorx_predict <- function(sample,
 
   # ---------- Step 6: post-process ----------
   # Build rem_input structure
-  gon_mask_key <- paste0("mask.", ref_gender)
-  gon_bpc_key  <- paste0("bins_per_chr.", ref_gender)
-  gon_mbpc_key <- paste0("masked_bins_per_chr.", ref_gender)
-  gon_mbpc_cum_key <- paste0("masked_bins_per_chr_cum.", ref_gender)
+  gon_suffix <- paste0(".", ref_gender)
+  gon_mask_key <- .ref_key("mask", gon_suffix)
+  gon_bpc_key  <- .ref_key("bins_per_chr", gon_suffix)
+  gon_mbpc_key <- .ref_key("masked_bins_per_chr", gon_suffix)
 
   rem_mask             <- reference[[gon_mask_key]]
   rem_bins_per_chr     <- reference[[gon_bpc_key]]
@@ -301,12 +301,26 @@ rwisecondorx_predict <- function(sample,
   }
 
   # ---------- Step 7: CBS ----------
-  cbs_result <- .exec_cbs(results_r_chr, results_w_chr, ref_gender, alpha,
-                          binsize, seed, parallel, cpus = cpus)
+  cbs_result <- .exec_cbs(
+    results_r_chr,
+    results_w_chr,
+    ref_gender,
+    alpha,
+    binsize,
+    seed,
+    parallel,
+    cpus = cpus,
+    split_min_gap_bp = cbs_split_min_gap_bp
+  )
 
   # Compute segment Z-scores
-  segment_zscores <- .get_segment_zscores(cbs_result, results_nr_chr, results_r_chr,
-                                          results_w_chr)
+  segment_zscores <- .get_segment_zscores(
+    cbs_result,
+    results_nr_chr,
+    results_r_chr,
+    results_w_chr,
+    zscore_cap = segment_zscore_cap
+  )
 
   # Build results_c
   results_c <- data.frame(
@@ -314,8 +328,7 @@ rwisecondorx_predict <- function(sample,
     start   = cbs_result$start,
     end     = cbs_result$end,
     zscore  = segment_zscores,
-    ratio   = cbs_result$ratio,
-    stringsAsFactors = FALSE
+    ratio   = cbs_result$ratio
   )
 
   # ---------- Step 8: aberrations ----------
@@ -338,7 +351,24 @@ rwisecondorx_predict <- function(sample,
     ref_gender   = ref_gender,
     n_reads      = n_reads,
     binsize      = binsize,
-    bins_per_chr = rem_bins_per_chr
+    bins_per_chr = rem_bins_per_chr,
+    algorithm_params = list(
+      minrefbins = minrefbins,
+      maskrepeats = maskrepeats,
+      alpha = alpha,
+      zscore = zscore,
+      optimal_cutoff_sd_multiplier = optimal_cutoff_sd_multiplier,
+      within_sample_mask_iterations = within_sample_mask_iterations,
+      within_sample_mask_quantile = within_sample_mask_quantile,
+      cbs_split_min_gap_bp = cbs_split_min_gap_bp,
+      segment_zscore_cap = segment_zscore_cap,
+      beta = beta,
+      gender = if (is.null(gender)) NULL else as.character(gender),
+      blacklist = if (is.null(blacklist)) NULL else normalizePath(blacklist, mustWork = TRUE),
+      seed = if (is.null(seed)) NULL else as.integer(seed),
+      parallel = isTRUE(parallel),
+      cpus = as.integer(cpus)
+    )
   )
   prediction <- .as_wcx_prediction(prediction)
 
@@ -347,6 +377,62 @@ rwisecondorx_predict <- function(sample,
   }
 
   prediction
+}
+
+.WCX_AUTOSOMAL_CHR_COUNT <- 22L
+
+.remap_autosomal_to_partition <- function(aut, reference, ref_gender) {
+  gon_suffix <- paste0(".", ref_gender)
+  gon_mbpc_cum <- reference[[.ref_key("masked_bins_per_chr_cum", gon_suffix)]]
+  n_aut_gon <- gon_mbpc_cum[.WCX_AUTOSOMAL_CHR_COUNT]
+  n_aut_a <- reference$masked_bins_per_chr_cum[.WCX_AUTOSOMAL_CHR_COUNT]
+  null_ratios_aut_full <- reference$null_ratios
+
+  if (n_aut_a == n_aut_gon) {
+    return(list(
+      r = aut$results_r,
+      z = aut$results_z,
+      w = aut$results_w,
+      ref_sizes = aut$ref_sizes,
+      null_ratios_aut = null_ratios_aut_full,
+      n_aut_gon = n_aut_gon
+    ))
+  }
+
+  n_aut_unmask <- sum(reference$bins_per_chr[seq_len(.WCX_AUTOSOMAL_CHR_COUNT)])
+  mask_a <- reference$mask[seq_len(n_aut_unmask)]
+  mask_gon <- reference[[.ref_key("mask", gon_suffix)]][seq_len(n_aut_unmask)]
+
+  a_idx <- which(mask_a)
+  g_idx <- which(mask_gon)
+  a_rank <- integer(n_aut_unmask)
+  a_rank[a_idx] <- seq_along(a_idx)
+  mapped_ranks <- a_rank[g_idx]
+  keep <- mapped_ranks > 0L
+
+  remap_aut <- function(aut_vec) {
+    out <- numeric(length(g_idx))
+    out[keep] <- aut_vec[mapped_ranks[keep]]
+    out
+  }
+
+  null_ratios_aut <- matrix(
+    0,
+    nrow = length(g_idx),
+    ncol = ncol(null_ratios_aut_full)
+  )
+  if (any(keep)) {
+    null_ratios_aut[keep, ] <- null_ratios_aut_full[mapped_ranks[keep], , drop = FALSE]
+  }
+
+  list(
+    r = remap_aut(aut$results_r),
+    z = remap_aut(aut$results_z),
+    w = remap_aut(aut$results_w),
+    ref_sizes = remap_aut(aut$ref_sizes),
+    null_ratios_aut = null_ratios_aut,
+    n_aut_gon = n_aut_gon
+  )
 }
 
 .validate_rwisecondorx_predict_threshold <- function(reference, minrefbins) {
@@ -396,10 +482,16 @@ rwisecondorx_predict <- function(sample,
 #' @param maskrepeats Number of optimal cutoff iterations.
 #' @return List with results_r, results_z, results_w, ref_sizes, m_lr, m_z.
 #' @keywords internal
-.normalize <- function(sample, ref, ref_gender, maskrepeats) {
+.normalize <- function(sample,
+                       ref,
+                       ref_gender,
+                       maskrepeats,
+                       optimal_cutoff_sd_multiplier = 3,
+                       within_sample_mask_iterations = 3L,
+                       within_sample_mask_quantile = 0.99) {
   ap <- if (ref_gender == "A") "" else paste0(".", ref_gender)
-  cp <- if (ref_gender == "A") 0L else 22L
-  ct <- if (ref_gender == "A") 0L else ref[[paste0("masked_bins_per_chr_cum", ap)]][cp]
+  cp <- if (ref_gender == "A") 0L else .WCX_AUTOSOMAL_CHR_COUNT
+  ct <- if (ref_gender == "A") 0L else ref[[.ref_key("masked_bins_per_chr_cum", ap)]][cp]
 
   # Coverage normalization + masking
   sample_masked <- .coverage_normalize_and_mask(sample, ref, ap)
@@ -414,10 +506,23 @@ rwisecondorx_predict <- function(sample,
   results_w <- results_w[(ct + 1L):length(results_w)]
 
   # Optimal distance cutoff
-  optimal_cutoff <- .get_optimal_cutoff(ref, maskrepeats)
+  optimal_cutoff <- .get_optimal_cutoff(
+    ref,
+    maskrepeats,
+    sd_multiplier = optimal_cutoff_sd_multiplier
+  )
 
   # Within-sample normalization (3 iterations)
-  norm_result <- .normalize_repeat(sample_corrected, ref, optimal_cutoff, ct, cp, ap)
+  norm_result <- .normalize_repeat(
+    sample_corrected,
+    ref,
+    optimal_cutoff,
+    ct,
+    cp,
+    ap,
+    iterations = within_sample_mask_iterations,
+    mask_quantile = within_sample_mask_quantile
+  )
 
   list(
     results_r  = norm_result$results_r,
@@ -433,8 +538,8 @@ rwisecondorx_predict <- function(sample,
 #' Coverage normalization and masking
 #' @keywords internal
 .coverage_normalize_and_mask <- function(sample, ref, ap) {
-  bins_per_chr <- ref[[paste0("bins_per_chr", ap)]]
-  mask         <- ref[[paste0("mask", ap)]]
+  bins_per_chr <- ref[[.ref_key("bins_per_chr", ap)]]
+  mask         <- ref[[.ref_key("mask", ap)]]
   n_chrs <- length(bins_per_chr)
 
   by_chr <- vector("list", n_chrs)
@@ -461,7 +566,7 @@ rwisecondorx_predict <- function(sample,
 #' Get weights from reference distances
 #' @keywords internal
 .get_weights <- function(ref, ap) {
-  distances <- ref[[paste0("distances", ap)]]
+  distances <- ref[[.ref_key("distances", ap)]]
   # weights = 1 / mean(sqrt(distances_per_bin))
   inv_w <- apply(distances, 1, function(x) mean(sqrt(x)))
   1 / inv_w
@@ -470,15 +575,15 @@ rwisecondorx_predict <- function(sample,
 
 #' Iterative optimal distance cutoff
 #' @keywords internal
-.get_optimal_cutoff <- function(ref, repeats) {
+.get_optimal_cutoff <- function(ref, repeats, sd_multiplier = 3) {
   distances <- ref$distances
   cutoff <- Inf
   for (i in seq_len(repeats)) {
     vals <- distances[distances < cutoff]
     if (length(vals) == 0L) break
     avg <- mean(vals)
-    sdev <- stats::sd(vals)
-    cutoff <- avg + 3 * sdev
+    sdev <- .wcx_population_sd(vals)
+    cutoff <- avg + as.numeric(sd_multiplier) * sdev
   }
   cutoff
 }
@@ -486,22 +591,30 @@ rwisecondorx_predict <- function(sample,
 
 #' Within-sample normalization with iterative aberration masking (3 iterations)
 #' @keywords internal
-.normalize_repeat <- function(test_data, ref, optimal_cutoff, ct, cp, ap) {
+.normalize_repeat <- function(test_data,
+                              ref,
+                              optimal_cutoff,
+                              ct,
+                              cp,
+                              ap,
+                              iterations = 3L,
+                              mask_quantile = 0.99) {
   test_copy <- test_data  # mutable copy
   results_z <- NULL
   results_r <- NULL
   ref_sizes <- NULL
 
-  for (iter in seq_len(3L)) {
+  z_mask_cutoff <- stats::qnorm(mask_quantile)
+  for (iter in seq_len(as.integer(iterations))) {
     norm_once <- .normalize_once(test_data, test_copy, ref, optimal_cutoff, ct, cp, ap)
     results_z <- norm_once$results_z
     results_r <- norm_once$results_r
     ref_sizes <- norm_once$ref_sizes
 
-    # Mask aberrant bins: |z| >= qnorm(0.99) ~= 2.326
-    # NaN/Inf z-scores from zero-sd bins: Inf gets masked (|Inf| >= 2.326),
+    # Mask aberrant bins for the next within-sample normalization pass.
+    # NaN/Inf z-scores from zero-sd bins: Inf gets masked,
     # NaN stays unmasked (matches numpy behavior: np.abs(nan) >= x is False).
-    aberrant <- abs(results_z) >= stats::qnorm(0.99)
+    aberrant <- abs(results_z) >= z_mask_cutoff
     aberrant[is.na(aberrant)] <- FALSE
     # ct offsets into the full array; aberrant is already ct-relative
     idx_start <- ct + 1L
@@ -520,10 +633,10 @@ rwisecondorx_predict <- function(sample,
 #' Single within-sample normalization pass
 #' @keywords internal
 .normalize_once <- function(test_data, test_copy, ref, optimal_cutoff, ct, cp, ap) {
-  masked_bins_per_chr     <- ref[[paste0("masked_bins_per_chr", ap)]]
-  masked_bins_per_chr_cum <- ref[[paste0("masked_bins_per_chr_cum", ap)]]
-  indexes   <- ref[[paste0("indexes", ap)]]
-  distances <- ref[[paste0("distances", ap)]]
+  masked_bins_per_chr     <- ref[[.ref_key("masked_bins_per_chr", ap)]]
+  masked_bins_per_chr_cum <- ref[[.ref_key("masked_bins_per_chr_cum", ap)]]
+  indexes   <- ref[[.ref_key("indexes", ap)]]
+  distances <- ref[[.ref_key("distances", ap)]]
 
   total_bins <- masked_bins_per_chr_cum[length(masked_bins_per_chr_cum)]
   n_out <- total_bins - ct
@@ -574,21 +687,12 @@ rwisecondorx_predict <- function(sample,
       ref_vals <- chr_data[ref_idx_local]
       ref_vals <- ref_vals[ref_vals >= 0]  # exclude masked (-1) bins
 
-      if (length(ref_vals) > 0) {
-        ref_mean <- mean(ref_vals)
-        # numpy np.std uses population sd (ddof=0, divides by N).
-        # R sd() uses sample sd (divides by N-1). Use population sd for
-        # upstream conformance.
-        n_rv <- length(ref_vals)
-        ref_sd <- if (n_rv > 1L) {
-          sqrt(sum((ref_vals - ref_mean)^2) / n_rv)
-        } else {
-          0
-        }
+      ref_mean <- if (length(ref_vals)) mean(ref_vals) else NaN
+      ref_sd <- .wcx_population_sd(ref_vals)
+      ref_median <- if (length(ref_vals)) stats::median(ref_vals) else NaN
 
-        results_z[i2] <- (test_data[i] - ref_mean) / ref_sd  # Inf/NaN when sd==0
-        results_r[i2] <- test_data[i] / stats::median(ref_vals)
-      }
+      results_z[i2] <- (test_data[i] - ref_mean) / ref_sd
+      results_r[i2] <- test_data[i] / ref_median
       ref_sizes[i2] <- length(ref_vals)
 
       i  <- i + 1L
@@ -698,7 +802,7 @@ rwisecondorx_predict <- function(sample,
   if (nrow(results_c) == 0L) {
     return(data.frame(chr = integer(0), start = integer(0), end = integer(0),
                       ratio = numeric(0), zscore = numeric(0),
-                      type = character(0), stringsAsFactors = FALSE))
+                      type = character(0)))
   }
 
   aberrations <- vector("list", nrow(results_c))
@@ -737,8 +841,7 @@ rwisecondorx_predict <- function(sample,
         end    = seg$end,
         ratio  = seg$ratio,
         zscore = seg$zscore,
-        type   = ab_type,
-        stringsAsFactors = FALSE
+        type   = ab_type
       )
     }
   }
@@ -746,7 +849,7 @@ rwisecondorx_predict <- function(sample,
   if (n_ab == 0L) {
     return(data.frame(chr = integer(0), start = integer(0), end = integer(0),
                       ratio = numeric(0), zscore = numeric(0),
-                      type = character(0), stringsAsFactors = FALSE))
+                      type = character(0)))
   }
 
   do.call(rbind, aberrations[seq_len(n_ab)])

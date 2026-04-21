@@ -35,8 +35,9 @@ the predictor pool (default \code{c(13, 18, 21)}).}
 
 \item{include_chromosomes}{Integer vector of chromosomes to force-include.}
 
-\item{train_fraction}{Fraction of control samples used for training
-(default 0.6).}
+\item{train_fraction}{Fraction of control samples used for training.
+Values below \code{1} perform a train/stat split; values greater than or
+equal to \code{1} fit and score on all controls. Default \code{0.6}.}
 
 \item{overdispersion_rate}{Overdispersion multiplier for theoretical CV
 (default 1.15).}
@@ -76,7 +77,9 @@ complementary strand remains available.
 
 The algorithm:
 \enumerate{
-\item Split the control group 60/40 into train and test sets.
+\item Split the control group into train and statistic sets according to
+\code{train_fraction}. When \code{train_fraction >= 1}, all controls are
+used for both fitting and statistic calculation.
 \item Compute chromosomal fractions for all samples.
 \item For each of \code{n_models} models, greedily select \code{n_predictors}
 chromosomes by maximising adjusted R-squared (forward stepwise

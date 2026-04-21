@@ -361,11 +361,16 @@ nipter_sex_model_y_unique <- function(ratios) {
 #'
 #' The BAM must be indexed (\code{.bai} or \code{.csi}).
 #'
-#' Read counting uses DuckDB/duckhts with index-based region queries
-#' (\code{read_bam(region := ...)}) issued once per Y-unique interval, and a
-#' separate full-genome scan for the nuclear total. Interval chromosome names
-#' are matched to the BAM header so both \code{Y} and \code{chrY}-style
-#' contigs work. Both query paths apply the same MAPQ and flag filters.
+#' Read counting uses DuckDB/duckhts BED coverage summaries via
+#' [Rduckhts::rduckhts_bam_bed_coverage()]. Interval chromosome names are
+#' matched to the BAM header so both \code{Y} and \code{chrY}-style contigs
+#' work. Both the Y-target BED and the whole-nuclear BED apply the same MAPQ
+#' and flag filters.
+#'
+#' Y-target reads are summed across the supplied intervals exactly as listed in
+#' \code{regions_file}. This intentionally preserves the historical
+#' interval-wise summation semantics: if two target intervals overlap, a read
+#' contributing to both intervals is counted twice.
 #'
 #' @param bam Path to an indexed BAM or CRAM file.
 #' @param mapq Minimum mapping quality. Default \code{1L}.
@@ -383,6 +388,9 @@ nipter_sex_model_y_unique <- function(ratios) {
 #'   \code{NULL} (default) a temporary in-memory DuckDB connection is
 #'   created.
 #' @param reference Optional FASTA reference path for CRAM inputs.
+#' @param decompression_threads Integer; number of htslib decompression worker
+#'   threads to use for BAM/CRAM decoding in the BED-coverage path. Default
+#'   \code{0L}.
 #'
 #' @return A list with elements:
 #' \describe{
@@ -414,32 +422,29 @@ nipter_y_unique_ratio <- function(bam,
                                   exclude_flags = 0L,
                                   regions_file  = NULL,
                                   con           = NULL,
-                                  reference     = NULL) {
+                                  reference     = NULL,
+                                  decompression_threads = 0L) {
   stopifnot(is.character(bam), length(bam) == 1L, nzchar(bam))
   stopifnot(file.exists(bam))
   stopifnot(is.numeric(mapq),          length(mapq)          == 1L, mapq          >= 0L)
   stopifnot(is.numeric(require_flags), length(require_flags) == 1L, require_flags >= 0L)
   stopifnot(is.numeric(exclude_flags), length(exclude_flags) == 1L, exclude_flags >= 0L)
+  stopifnot(is.numeric(decompression_threads),
+            length(decompression_threads) == 1L,
+            decompression_threads >= 0L)
   mapq          <- as.integer(mapq)
   require_flags <- as.integer(require_flags)
   exclude_flags <- as.integer(exclude_flags)
+  decompression_threads <- as.integer(decompression_threads)
 
   # Load regions
   if (is.null(regions_file)) {
-    regions_file <- system.file("extdata", "grch37_Y_chrom_blacklist.bed",
-                                package = "RWisecondorX", mustWork = FALSE)
-    if (!nzchar(regions_file) || !file.exists(regions_file)) {
-      candidates <- c(
-        file.path("inst", "extdata", "grch37_Y_chrom_blacklist.bed"),
-        file.path("..", "..", "inst", "extdata", "grch37_Y_chrom_blacklist.bed")
-      )
-      regions_file <- candidates[file.exists(candidates)][1L]
-      if (is.na(regions_file)) {
-        stop("Cannot find a bundled GRCh37 Y-interval file. ",
-             "Provide a path via the 'regions_file' argument.",
-             call. = FALSE)
-      }
-    }
+    regions_file <- system.file(
+      "extdata",
+      "grch37_Y_chrom_blacklist.bed",
+      package = "RWisecondorX",
+      mustWork = TRUE
+    )
   }
   stopifnot(file.exists(regions_file))
   regions <- .read_y_unique_regions_file(regions_file)
@@ -454,67 +459,111 @@ nipter_y_unique_ratio <- function(bam,
     on.exit(DBI::dbDisconnect(con, shutdown = TRUE), add = TRUE)
   }
 
-  bam_escaped <- gsub("'", "''", bam)
-  ref_clause <- if (!is.null(reference)) {
-    sprintf(", reference := '%s'", gsub("'", "''", reference))
-  } else ""
-
-  # Build flag filter clauses
-  req_clause <- if (require_flags > 0L)
-    sprintf("AND (flag & %d) = %d", require_flags, require_flags) else ""
-  exc_clause <- if (exclude_flags > 0L)
-    sprintf("AND (flag & %d) = 0", exclude_flags) else ""
-
-  header_chr <- tryCatch({
-    hdr <- Rduckhts::rduckhts_hts_header(con, bam)
-    hdr <- hdr[hdr$record_type == "SQ" & nzchar(hdr$key_values), , drop = FALSE]
-    if (!nrow(hdr)) {
-      character()
-    } else {
-      sub("^SN, LN, ([^,]+),.*$", "\\1", hdr$key_values)
-    }
-  }, error = function(e) character())
+  hdr <- Rduckhts::rduckhts_hts_header(con, bam)
+  hdr <- hdr[
+    hdr$record_type == "SQ" &
+      !is.na(hdr$id) &
+      nzchar(as.character(hdr$id)) &
+      !is.na(hdr$length),
+    ,
+    drop = FALSE
+  ]
+  header_chr <- as.character(hdr$id)
   header_chr_norm <- .normalize_chr_name(header_chr, xy_to_numeric = FALSE)
-  regions$ChromosomeQuery <- vapply(regions$Chromosome, function(chr) {
+
+  region_chr_query <- vapply(regions$Chromosome, function(chr) {
     chr_norm <- .normalize_chr_name(chr, xy_to_numeric = FALSE)
     hit <- match(chr_norm, header_chr_norm)
-    if (is.na(hit)) chr else header_chr[[hit]]
+    if (is.na(hit)) NA_character_ else header_chr[[hit]]
   }, character(1L))
-
-  # Count reads in Y-unique regions (index-based region query, one interval at
-  # a time so the function does not depend on multi-region parser support).
-  region_counts <- vapply(seq_len(nrow(regions)), function(i) {
-    region_param <- sprintf(
-      "%s:%d-%d",
-      regions$ChromosomeQuery[[i]],
-      as.integer(regions$Start[[i]]),
-      as.integer(regions$End[[i]])
+  keep_regions <- !is.na(region_chr_query) & nzchar(region_chr_query)
+  regions_used <- regions[keep_regions, c("Chromosome", "Start", "End", "GeneName"), drop = FALSE]
+  if (nrow(regions_used)) {
+    regions_bed <- data.frame(
+      chrom = region_chr_query[keep_regions],
+      start = as.integer(regions_used$Start),
+      end = as.integer(regions_used$End),
+      name = ifelse(
+        is.na(regions_used$GeneName) | !nzchar(as.character(regions_used$GeneName)),
+        sprintf(
+          "%s:%s-%s",
+          regions_used$Chromosome,
+          as.integer(regions_used$Start),
+          as.integer(regions_used$End)
+        ),
+        as.character(regions_used$GeneName)
+      ),
+      stringsAsFactors = FALSE
     )
-    sql_y_unique <- sprintf(
-      "SELECT COUNT(*)::INTEGER AS n
-       FROM read_bam('%s', region := '%s'%s)
-       WHERE mapq >= %d %s %s",
-      bam_escaped, region_param, ref_clause,
-      mapq, req_clause, exc_clause
+  } else {
+    regions_bed <- data.frame(
+      chrom = character(),
+      start = integer(),
+      end = integer(),
+      name = character()
     )
-    DBI::dbGetQuery(con, sql_y_unique)$n[1L]
-  }, integer(1L))
-  y_unique_reads <- sum(region_counts)
+  }
 
-  # Count total nuclear reads (chromosomes 1-22, X, Y — no region filter,
-  # full scan with rname filtering)
-  # Nuclear chromosomes pattern: matches 1-22, X, Y with optional chr prefix.
-  sql_total <- sprintf(
-    "SELECT COUNT(*)::INTEGER AS n
-     FROM read_bam('%s'%s)
-     WHERE mapq >= %d %s %s
-       AND rname IS NOT NULL
-       AND regexp_matches(upper(regexp_replace(rname, '^[Cc][Hh][Rr]', '')),
-                          '^([1-9]|1[0-9]|2[0-2]|X|Y)$')",
-    bam_escaped, ref_clause,
-    mapq, req_clause, exc_clause
+  nuclear_keep <- header_chr_norm %in% c(as.character(seq_len(22L)), "X", "Y")
+  nuclear_bed <- data.frame(
+    chrom = header_chr[nuclear_keep],
+    start = 0L,
+    end = as.integer(hdr$length[nuclear_keep]),
+    name = paste0("nuclear_", header_chr[nuclear_keep]),
+    stringsAsFactors = FALSE
   )
-  total_nuclear_reads <- DBI::dbGetQuery(con, sql_total)$n[1L]
+
+  y_bed_path <- tempfile("y_unique_regions_", fileext = ".bed")
+  nuclear_bed_path <- tempfile("nuclear_regions_", fileext = ".bed")
+  on.exit(unlink(c(y_bed_path, nuclear_bed_path), force = TRUE), add = TRUE)
+
+  utils::write.table(
+    regions_bed,
+    file = y_bed_path,
+    sep = "\t",
+    quote = FALSE,
+    row.names = FALSE,
+    col.names = FALSE
+  )
+  utils::write.table(
+    nuclear_bed,
+    file = nuclear_bed_path,
+    sep = "\t",
+    quote = FALSE,
+    row.names = FALSE,
+    col.names = FALSE
+  )
+
+  coverage_args <- list(
+    con = con,
+    path = bam,
+    mapq = mapq,
+    require_flags = require_flags,
+    exclude_flags = exclude_flags,
+    reference = reference,
+    decompression_threads = decompression_threads,
+    strand_outputs = FALSE
+  )
+
+  if (nrow(regions_bed)) {
+    y_cov <- do.call(
+      Rduckhts::rduckhts_bam_bed_coverage,
+      c(coverage_args, list(bed_path = y_bed_path))
+    )
+    y_unique_reads <- as.integer(sum(y_cov$numreads_post, na.rm = TRUE))
+  } else {
+    y_unique_reads <- 0L
+  }
+
+  if (nrow(nuclear_bed)) {
+    total_cov <- do.call(
+      Rduckhts::rduckhts_bam_bed_coverage,
+      c(coverage_args, list(bed_path = nuclear_bed_path))
+    )
+    total_nuclear_reads <- as.integer(sum(total_cov$numreads_post, na.rm = TRUE))
+  } else {
+    total_nuclear_reads <- 0L
+  }
 
   ratio <- if (total_nuclear_reads > 0L) {
     as.numeric(y_unique_reads) / as.numeric(total_nuclear_reads)
@@ -524,7 +573,7 @@ nipter_y_unique_ratio <- function(bam,
     ratio               = ratio,
     y_unique_reads      = y_unique_reads,
     total_nuclear_reads = total_nuclear_reads,
-    regions             = regions,
+    regions             = regions_used,
     regions_file        = regions_file
   )
 }
@@ -596,10 +645,5 @@ nipter_y_unique_ratio <- function(bam,
 # Evaluating in the namespace makes internal symbol lookup succeed, which is
 # the CRAN-friendly alternative to library()/require() inside a function.
 .mclust_fit <- function(data, G = 2L, equalPro = TRUE) {
-  ns <- asNamespace("mclust")
-  evalq(
-    Mclust(data, G = G, control = emControl(equalPro = equalPro)),
-    envir = list2env(list(data = data, G = G, equalPro = equalPro),
-                     parent = ns)
-  )
+  .mclust_fit_in_namespace(data = data, G = G, equalPro = equalPro)
 }

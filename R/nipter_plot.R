@@ -11,7 +11,9 @@
 #' @param method_palette Optional named color vector keyed by method labels.
 #' @param shapiro_shapes Optional named shape vector keyed by Shapiro labels
 #'   \code{"<0.05"}, \code{">=0.05"}, and \code{"NA"}.
-#' @param cv_step Y-axis increment for CV facets. Default \code{0.05}.
+#' @param cv_step Base CV increment used for zero-based y-axis scaling.
+#'   Labeled major breaks adapt when the facet range becomes large. Default
+#'   \code{0.05}.
 #'
 #' @return A \code{ggplot} object.
 #'
@@ -27,25 +29,25 @@ nipter_plot_qc_chromosomes <- function(qc,
   theme <- match.arg(theme)
   stopifnot(is.numeric(base_size), length(base_size) == 1L, base_size > 0)
   stopifnot(is.numeric(cv_step), length(cv_step) == 1L, cv_step > 0)
-  method_palette <- .merge_named_defaults(method_palette, .chrom_method_palette())
   shapiro_shapes <- .merge_named_defaults(
     shapiro_shapes,
     c("<0.05" = 17, ">=0.05" = 16, "NA" = 4)
   )
 
-  df <- as.data.frame(qc$chromosome_summary, stringsAsFactors = FALSE)
-  df$chromosome <- factor(as.character(df$chromosome), levels = as.character(1:22))
+  df <- .chromosome_plot_data(qc)
+  method_palette <- .complete_named_palette(
+    .merge_named_defaults(method_palette, .chrom_method_palette()),
+    levels = unique(df$series_label)
+  )
+  df$chromosome <- factor(
+    as.character(df$chromosome),
+    levels = c(as.character(1:22), "X_XX", "Y_XX", "X_XY", "Y_XY")
+  )
   df$method_family <- factor(
-    if ("method_family" %in% names(df)) df$method_family else "z_fraction",
+    df$method_family,
     levels = c("z_fraction", "ncv", "rbz")
   )
-  df$method_label <- if ("method_label" %in% names(df)) df$method_label else "combined"
-  df$method_label <- factor(
-    df$method_label,
-    levels = c("combined", "forward", "reverse", "ncv",
-               "predictor_set_1", "predictor_set_2",
-               "predictor_set_3", "predictor_set_4")
-  )
+  df$series_label <- factor(df$series_label, levels = unique(df$series_label))
   df$shapiro_flag <- ifelse(
     is.na(df$shapiro_p_value),
     "NA",
@@ -54,7 +56,7 @@ nipter_plot_qc_chromosomes <- function(qc,
   df <- df[!is.na(df$method_family), , drop = FALSE]
   p <- ggplot2::ggplot(
     df,
-    ggplot2::aes(x = chromosome, y = cv_fraction, color = method_label, group = method_label)
+    ggplot2::aes(x = chromosome, y = cv_fraction, color = series_label, group = series_label)
   ) +
     ggplot2::geom_line(linewidth = 0.45, na.rm = TRUE) +
     ggplot2::geom_point(
@@ -65,7 +67,7 @@ nipter_plot_qc_chromosomes <- function(qc,
     ggplot2::scale_color_manual(
       values = method_palette,
       drop = FALSE,
-      name = "Method"
+      name = "Series"
     ) +
     ggplot2::scale_shape_manual(
       values = shapiro_shapes,
@@ -73,13 +75,13 @@ nipter_plot_qc_chromosomes <- function(qc,
     ) +
     ggplot2::scale_y_continuous(
       limits = function(x) .cv_axis_limits(x, step = cv_step),
-      breaks = function(x) .cv_axis_breaks(x, step = cv_step),
-      minor_breaks = NULL,
+      breaks = function(x) .cv_axis_major_breaks(x, step = cv_step),
+      minor_breaks = function(x) .cv_axis_minor_breaks(x, step = cv_step),
       expand = ggplot2::expansion(mult = c(0, 0.02))
     ) +
     ggplot2::labs(
       title = "Chromosome CV QC Across Controls",
-      x = "Chromosome",
+      x = "Chromosome / sex model",
       y = "CV (%)"
     ) +
     .nipter_plot_theme(theme, base_size = base_size) +
@@ -89,7 +91,39 @@ nipter_plot_qc_chromosomes <- function(qc,
       legend.position = "bottom"
     )
 
-  p + ggplot2::facet_wrap(~ method_family, ncol = 1, scales = "free_y")
+  p + ggplot2::facet_wrap(
+    ~ method_family,
+    ncol = 1,
+    scales = "free_y",
+    labeller = ggplot2::labeller(
+      method_family = c(
+        z_fraction = "Z fractions",
+        ncv = "NCV",
+        rbz = "RBZ"
+      )
+    )
+  )
+}
+
+.chromosome_plot_data <- function(qc) {
+  chr_df <- as.data.frame(qc$chromosome_summary, stringsAsFactors = FALSE)
+  if (!nrow(chr_df)) {
+    stop("qc$chromosome_summary is empty.", call. = FALSE)
+  }
+  chr_df <- chr_df[is.finite(chr_df$cv_fraction), , drop = FALSE]
+  chr_df$chromosome <- as.character(chr_df$chromosome)
+  chr_df$method_family <- if ("method_family" %in% names(chr_df)) {
+    as.character(chr_df$method_family)
+  } else {
+    "z_fraction"
+  }
+  chr_df$series_label <- if ("method_label" %in% names(chr_df)) {
+    as.character(chr_df$method_label)
+  } else {
+    "combined"
+  }
+  chr_df[, c("chromosome", "method_family", "series_label",
+             "cv_fraction", "shapiro_p_value"), drop = FALSE]
 }
 
 .cv_axis_step <- 0.05
@@ -106,6 +140,32 @@ nipter_plot_qc_chromosomes <- function(qc,
 
 .cv_axis_breaks <- function(x, step = .cv_axis_step) {
   seq(0, .cv_axis_upper(x, step = step), by = step)
+}
+
+.cv_axis_major_step <- function(x, step = .cv_axis_step, max_labels = 10L) {
+  upper <- .cv_axis_upper(x, step = step)
+  if (!is.finite(upper) || upper <= (step * max_labels)) {
+    return(step)
+  }
+  raw_step <- upper / max_labels
+  max(step, ceiling(raw_step / step) * step)
+}
+
+.cv_axis_major_breaks <- function(x, step = .cv_axis_step, max_labels = 10L) {
+  seq(
+    0,
+    .cv_axis_upper(x, step = step),
+    by = .cv_axis_major_step(x, step = step, max_labels = max_labels)
+  )
+}
+
+.cv_axis_minor_breaks <- function(x, step = .cv_axis_step, max_minor = 200L) {
+  upper <- .cv_axis_upper(x, step = step)
+  n_minor <- ceiling(upper / step)
+  if (!is.finite(n_minor) || n_minor > max_minor) {
+    return(NULL)
+  }
+  seq(0, upper, by = step)
 }
 
 #' Plot sample-level NIPTeR control-group QC
@@ -727,6 +787,16 @@ write_nipter_reference_plots <- function(qc,
     forward = "#4da3c7",
     reverse = "#144b5f",
     ncv = "#3b7a57",
+    XX = "#7a3e9d",
+    XY = "#b84a62",
+    XX_predictor_set_1 = "#7a3e9d",
+    XX_predictor_set_2 = "#9467bd",
+    XX_predictor_set_3 = "#b08ad9",
+    XX_predictor_set_4 = "#5e2a84",
+    XY_predictor_set_1 = "#b84a62",
+    XY_predictor_set_2 = "#d96f5a",
+    XY_predictor_set_3 = "#f49d6e",
+    XY_predictor_set_4 = "#8f2d3c",
     predictor_set_1 = "#c73e1d",
     predictor_set_2 = "#d98b2b",
     predictor_set_3 = "#7c4dff",
@@ -742,6 +812,18 @@ write_nipter_reference_plots <- function(qc,
   out <- defaults
   out[names(values)] <- values
   out
+}
+
+.complete_named_palette <- function(values, levels) {
+  levels <- unique(as.character(levels))
+  missing <- setdiff(levels, names(values))
+  if (length(missing)) {
+    values[missing] <- stats::setNames(
+      grDevices::hcl.colors(length(missing), palette = "Dark 3"),
+      missing
+    )
+  }
+  values
 }
 
 .nipter_plot_theme <- function(theme = c("minimal", "light", "bw", "classic"),

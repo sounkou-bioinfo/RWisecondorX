@@ -44,6 +44,14 @@
 #'   chromosomes are aberrant.
 #' @param include_bins Logical; when \code{TRUE}, compute the autosomal
 #'   bin-level scaled-count CV and chi profile. Default \code{FALSE}.
+#' @param rbz_train_fraction Fraction of controls used to fit autosomal RBZ
+#'   QC models. Values below \code{1} use a train/stat split; values greater
+#'   than or equal to \code{1} fit and score on all retained controls.
+#'   Default \code{1}.
+#' @param rbz_seed Integer seed used when \code{rbz_train_fraction < 1}.
+#'   Default \code{1995L}.
+#' @param rbz_exclude_chromosomes Integer vector excluded from autosomal RBZ
+#'   predictor search. Default \code{c(13L, 18L, 21L)}.
 #'
 #' @return A typed \code{NIPTControlGroupQC} object.
 #'
@@ -59,7 +67,10 @@ nipter_control_group_qc <- function(control_group,
                                     collapse_strands = FALSE,
                                     max_aberrant_chromosomes = 2L,
                                     outlier_rule = c("any_aberrant_score", "bidirectional_or_multichromosome"),
-                                    include_bins = FALSE) {
+                                    include_bins = FALSE,
+                                    rbz_train_fraction = 1,
+                                    rbz_seed = 1995L,
+                                    rbz_exclude_chromosomes = c(13L, 18L, 21L)) {
   stopifnot(.is_nipt_control_group_object(control_group))
   stopifnot(is.numeric(chi_cutoff), length(chi_cutoff) == 1L)
   stopifnot(is.numeric(z_cutoff), length(z_cutoff) == 1L, z_cutoff > 0)
@@ -67,6 +78,16 @@ nipter_control_group_qc <- function(control_group,
   stopifnot(is.numeric(max_aberrant_chromosomes),
             length(max_aberrant_chromosomes) == 1L,
             max_aberrant_chromosomes >= 0)
+  stopifnot(is.numeric(rbz_train_fraction),
+            length(rbz_train_fraction) == 1L,
+            is.finite(rbz_train_fraction),
+            rbz_train_fraction > 0)
+  if (!is.null(rbz_seed)) {
+    stopifnot(is.numeric(rbz_seed), length(rbz_seed) == 1L, is.finite(rbz_seed))
+  }
+  if (!is.null(rbz_exclude_chromosomes)) {
+    stopifnot(is.numeric(rbz_exclude_chromosomes))
+  }
   if (!is.null(reference_model)) {
     stopifnot(.is_nipt_reference_model(reference_model))
   }
@@ -85,7 +106,10 @@ nipter_control_group_qc <- function(control_group,
   )
   chromosome_summary <- .qc_chromosome_summary(
     chi_corrected_control_group = chi_corrected_control_group,
-    z_cutoff = z_cutoff
+    z_cutoff = z_cutoff,
+    rbz_train_fraction = rbz_train_fraction,
+    rbz_seed = rbz_seed,
+    rbz_exclude_chromosomes = rbz_exclude_chromosomes
   )
 
   ssd_mat <- nipter_match_matrix(control_group)
@@ -136,6 +160,10 @@ nipter_control_group_qc <- function(control_group,
   sex_model_summary <- .qc_sex_model_summary(
     reference_model = reference_model,
     ref = sex_frame
+  )
+  chromosome_summary <- .append_sex_model_chromosome_summary(
+    chromosome_summary,
+    sex_model_summary
   )
   if (!is.null(sex_frame)) {
     sex_cols <- sex_frame[, c(
@@ -189,6 +217,9 @@ nipter_control_group_qc <- function(control_group,
       invalid_chi_reason_counts = as.list(table(chi_profile$invalid_reason[!chi_profile$valid_bins])),
       n_overdispersed_bins = sum(chi_profile$overdispersed),
       chromosome_summary_source = "post_chi_with_model_qc",
+      rbz_train_fraction = as.numeric(rbz_train_fraction),
+      rbz_seed = if (is.null(rbz_seed)) NA_integer_ else as.integer(rbz_seed),
+      rbz_exclude_chromosomes = as.integer(rbz_exclude_chromosomes),
       sample_sex_counts = if (is.null(sample_sex)) NULL else as.list(table(sample_sex))
     )
   ))
@@ -196,7 +227,9 @@ nipter_control_group_qc <- function(control_group,
 
 .qc_chromosome_summary <- function(chi_corrected_control_group,
                                    z_cutoff = 3,
-                                   regression_seed = 1995L) {
+                                   rbz_train_fraction = 1,
+                                   rbz_seed = 1995L,
+                                   rbz_exclude_chromosomes = c(13L, 18L, 21L)) {
   out <- rbind(
     .qc_post_chi_fraction_chromosome_summary(
       chi_corrected_control_group = chi_corrected_control_group,
@@ -205,7 +238,9 @@ nipter_control_group_qc <- function(control_group,
     .qc_ncv_chromosome_summary(chi_corrected_control_group),
     .qc_rbz_chromosome_summary(
       chi_corrected_control_group = chi_corrected_control_group,
-      seed = regression_seed
+      train_fraction = rbz_train_fraction,
+      seed = rbz_seed,
+      exclude_chromosomes = rbz_exclude_chromosomes
     )
   )
 
@@ -227,7 +262,11 @@ nipter_control_group_qc <- function(control_group,
                                    model_message = NA_character_,
                                    n_reference_samples = NA_integer_,
                                    n_training_samples = NA_integer_,
-                                   n_stat_samples = NA_integer_) {
+                                   n_stat_samples = NA_integer_,
+                                   train_fraction_requested = NA_real_,
+                                   train_fraction_effective = NA_real_,
+                                   split_mode = NA_character_,
+                                   split_seed = NA_integer_) {
   data.frame(
     chromosome = as.character(chromosome),
     mean_fraction = as.numeric(mean_value),
@@ -244,8 +283,69 @@ nipter_control_group_qc <- function(control_group,
     n_reference_samples = as.integer(n_reference_samples),
     n_training_samples = as.integer(n_training_samples),
     n_stat_samples = as.integer(n_stat_samples),
+    train_fraction_requested = as.numeric(train_fraction_requested),
+    train_fraction_effective = as.numeric(train_fraction_effective),
+    split_mode = as.character(split_mode),
+    split_seed = as.integer(split_seed),
     stringsAsFactors = FALSE
   )
+}
+
+.append_sex_model_chromosome_summary <- function(chromosome_summary,
+                                                 sex_model_summary) {
+  if (is.null(sex_model_summary) || !nrow(sex_model_summary)) {
+    return(chromosome_summary)
+  }
+
+  sex_df <- as.data.frame(sex_model_summary, stringsAsFactors = FALSE)
+  sex_df <- sex_df[
+    sex_df$model_status == "ok" &
+      sex_df$reference_sex %in% c("female", "male") &
+      sex_df$focus_chromosome %in% c("X", "Y"),
+    ,
+    drop = FALSE
+  ]
+  if (!nrow(sex_df)) {
+    return(chromosome_summary)
+  }
+
+  sex_group <- ifelse(sex_df$reference_sex == "female", "XX", "XY")
+  method_family <- ifelse(
+    sex_df$method_family == "regression",
+    "rbz",
+    sex_df$method_family
+  )
+  method_label <- ifelse(
+    sex_df$method_family == "regression",
+    paste0(sex_group, "_", sex_df$method_label),
+    sex_group
+  )
+
+  rows <- data.frame(
+    chromosome = paste0(sex_df$focus_chromosome, "_", sex_group),
+    mean_fraction = sex_df$mean_value,
+    sd_fraction = sex_df$sd_value,
+    cv_fraction = sex_df$cv_percent,
+    shapiro_p_value = sex_df$shapiro_p_value,
+    method_family = method_family,
+    method_label = method_label,
+    value_space = sex_df$value_space,
+    cv_type = NA_character_,
+    model_terms = sex_df$model_terms,
+    model_status = sex_df$model_status,
+    model_message = sex_df$model_message,
+    n_reference_samples = sex_df$n_reference_samples,
+    n_training_samples = sex_df$n_training_samples,
+    n_stat_samples = sex_df$n_stat_samples,
+    train_fraction_requested = NA_real_,
+    train_fraction_effective = NA_real_,
+    split_mode = "all_samples",
+    split_seed = NA_integer_,
+    stringsAsFactors = FALSE
+  )
+
+  rownames(rows) <- NULL
+  rbind(chromosome_summary, rows)
 }
 
 .qc_post_chi_fraction_chromosome_summary <- function(chi_corrected_control_group,
@@ -358,10 +458,13 @@ nipter_control_group_qc <- function(control_group,
 }
 
 .qc_rbz_chromosome_summary <- function(chi_corrected_control_group,
-                                       seed = 1995L) {
+                                       train_fraction = 1,
+                                       seed = 1995L,
+                                       exclude_chromosomes = c(13L, 18L, 21L)) {
   control_sample <- chi_corrected_control_group$samples[[1L]]
   rows <- vector("list", 22L * 4L)
   k <- 1L
+  split_mode <- if (isTRUE(train_fraction >= 1)) "all_samples" else "train_test"
 
   for (chrom in 1:22) {
     reg <- tryCatch(
@@ -369,6 +472,8 @@ nipter_control_group_qc <- function(control_group,
         sample = control_sample,
         control_group = chi_corrected_control_group,
         chromo_focus = chrom,
+        train_fraction = train_fraction,
+        exclude_chromosomes = as.integer(exclude_chromosomes),
         seed = seed
       ),
       error = identity
@@ -384,7 +489,11 @@ nipter_control_group_qc <- function(control_group,
           model_message = conditionMessage(reg),
           n_reference_samples = n_controls(chi_corrected_control_group),
           n_training_samples = NA_integer_,
-          n_stat_samples = NA_integer_
+          n_stat_samples = NA_integer_,
+          train_fraction_requested = as.numeric(train_fraction),
+          train_fraction_effective = NA_real_,
+          split_mode = split_mode,
+          split_seed = if (is.null(seed)) NA_integer_ else as.integer(seed)
         )
         k <- k + 1L
       }
@@ -402,7 +511,11 @@ nipter_control_group_qc <- function(control_group,
           model_message = "Regression builder returned fewer than 4 predictor sets.",
           n_reference_samples = n_controls(chi_corrected_control_group),
           n_training_samples = NA_integer_,
-          n_stat_samples = NA_integer_
+          n_stat_samples = NA_integer_,
+          train_fraction_requested = as.numeric(train_fraction),
+          train_fraction_effective = NA_real_,
+          split_mode = split_mode,
+          split_seed = if (is.null(seed)) NA_integer_ else as.integer(seed)
         )
         k <- k + 1L
         next
@@ -421,9 +534,13 @@ nipter_control_group_qc <- function(control_group,
         value_space = "ratio",
         cv_type = mdl$cv_type,
         model_terms = paste(mdl$predictors, collapse = " "),
-        n_reference_samples = n_controls(chi_corrected_control_group),
+        n_reference_samples = mdl$n_reference_samples %||% n_controls(chi_corrected_control_group),
         n_training_samples = mdl$n_training_samples %||% NA_integer_,
-        n_stat_samples = mdl$n_stat_samples %||% length(mdl$control_z_scores)
+        n_stat_samples = mdl$n_stat_samples %||% length(mdl$control_z_scores),
+        train_fraction_requested = mdl$train_fraction_requested %||% as.numeric(train_fraction),
+        train_fraction_effective = mdl$train_fraction_effective %||% NA_real_,
+        split_mode = mdl$split_mode %||% split_mode,
+        split_seed = mdl$split_seed %||% if (is.null(seed)) NA_integer_ else as.integer(seed)
       )
       k <- k + 1L
     }

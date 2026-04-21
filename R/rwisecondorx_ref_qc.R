@@ -20,9 +20,10 @@
 #'
 #' @param reference A `WisecondorXReference` object from
 #'   [rwisecondorx_newref()].
-#' @param min_ref_bins Integer; minimum number of usable reference bins per
-#'   target bin before the report flags a warning. Default `150L`, matching the
-#'   upstream Python QC heuristic.
+#' @param min_ref_bins Integer; minimum number of usable normalizing reference
+#'   bins retained for a target bin before the report flags a warning. This is
+#'   not the number of cohort samples. Default `150L`, matching the upstream
+#'   Python QC heuristic.
 #' @param output_json Optional path for writing the QC report as JSON. When
 #'   supplied, requires the `jsonlite` package.
 #'
@@ -35,7 +36,8 @@
 #'     issues between autosomal and gonosomal sub-references.}
 #'   \item{metrics}{Named list of per-branch metrics (`A`, `F`, `M`) including
 #'     verdict, message, mean/std of per-bin mean distances, outlier counts, and
-#'     low-reference counts. Male reports also include chrY metrics.}
+#'     counts of target bins that fall below the normalizing-reference-bin
+#'     threshold. Male reports also include chrY metrics.}
 #' }
 #'
 #' @seealso [rwisecondorx_newref()], [rwisecondorx_predict()]
@@ -89,11 +91,13 @@ rwisecondorx_ref_qc <- function(reference,
       n_valid = metrics$n_valid,
       verdict = verdict$verdict,
       message = verdict$message,
+      min_reference_bins_threshold = as.integer(min_ref_bins),
       mean_of_means = metrics$mean_of_means,
       std_of_means = metrics$std_of_means,
       n_mean_outlier = metrics$n_mean_outlier,
       outlier_pct = metrics$outlier_pct,
-      n_low_refs = metrics$n_low_refs
+      n_low_refs = metrics$n_low_refs,
+      n_target_bins_below_reference_bin_threshold = metrics$n_low_refs
     )
     if (!is.null(metrics$chrY)) {
       branch_report$chrY <- metrics$chrY
@@ -175,8 +179,12 @@ rwisecondorx_ref_qc <- function(reference,
     if (s_autosomal_masked != a_autosomal_masked) {
       issues <- c(
         issues,
-        sprintf("%s autosomal masked bins (%d) differ from A (%d)",
-                suffix, s_autosomal_masked, a_autosomal_masked)
+        sprintf(
+          "%s autosomal masked-bin count (%d) differs from autosomal reference A (%d)",
+          suffix,
+          s_autosomal_masked,
+          a_autosomal_masked
+        )
       )
     }
 
@@ -184,7 +192,10 @@ rwisecondorx_ref_qc <- function(reference,
     if (s_autosomal_span != a_autosomal_span || !identical(s_prefix, a_prefix)) {
       issues <- c(
         issues,
-        sprintf("%s autosomal mask prefix differs from A", suffix)
+        sprintf(
+          "%s autosomal mask prefix is not aligned to the finalized autosomal reference A",
+          suffix
+        )
       )
     }
   }
@@ -307,7 +318,11 @@ rwisecondorx_ref_qc <- function(reference,
     return(list(
       verdict = "WARN",
       severity = 1L,
-      message = sprintf("n_refs<%d in %d bins", min_ref_bins, metrics$n_low_refs)
+      message = sprintf(
+        "usable normalizing reference bins per target < %d for %d target bins",
+        min_ref_bins,
+        metrics$n_low_refs
+      )
     ))
   }
   if (metrics$std_of_means > 10) {
@@ -355,7 +370,11 @@ rwisecondorx_ref_qc <- function(reference,
 
   if (metrics$n_low_refs > 0L) {
     update("WARN", 1L,
-           sprintf("n_refs<%d in %d bins", min_ref_bins, metrics$n_low_refs))
+           sprintf(
+             "usable normalizing reference bins per target < %d for %d target bins",
+             min_ref_bins,
+             metrics$n_low_refs
+           ))
   }
   if (metrics$mean_of_means > 10) {
     update("FAIL", 2L,

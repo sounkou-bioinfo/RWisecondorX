@@ -48,6 +48,10 @@ BAM or CRAM file to a \code{.npz} file for downstream use with
 This wrapper exposes the upstream \verb{wisecondorx convert} CLI flags:
 \code{--reference}, \code{--binsize}, and \code{--normdup}.
 
+Conda execution is run inside an isolated HOME/XDG sandbox so stale
+libmamba lock files in the user's global cache do not leak into package
+calls.
+
 For a fully native R implementation (no Python dependency) that uses
 Rduckhts instead of pysam, see \code{\link[=bam_convert]{bam_convert()}} and \code{\link[=bam_convert_npz]{bam_convert_npz()}}.
 }

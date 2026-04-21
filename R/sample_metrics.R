@@ -352,12 +352,14 @@
                                 seqff = NULL,
                                 y_unique = NULL,
                                 native = NULL,
+                                nipter_qc = NULL,
                                 filters_pre = NULL,
                                 filters_post = NULL) {
   stopifnot(is.character(sample_name), length(sample_name) == 1L, nzchar(sample_name))
   seqff <- .null_coalesce(seqff, list())
   y_unique <- .null_coalesce(y_unique, list())
   native <- .null_coalesce(native, list())
+  nipter_qc <- .null_coalesce(nipter_qc, list())
   filters_pre <- .null_coalesce(.record_to_list(filters_pre), list())
   filters_post <- .null_coalesce(.record_to_list(filters_post), list())
   unique_pct <- if (!is.null(native$count_pre) &&
@@ -383,6 +385,15 @@
     native_count_fwd_sum = unname(.null_coalesce(native$count_fwd, NA_real_)),
     native_count_rev_sum = unname(.null_coalesce(native$count_rev, NA_real_)),
     native_n_nonzero_bins_post = unname(.null_coalesce(native$n_nonzero_bins_post, NA_real_)),
+    gc_loess_valid_bins = unname(.null_coalesce(nipter_qc$gc_loess_valid_bins, NA_real_)),
+    nipter_autosomal_bin_cv_pre = unname(.null_coalesce(nipter_qc$nipter_autosomal_bin_cv_pre, NA_real_)),
+    nipter_autosomal_bin_cv_post = unname(.null_coalesce(nipter_qc$nipter_autosomal_bin_cv_post, NA_real_)),
+    nipter_corrected_bin_ratio_mean = unname(.null_coalesce(nipter_qc$nipter_corrected_bin_ratio_mean, NA_real_)),
+    nipter_corrected_bin_ratio_sd = unname(.null_coalesce(nipter_qc$nipter_corrected_bin_ratio_sd, NA_real_)),
+    nipter_corrected_bin_ratio_cv = unname(.null_coalesce(nipter_qc$nipter_corrected_bin_ratio_cv, NA_real_)),
+    nipter_gc_correlation_pre = unname(.null_coalesce(nipter_qc$nipter_gc_correlation_pre, NA_real_)),
+    nipter_gc_correlation_post = unname(.null_coalesce(nipter_qc$nipter_gc_correlation_post, NA_real_)),
+    nipter_gc_curve_png = .null_coalesce(nipter_qc$gc_curve_plot, NA_character_),
     gc_read_perc_pre = unname(.null_coalesce(native$gc_pre, NA_real_)),
     gc_read_perc_post = unname(.null_coalesce(native$gc_post, NA_real_)),
     mean_mapq_post = unname(.null_coalesce(native$mean_mapq_post, NA_real_)),
@@ -468,11 +479,13 @@
 .sample_metrics_tabix_metadata <- function(seqff = NULL,
                                            y_unique = NULL,
                                            native = NULL,
+                                           nipter_qc = NULL,
                                            filters_pre = NULL,
                                            filters_post = NULL) {
   seqff <- .null_coalesce(seqff, list())
   y_unique <- .null_coalesce(y_unique, list())
   native <- .null_coalesce(native, list())
+  nipter_qc <- .null_coalesce(nipter_qc, list())
   filters_pre <- .null_coalesce(.record_to_list(filters_pre), list())
   filters_post <- .null_coalesce(.record_to_list(filters_post), list())
 
@@ -500,8 +513,14 @@
     y_unique_total_nuclear_reads_post = y_unique$total_post,
     y_unique_source = y_unique$source,
     y_unique_regions_file = y_unique$regions_file,
-    y_unique_genes = y_unique$genes,
-    y_unique_regions = y_unique$intervals,
+    gc_loess_valid_bins = nipter_qc$gc_loess_valid_bins,
+    nipter_autosomal_bin_cv_pre = nipter_qc$nipter_autosomal_bin_cv_pre,
+    nipter_autosomal_bin_cv_post = nipter_qc$nipter_autosomal_bin_cv_post,
+    nipter_corrected_bin_ratio_mean = nipter_qc$nipter_corrected_bin_ratio_mean,
+    nipter_corrected_bin_ratio_sd = nipter_qc$nipter_corrected_bin_ratio_sd,
+    nipter_corrected_bin_ratio_cv = nipter_qc$nipter_corrected_bin_ratio_cv,
+    nipter_gc_correlation_pre = nipter_qc$nipter_gc_correlation_pre,
+    nipter_gc_correlation_post = nipter_qc$nipter_gc_correlation_post,
     gc_read_perc_pre = native$gc_pre,
     gc_read_perc_post = native$gc_post,
     mean_mapq_post = native$mean_mapq_post,

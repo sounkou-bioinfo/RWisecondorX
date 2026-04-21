@@ -213,12 +213,16 @@ if (nzchar(.helper_nipter)) {
   expect_identical(meta[["metrics_post_exclude_flags"]], "1024",
                    info = "sample metrics metadata includes filtered flag provenance")
   expect_true(
-    identical(meta[["y_unique_genes"]], "GENE1;GENE2"),
-    info = "sample metrics metadata includes Y-unique gene labels"
+    identical(meta[["y_unique_regions_file"]], regions_tsv),
+    info = "sample metrics metadata keeps the Y-region file provenance"
   )
   expect_true(
-    grepl("Y:100-200\\(GENE1\\);Y:300-400\\(GENE2\\)", meta[["y_unique_regions"]]),
-    info = "sample metrics metadata includes explicit Y-unique intervals"
+    !"y_unique_genes" %in% names(meta),
+    info = "sample metrics metadata no longer embeds Y-unique gene labels"
+  )
+  expect_true(
+    !"y_unique_regions" %in% names(meta),
+    info = "sample metrics metadata no longer embeds explicit Y-unique interval payloads"
   )
 }
 

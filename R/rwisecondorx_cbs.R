@@ -53,7 +53,8 @@
 #'
 #' @keywords internal
 .exec_cbs <- function(results_r, results_w, ref_gender, alpha, binsize, seed,
-                      parallel = TRUE, cpus = 1L) {
+                      parallel = TRUE, cpus = 1L,
+                      split_min_gap_bp = 2000000L) {
   # Determine which chromosomes to include
   chrs <- if (ref_gender == "M") seq_len(24L) else seq_len(23L)
 
@@ -91,8 +92,7 @@
   keep <- !is.na(ratio_vec)
   if (sum(keep) == 0L) {
     return(data.frame(chr = integer(0), start = integer(0),
-                      end = integer(0), ratio = numeric(0),
-                      stringsAsFactors = FALSE))
+                      end = integer(0), ratio = numeric(0)))
   }
 
   ratio_cbs  <- ratio_vec[keep]
@@ -100,8 +100,24 @@
   chr_cbs    <- chr_vec[keep]
   pos_cbs    <- pos_vec[keep]
 
-  # Set seed if provided
-  if (!is.null(seed)) set.seed(seed)
+  # Set seed temporarily if provided, but restore the caller RNG state.
+  if (!is.null(seed)) {
+    has_seed <- exists(".Random.seed", envir = .GlobalEnv, inherits = FALSE)
+    if (has_seed) {
+      old_seed <- get(".Random.seed", envir = .GlobalEnv, inherits = FALSE)
+    }
+    on.exit(
+      {
+        if (has_seed) {
+          assign(".Random.seed", old_seed, envir = .GlobalEnv)
+        } else if (exists(".Random.seed", envir = .GlobalEnv, inherits = FALSE)) {
+          rm(".Random.seed", envir = .GlobalEnv)
+        }
+      },
+      add = TRUE
+    )
+    set.seed(as.integer(seed))
+  }
 
   # Create CNA object
   cna_obj <- DNAcopy::CNA(ratio_cbs, chr_cbs, pos_cbs,
@@ -125,16 +141,12 @@
                                          verbose = 0,
                                          weights = weight_cbs)
   } else {
-    # Suppress DNAcopy's verbose progress output
-    seg_result <- local({
-      seg_out <- NULL
-      utils::capture.output(
-        seg_out <- DNAcopy::segment(cna_obj, alpha = alpha, verbose = 1,
-                                    weights = weight_cbs),
-        type = "output"
-      )
-      seg_out
-    })
+    seg_result <- DNAcopy::segment(
+      cna_obj,
+      alpha = alpha,
+      verbose = 0,
+      weights = weight_cbs
+    )
   }
 
   seg_df <- seg_result$output
@@ -144,17 +156,15 @@
 
   # Build the full position-indexed data frame for segment splitting
   full_df <- data.frame(chromosome = chr_cbs, x = pos_cbs,
-                        y = ratio_cbs, w = weight_cbs,
-                        stringsAsFactors = FALSE)
+                        y = ratio_cbs, w = weight_cbs)
 
   # Split segments spanning large NA gaps
-  na_threshold <- as.integer((binsize / 2000000)^(-1))
+  na_threshold <- as.integer(ceiling(as.numeric(split_min_gap_bp) / as.numeric(binsize)))
   new_segs <- .split_na_segments(seg_df, full_df, na_threshold)
 
   if (nrow(new_segs) == 0L) {
     return(data.frame(chr = integer(0), start = integer(0),
-                      end = integer(0), ratio = numeric(0),
-                      stringsAsFactors = FALSE))
+                      end = integer(0), ratio = numeric(0)))
   }
 
   # Recalculate segmental ratios using weighted means
@@ -175,8 +185,7 @@
     chr   = as.integer(new_segs$chr),
     start = as.integer(new_segs$s) - 1L,
     end   = as.integer(new_segs$e),
-    ratio = as.numeric(new_segs$r),
-    stringsAsFactors = FALSE
+    ratio = as.numeric(new_segs$r)
   )
 }
 
@@ -209,8 +218,7 @@
     if (length(segment_y) < 2L) {
       n_new <- n_new + 1L
       new_rows[[n_new]] <- data.frame(chr = chr_i, s = start_i,
-                                       e = end_i, r = seg_df$r[row_i],
-                                       stringsAsFactors = FALSE)
+                                       e = end_i, r = seg_df$r[row_i])
       next
     }
 
@@ -231,6 +239,21 @@
       end_pos   <- integer(0)
     }
 
+    if (length(start_pos) != length(end_pos)) {
+      warning(
+        sprintf(
+          "CBS NA-gap split mismatch on chr %s segment [%d, %d]; keeping the original segment unsplit.",
+          chr_i, start_i, end_i
+        ),
+        call. = FALSE
+      )
+      n_new <- n_new + 1L
+      new_rows[[n_new]] <- data.frame(chr = chr_i, s = start_i,
+                                      e = end_i, r = seg_df$r[row_i])
+      next
+    }
+    stopifnot(length(start_pos) == length(end_pos))
+
     # Compute inverse segments (the non-NA stretches)
     inv_start <- c(start_i, end_pos)
     inv_end   <- c(start_pos, end_i)
@@ -244,14 +267,13 @@
     for (j in seq_along(inv_start)) {
       n_new <- n_new + 1L
       new_rows[[n_new]] <- data.frame(chr = chr_i, s = inv_start[j],
-                                       e = inv_end[j], r = seg_df$r[row_i],
-                                       stringsAsFactors = FALSE)
+                                       e = inv_end[j], r = seg_df$r[row_i])
     }
   }
 
   if (n_new == 0L) {
     return(data.frame(chr = integer(0), s = integer(0), e = integer(0),
-                      r = numeric(0), stringsAsFactors = FALSE))
+                      r = numeric(0)))
   }
 
   do.call(rbind, new_rows[seq_len(n_new)])
@@ -268,10 +290,15 @@
 #' @param results_nr List of per-chromosome null-ratio matrices.
 #' @param results_r List of per-chromosome log2-ratio vectors.
 #' @param results_w List of per-chromosome weight vectors.
+#' @param zscore_cap Numeric; absolute cap applied to finite segment z-scores.
 #'
 #' @return Numeric vector of Z-scores, one per segment.
 #' @keywords internal
-.get_segment_zscores <- function(cbs_result, results_nr, results_r, results_w) {
+.get_segment_zscores <- function(cbs_result,
+                                 results_nr,
+                                 results_r,
+                                 results_w,
+                                 zscore_cap = 1000) {
   if (nrow(cbs_result) == 0L) return(numeric(0))
 
   zscores <- numeric(nrow(cbs_result))
@@ -332,7 +359,7 @@
       zscores[i] <- NaN
     } else {
       z <- (cbs_result$ratio[i] - null_mean) / null_sd
-      zscores[i] <- max(min(z, 1000), -1000)
+      zscores[i] <- max(min(z, zscore_cap), -zscore_cap)
     }
   }
 
@@ -359,8 +386,8 @@
   n_chr <- length(results_r)
 
   # Per-chromosome ratio means and medians
-  chr_ratio_means <- numeric(n_chr)
-  chr_ratio_medians <- numeric(n_chr)
+  chr_ratio_means <- rep(NaN, n_chr)
+  chr_ratio_medians <- rep(NaN, n_chr)
   for (chr in seq_len(n_chr)) {
     r <- results_r[[chr]]
     w <- results_w[[chr]]
@@ -382,8 +409,7 @@
     # This is a known upstream bug (predict_output.py:210) but we replicate it
     # for exact conformance with Python WisecondorX output.
     end   = bins_per_chr - 1L,
-    ratio = chr_ratio_means,
-    stringsAsFactors = FALSE
+    ratio = chr_ratio_means
   )
   chr_zscores <- .get_segment_zscores(chr_segments, results_nr, results_r, results_w)
 
@@ -401,10 +427,11 @@
 
   data.frame(
     chr           = chr_names,
-    ratio_mean    = round(chr_ratio_means, 5),
-    ratio_median  = round(chr_ratio_medians, 5),
-    zscore        = round(chr_zscores, 5),
-    stringsAsFactors = FALSE
+    ratio_mean    = chr_ratio_means,
+    ratio_median  = chr_ratio_medians,
+    zscore        = chr_zscores,
+    msv           = rep(msv, n_chr),
+    cpa           = rep(cpa, n_chr)
   )
 }
 
@@ -422,13 +449,14 @@
     if (chr > length(results_r)) next
     seg_r <- results_r[[chr]][s:e]
     seg_r <- seg_r[seg_r != 0]
-    if (length(seg_r) > 1L) {
+    if (length(seg_r) > 0L) {
       n_valid <- n_valid + 1L
-      vars[n_valid] <- stats::var(seg_r)
+      seg_mean <- mean(seg_r)
+      vars[n_valid] <- mean((seg_r - seg_mean)^2)
     }
   }
   if (n_valid == 0L) return(NA_real_)
-  round(stats::median(vars[seq_len(n_valid)]), 5)
+  stats::median(vars[seq_len(n_valid)])
 }
 
 

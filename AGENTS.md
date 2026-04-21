@@ -28,7 +28,7 @@ Design priorities:
 
 **WisecondorX layer**
 - `R/wisecondorx_cli.R`: `wisecondorx_convert()`, `wisecondorx_newref()`, `wisecondorx_predict()` — thin `condathis` wrappers delegating to the official bioconda package.
-- `R/wisecondorx_npz.R`: `bam_convert_npz()` — WisecondorX-compatible NPZ output via `reticulate`.
+- `R/wisecondorx_npz.R`: `bam_convert_npz()` — WisecondorX-compatible NPZ output via `reticulate`, kept for Python CLI conformance/interoperability rather than the native R pipeline.
 
 **NIPTeR binning layer — `R/nipter_bin.R`**
 - `nipter_bin_bam()`: produces `NIPTeRSample` objects. With `separate_strands = FALSE` (default), class is `c("NIPTeRSample", "CombinedStrands")`; with `separate_strands = TRUE`, class is `c("NIPTeRSample", "SeparatedStrands")` with `autosomal_chromosome_reads` as a list of two matrices (forward/reverse, rownames `"1F".."22F"` / `"1R".."22R"`). Exposes `mapq`, `require_flags`, `exclude_flags`, `rmdup` for pre-filtering matching real-world NIPT pipelines (e.g. `mapq=40L, exclude_flags=1024L`).
@@ -65,9 +65,10 @@ Each file is strictly separate; never mix NIPTeR and WisecondorX code. All stati
 Pure R/Rcpp port of the WisecondorX `newref` and `predict` pipelines, with performance-critical KNN reference-finding in compiled C++. No Python runtime dependency.
 
 - `R/rwisecondorx_utils.R` — Shared utilities: `.train_gender_model()` (2-component GMM on Y-fractions with zero-variance fallback), `.gender_correct()`, `.get_mask()` (5% median coverage threshold), `.normalize_and_mask()`, `.train_pca()` (5 components, ratio correction), `.project_pc()`, `.predict_gender()`. Also exports `scale_sample()` for rescaling bin sizes.
+- `R/mclust_utils.R` — Shared internal mclust namespace helper used by both the NIPTeR and native WisecondorX sex-model code paths.
 - `R/rwisecondorx_newref.R` — `rwisecondorx_newref()`: reference building pipeline. Gender model training → global bin mask → per-partition (A/F/M) normalize/PCA/distance-filter/KNN/null-ratios. `.build_sub_reference()` orchestrates each partition. `.get_reference()` delegates to Rcpp.
 - `R/rwisecondorx_predict.R` — `rwisecondorx_predict()`: prediction pipeline. Rescale → predict gender → normalize autosomes (coverage + PCA + weights + optimal cutoff + 3-pass within-sample normalization with aberration masking) → normalize gonosomes → combine → inflate → log-transform → blacklist → CBS → segment Z-scores → aberration calling. `.normalize()`, `.normalize_repeat()`, `.normalize_once()` implement the multi-pass normalization. Global-to-local index conversion in `.normalize_once()` handles the index-space mapping correctly.
-- `R/rwisecondorx_cbs.R` — `.exec_cbs()`: CBS wrapper; `parallel = TRUE` (now the default) uses `ParDNAcopy::parSegment(num.cores = cpus)` with an explicit thread count; falls back to `DNAcopy::segment()` with a message if ParDNAcopy is absent. Matches upstream conventions (0→NA, 0 weights→1e-99, split segments at large NA gaps, recalculate weighted means). `.get_segment_zscores()`: segment-level Z-scores from null ratio distributions.
+- `R/rwisecondorx_cbs.R` — `.exec_cbs()`: CBS wrapper; `parallel = TRUE` (now the default) uses `ParDNAcopy::parSegment(num.cores = cpus)` with an explicit thread count and hard-stops if `ParDNAcopy` is absent; call with `parallel = FALSE` to use `DNAcopy::segment()` explicitly. Matches upstream conventions (0→NA, 0 weights→1e-99, split segments at large NA gaps, recalculate weighted means). `.get_segment_zscores()`: segment-level Z-scores from null ratio distributions.
 - `R/rwisecondorx_output.R` — BED and statistics output writers for `WisecondorXPrediction` objects.
 - `src/knn_reference.cpp` — `knn_reference_cpp()`: OpenMP-parallelized KNN reference bin finding (leave-one-chromosome-out squared Euclidean distance, partial sort for K nearest). Stores **global** 1-based indexes. `null_ratios_cpp()`: OpenMP-parallelized null ratio computation using global indexes directly against full sample vectors.
 - `src/nipter_matching.cpp` — `nipter_ssd_scores_cpp()`: one query vs N columns of a fractions matrix, returns N SSD scores (OpenMP). `nipter_ssd_matrix_cpp()`: symmetric N×N pairwise SSD matrix (OpenMP, symmetric schedule). Both accept `cpus` for thread count.
@@ -138,6 +139,7 @@ The pipeline (`newref` + `predict`) is functionally complete and all 76 unit tes
 - `src/Makevars`, `src/Makevars.win` — OpenMP compilation flags.
 - `inst/tinytest/` — unit tests (one file per feature family).
 - `inst/extdata/` — synthetic BAM/CRAM fixtures (including `nipter_conformance_fixture.bam`) and bundled reference data (`grch37_Y_UniqueRegions.txt`).
+- `inst/extdata/write_compat_npz.py` — packaged Python helper used by `bam_convert_npz()` to write numpy 1.x/2.x compatible NPZ payloads. Keep compatibility helpers here; do not introduce an `inst/python/` directory.
 - `inst/scripts/make_cohort.R` — CLI wrapper for cohort generation.
 - `inst/scripts/build_reference.R` — optparse CLI for building WisecondorX references or NIPTeR control groups from BAM/CRAM or BED.gz files. Supports `--mode wisecondorx|nipter`, `--bam-dir`/`--bam-list` (bins then builds), `--bed-dir`/`--bed-list` (builds from pre-binned BEDs), `--gc-table` or `--fasta` (NIPTeR GC correction during binning, mutually exclusive), `--bed-out-dir`, and all key parameters (binsize, mapq, rmdup, refsize, cpus, etc.).
 - `inst/scripts/convert_sample.R` — optparse CLI for converting a single BAM/CRAM to a binned BED.gz or NPZ file. Supports `--mode wisecondorx|nipter`, `--npz` (WisecondorX NPZ output for Python interop), `--gc-table` or `--fasta` (NIPTeR GC correction, mutually exclusive), `--separate-strands`, and all binning parameters (binsize, mapq, rmdup, exclude-flags, require-flags, reference).
@@ -145,7 +147,12 @@ The pipeline (`newref` + `predict`) is functionally complete and all 76 unit tes
 - The WisecondorX upstream algorithm reference is `.sync/WisecondorX/`.
 - The NIPTeR upstream algorithm reference is `.sync/NIPTeR/`.
 - The WisecondorX conformance script is `../../duckhts/scripts/wisecondorx_convert_conformance.py`.
-- There is NO `inst/python/` directory.
+- There is NO `inst/python/` directory; packaged Python compatibility helpers belong under `inst/extdata/`.
+
+### Known upstream WisecondorX deviations intentionally replicated
+
+- **CPA +1 overcount**: upstream Python computes segment length as `end - start + 1` for half-open CBS intervals. `rwisecondorx_cbs.R` replicates this in `.get_cpa()` for conformance.
+- **Whole-chromosome last-bin drop**: upstream Python computes whole-chromosome Z-scores using `end = bins_per_chr - 1`, which drops the last bin under half-open slicing. `rwisecondorx_cbs.R` replicates this in `.compute_statistics()` for conformance.
 
 ---
 
@@ -271,6 +278,26 @@ Always read the existing implementation before changing it:
 
 - Use make targets: `make rd`, `make test`, `make readme`, `make fixtures`.
 - Keep build steps deterministic and non-interactive.
+
+## Development Dependency Source
+
+`RWisecondorX` development tracks the edge of `Rduckhts`, not the CRAN
+release. If an agent needs to install or update `Rduckhts` for local
+development or validation, use the r-universe repository first:
+
+```r
+install.packages(
+  "Rduckhts",
+  repos = c(
+    "https://rgenomicsetl.r-universe.dev",
+    "https://cloud.r-project.org"
+  )
+)
+```
+
+Do not assume the CRAN build is current enough for this repository. Prefer an
+already installed edge build when available, and do not "fix" behaviour by
+downgrading expectations to match an older CRAN release.
 
 ## Conformance Testing Rules
 

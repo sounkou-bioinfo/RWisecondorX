@@ -10,7 +10,8 @@
   masked_bins_per_chr_cum,
   refsize,
   gender,
-  cpus
+  cpus,
+  null_ratio_max_samples = 100L
 )
 }
 \arguments{

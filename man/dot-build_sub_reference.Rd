@@ -4,7 +4,17 @@
 \alias{.build_sub_reference}
 \title{Build a sub-reference for one gender partition}
 \usage{
-.build_sub_reference(samples, gender, total_mask, bins_per_chr, refsize, cpus)
+.build_sub_reference(
+  samples,
+  gender,
+  total_mask,
+  bins_per_chr,
+  refsize,
+  cpus,
+  pca_components,
+  pca_distance_params,
+  null_ratio_max_samples
+)
 }
 \arguments{
 \item{samples}{List of sample objects.}

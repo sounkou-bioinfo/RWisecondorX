@@ -27,7 +27,9 @@ nipter_plot_qc_chromosomes(
 \item{shapiro_shapes}{Optional named shape vector keyed by Shapiro labels
 \code{"<0.05"}, \code{">=0.05"}, and \code{"NA"}.}
 
-\item{cv_step}{Y-axis increment for CV facets. Default \code{0.05}.}
+\item{cv_step}{Base CV increment used for zero-based y-axis scaling.
+Labeled major breaks adapt when the facet range becomes large. Default
+\code{0.05}.}
 }
 \value{
 A \code{ggplot} object.

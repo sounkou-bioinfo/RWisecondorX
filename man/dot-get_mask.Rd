@@ -4,7 +4,11 @@
 \alias{.get_mask}
 \title{Compute the global bin mask from a set of reference samples}
 \usage{
-.get_mask(samples, ref_bins_per_chr = NULL)
+.get_mask(
+  samples,
+  ref_bins_per_chr = NULL,
+  min_median_coverage_fraction = 0.05
+)
 }
 \arguments{
 \item{samples}{List of sample objects (each a named list of integer vectors

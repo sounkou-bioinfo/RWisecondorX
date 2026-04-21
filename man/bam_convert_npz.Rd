@@ -55,6 +55,10 @@ Runs \code{\link[=bam_convert]{bam_convert()}} and serialises the resulting bin-
 version from 1.16 onward works.
 }
 \details{
+This function exists for Python WisecondorX CLI conformance and
+interoperability. The native R pipeline uses \code{\link[=bam_convert_bed]{bam_convert_bed()}} together
+with \code{\link[=rwisecondorx_newref]{rwisecondorx_newref()}} and \code{\link[=rwisecondorx_predict]{rwisecondorx_predict()}}.
+
 The resulting NPZ has three top-level keys:
 \describe{
 \item{\code{sample}}{0-d object array wrapping a dict mapping \code{"1"}..\code{"24"}
@@ -86,5 +90,6 @@ bam_convert_npz("sample.bam", "sample.npz", binsize = 5000, rmdup = "streaming")
 
 }
 \seealso{
-\code{\link[=bam_convert]{bam_convert()}}, \code{\link[=wisecondorx_newref]{wisecondorx_newref()}}, \code{\link[=wisecondorx_predict]{wisecondorx_predict()}}
+\code{\link[=bam_convert]{bam_convert()}}, \code{\link[=bam_convert_bed]{bam_convert_bed()}}, \code{\link[=rwisecondorx_newref]{rwisecondorx_newref()}},
+\code{\link[=rwisecondorx_predict]{rwisecondorx_predict()}}, \code{\link[=wisecondorx_newref]{wisecondorx_newref()}}, \code{\link[=wisecondorx_predict]{wisecondorx_predict()}}
 }

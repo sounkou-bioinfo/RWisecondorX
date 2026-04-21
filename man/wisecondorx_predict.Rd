@@ -95,6 +95,12 @@ documented in the WisecondorX README: \code{--minrefbins}, \code{--maskrepeats},
 \code{--zscore}, \code{--alpha}, \code{--beta}, \code{--blacklist}, \code{--gender}, \code{--bed},
 \code{--plot}, \code{--add-plot-title}, \code{--regions}, \code{--ylim}, \code{--cairo}, and
 \code{--seed}.
+
+Conda execution is run inside an isolated HOME/XDG sandbox so stale
+libmamba lock files in the user's global cache do not leak into package
+calls. Unlike \code{\link[=rwisecondorx_predict]{rwisecondorx_predict()}}, this wrapper does not expose the
+native \code{parallel} argument used for \code{ParDNAcopy}; segmentation behavior is
+delegated entirely to the upstream Python WisecondorX CLI.
 }
 \examples{
 \dontrun{

@@ -21,8 +21,9 @@
 #' @param exclude_chromosomes Integer vector of chromosomes to exclude from
 #'   the predictor pool (default \code{c(13, 18, 21)}).
 #' @param include_chromosomes Integer vector of chromosomes to force-include.
-#' @param train_fraction Fraction of control samples used for training
-#'   (default 0.6).
+#' @param train_fraction Fraction of control samples used for training.
+#'   Values below \code{1} perform a train/stat split; values greater than or
+#'   equal to \code{1} fit and score on all controls. Default \code{0.6}.
 #' @param overdispersion_rate Overdispersion multiplier for theoretical CV
 #'   (default 1.15).
 #' @param force_practical_cv Logical; always use practical CV regardless of
@@ -45,7 +46,9 @@
 #' @details
 #' The algorithm:
 #'
-#' 1. Split the control group 60/40 into train and test sets.
+#' 1. Split the control group into train and statistic sets according to
+#'    \code{train_fraction}. When \code{train_fraction >= 1}, all controls are
+#'    used for both fitting and statistic calculation.
 #' 2. Compute chromosomal fractions for all samples.
 #' 3. For each of \code{n_models} models, greedily select \code{n_predictors}
 #'    chromosomes by maximising adjusted R-squared (forward stepwise
@@ -112,6 +115,49 @@ nipter_regression <- function(sample,
   }
 }
 
+.regression_split_indices <- function(n_controls, train_fraction, seed = NULL) {
+  stopifnot(is.numeric(train_fraction), length(train_fraction) == 1L)
+  if (!is.finite(train_fraction) || train_fraction <= 0) {
+    stop("train_fraction must be a finite number > 0.", call. = FALSE)
+  }
+
+  if (train_fraction >= 1) {
+    idx <- seq_len(n_controls)
+    return(list(
+      train_idx = idx,
+      stat_idx = idx,
+      train_fraction_requested = as.numeric(train_fraction),
+      train_fraction_effective = 1,
+      split_mode = "all_samples",
+      split_seed = NA_integer_
+    ))
+  }
+
+  if (n_controls < 4L) {
+    stop(
+      "Control group too small for a train/stat split (need >= 4 samples unless train_fraction >= 1).",
+      call. = FALSE
+    )
+  }
+
+  n_train <- max(2L, as.integer(round(n_controls * train_fraction)))
+  n_train <- min(n_train, n_controls - 2L)
+  if (!is.null(seed)) {
+    set.seed(as.integer(seed))
+  }
+  train_idx <- sort(sample(seq_len(n_controls), n_train))
+  stat_idx <- setdiff(seq_len(n_controls), train_idx)
+
+  list(
+    train_idx = train_idx,
+    stat_idx = stat_idx,
+    train_fraction_requested = as.numeric(train_fraction),
+    train_fraction_effective = length(train_idx) / n_controls,
+    split_mode = "train_test",
+    split_seed = if (is.null(seed)) NA_integer_ else as.integer(seed)
+  )
+}
+
 
 # ---------------------------------------------------------------------------
 # CombinedStrands regression (unchanged logic, extracted to helper)
@@ -143,19 +189,16 @@ nipter_regression <- function(sample,
   # Sample fractions
   sample_frac <- .sample_chr_fractions(sample)
 
-  # Train/test split
-  if (!is.null(seed)) set.seed(seed)
-  n_train  <- max(2L, round(n_controls * train_fraction))
-  train_idx <- sort(sample(seq_len(n_controls), n_train))
-  test_idx  <- setdiff(seq_len(n_controls), train_idx)
+  split <- .regression_split_indices(
+    n_controls = n_controls,
+    train_fraction = train_fraction,
+    seed = seed
+  )
 
-  if (length(test_idx) < 2L) {
-    stop("Control group too small for train/test split (need >= 4 samples).",
-         call. = FALSE)
-  }
-
+  train_idx <- split$train_idx
+  stat_idx <- split$stat_idx
   train_frac <- all_frac[, train_idx, drop = FALSE]
-  test_frac  <- all_frac[, test_idx, drop = FALSE]
+  stat_frac  <- all_frac[, stat_idx, drop = FALSE]
 
   # Total reads for focus chromosome of the test sample (for theoretical CV)
   sample_focus_reads <- sum(sample$autosomal_chromosome_reads[[1L]][chr_focus_key, ])
@@ -200,12 +243,12 @@ nipter_regression <- function(sample,
                               train_frac[chr_focus_key, ])$coefficients
 
     # Predict on test set and sample
-    X_test   <- rbind(1, test_frac[selected,  , drop = FALSE])
+    X_test   <- rbind(1, stat_frac[selected,  , drop = FALSE])
     X_sample <- c(1, sample_frac[selected])
     test_pred   <- as.numeric(fit_coef %*% X_test)
     sample_pred <- as.numeric(sum(fit_coef * X_sample))
 
-    test_obs  <- test_frac[chr_focus_key, ]
+    test_obs  <- stat_frac[chr_focus_key, ]
     test_ratio   <- test_obs / test_pred
     sample_ratio <- sample_frac[chr_focus_key] / sample_pred
 
@@ -224,7 +267,7 @@ nipter_regression <- function(sample,
     # Z-score
     z_sample   <- (sample_ratio - 1) / cv_used
     ctrl_z     <- (test_ratio - 1) / cv_used
-    ctrl_names <- vapply(control_group$samples[test_idx],
+    ctrl_names <- vapply(control_group$samples[stat_idx],
                          .sample_name, character(1L))
     names(ctrl_z) <- ctrl_names
 
@@ -242,8 +285,13 @@ nipter_regression <- function(sample,
       predictors       = selected,
       shapiro_p_value  = shap_p,
       control_z_scores = ctrl_z,
+      n_reference_samples = n_controls,
       n_training_samples = length(train_idx),
-      n_stat_samples = length(ctrl_z)
+      n_stat_samples = length(ctrl_z),
+      train_fraction_requested = split$train_fraction_requested,
+      train_fraction_effective = split$train_fraction_effective,
+      split_mode = split$split_mode,
+      split_seed = split$split_seed
     )
   }
 
@@ -252,7 +300,12 @@ nipter_regression <- function(sample,
       models            = models_out,
       focus_chromosome  = chr_focus_key,
       correction_status = .sample_correction_status(sample, "autosomal"),
-      sample_name       = .sample_name(sample)
+      sample_name       = .sample_name(sample),
+      n_reference_samples = n_controls,
+      train_fraction_requested = split$train_fraction_requested,
+      train_fraction_effective = split$train_fraction_effective,
+      split_mode = split$split_mode,
+      split_seed = split$split_seed
     ),
     class = "NIPTeRRegression"
   )
@@ -320,23 +373,20 @@ nipter_regression <- function(sample,
     frac_vec[focus_F] + frac_vec[focus_R]
   }
 
-  # Train/test split
-  if (!is.null(seed)) set.seed(seed)
-  n_train   <- max(2L, round(n_controls * train_fraction))
-  train_idx <- sort(sample(seq_len(n_controls), n_train))
-  test_idx  <- setdiff(seq_len(n_controls), train_idx)
-
-  if (length(test_idx) < 2L) {
-    stop("Control group too small for train/test split (need >= 4 samples).",
-         call. = FALSE)
-  }
+  split <- .regression_split_indices(
+    n_controls = n_controls,
+    train_fraction = train_fraction,
+    seed = seed
+  )
+  train_idx <- split$train_idx
+  stat_idx <- split$stat_idx
 
   train_frac <- all_frac[, train_idx, drop = FALSE]
-  test_frac  <- all_frac[, test_idx, drop = FALSE]
+  stat_frac  <- all_frac[, stat_idx, drop = FALSE]
 
   # Focus fractions for train/test/sample
   train_focus  <- .focus_fracs(train_frac)
-  test_focus   <- .focus_fracs(test_frac)
+  test_focus   <- .focus_fracs(stat_frac)
   sample_focus <- .focus_frac_vec(sample_frac)
 
   # Total reads for focus chromosome (summed F+R) for theoretical CV
@@ -408,7 +458,7 @@ nipter_regression <- function(sample,
     fit_coef <- stats::lm.fit(t(X_train), train_focus)$coefficients
 
     # Predict on test set and sample
-    X_test   <- rbind(1, test_frac[selected,  , drop = FALSE])
+    X_test   <- rbind(1, stat_frac[selected,  , drop = FALSE])
     X_sample <- c(1, sample_frac[selected])
     test_pred    <- as.numeric(fit_coef %*% X_test)
     sample_pred  <- as.numeric(sum(fit_coef * X_sample))
@@ -430,7 +480,7 @@ nipter_regression <- function(sample,
     # Z-score
     z_sample   <- (sample_ratio - 1) / cv_used
     ctrl_z     <- (test_ratio - 1) / cv_used
-    ctrl_names <- vapply(control_group$samples[test_idx],
+    ctrl_names <- vapply(control_group$samples[stat_idx],
                          .sample_name, character(1L))
     names(ctrl_z) <- ctrl_names
 
@@ -448,8 +498,13 @@ nipter_regression <- function(sample,
       predictors       = selected,
       shapiro_p_value  = shap_p,
       control_z_scores = ctrl_z,
+      n_reference_samples = n_controls,
       n_training_samples = length(train_idx),
-      n_stat_samples = length(ctrl_z)
+      n_stat_samples = length(ctrl_z),
+      train_fraction_requested = split$train_fraction_requested,
+      train_fraction_effective = split$train_fraction_effective,
+      split_mode = split$split_mode,
+      split_seed = split$split_seed
     )
   }
 
@@ -458,7 +513,12 @@ nipter_regression <- function(sample,
       models            = models_out,
       focus_chromosome  = chr_focus_key,
       correction_status = .sample_correction_status(sample, "autosomal"),
-      sample_name       = .sample_name(sample)
+      sample_name       = .sample_name(sample),
+      n_reference_samples = n_controls,
+      train_fraction_requested = split$train_fraction_requested,
+      train_fraction_effective = split$train_fraction_effective,
+      split_mode = split$split_mode,
+      split_seed = split$split_seed
     ),
     class = "NIPTeRRegression"
   )

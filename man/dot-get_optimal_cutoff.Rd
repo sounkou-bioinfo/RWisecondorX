@@ -4,7 +4,7 @@
 \alias{.get_optimal_cutoff}
 \title{Iterative optimal distance cutoff}
 \usage{
-.get_optimal_cutoff(ref, repeats)
+.get_optimal_cutoff(ref, repeats, sd_multiplier = 3)
 }
 \description{
 Iterative optimal distance cutoff

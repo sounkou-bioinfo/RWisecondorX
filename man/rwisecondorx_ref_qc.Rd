@@ -10,9 +10,10 @@ rwisecondorx_ref_qc(reference, min_ref_bins = 150L, output_json = NULL)
 \item{reference}{A \code{WisecondorXReference} object from
 \code{\link[=rwisecondorx_newref]{rwisecondorx_newref()}}.}
 
-\item{min_ref_bins}{Integer; minimum number of usable reference bins per
-target bin before the report flags a warning. Default \code{150L}, matching the
-upstream Python QC heuristic.}
+\item{min_ref_bins}{Integer; minimum number of usable normalizing reference
+bins retained for a target bin before the report flags a warning. This is
+not the number of cohort samples. Default \code{150L}, matching the upstream
+Python QC heuristic.}
 
 \item{output_json}{Optional path for writing the QC report as JSON. When
 supplied, requires the \code{jsonlite} package.}
@@ -27,7 +28,8 @@ fail.}
 issues between autosomal and gonosomal sub-references.}
 \item{metrics}{Named list of per-branch metrics (\code{A}, \code{F}, \code{M}) including
 verdict, message, mean/std of per-bin mean distances, outlier counts, and
-low-reference counts. Male reports also include chrY metrics.}
+counts of target bins that fall below the normalizing-reference-bin
+threshold. Male reports also include chrY metrics.}
 }
 }
 \description{

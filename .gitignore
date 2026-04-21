@@ -10,6 +10,7 @@ wisecondorx.egg-info/
 docs
 RWisecondorX.Rcheck/
 RWisecondorX*tar.gz
+*.out
 
 # Agent/editor artifacts
 .codex/

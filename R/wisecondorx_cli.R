@@ -7,6 +7,10 @@
 #' This wrapper exposes the upstream `wisecondorx convert` CLI flags:
 #' `--reference`, `--binsize`, and `--normdup`.
 #'
+#' Conda execution is run inside an isolated HOME/XDG sandbox so stale
+#' libmamba lock files in the user's global cache do not leak into package
+#' calls.
+#'
 #' For a fully native R implementation (no Python dependency) that uses
 #' Rduckhts instead of pysam, see [bam_convert()] and [bam_convert_npz()].
 #'
@@ -92,6 +96,10 @@ wisecondorx_convert <- function(bam,
 #' This wrapper exposes the current upstream `wisecondorx newref` CLI flags
 #' documented in the WisecondorX README: `--nipt`, `--binsize`, `--refsize`,
 #' `--yfrac`, `--plotyfrac`, and `--cpus`.
+#'
+#' Conda execution is run inside an isolated HOME/XDG sandbox so stale
+#' libmamba lock files in the user's global cache do not leak into package
+#' calls.
 #'
 #' @param npz_files Character vector of paths to `.npz` files (one per sample).
 #' @param output Path for the output reference `.npz` file.
@@ -181,6 +189,12 @@ wisecondorx_newref <- function(npz_files,
 #' `--zscore`, `--alpha`, `--beta`, `--blacklist`, `--gender`, `--bed`,
 #' `--plot`, `--add-plot-title`, `--regions`, `--ylim`, `--cairo`, and
 #' `--seed`.
+#'
+#' Conda execution is run inside an isolated HOME/XDG sandbox so stale
+#' libmamba lock files in the user's global cache do not leak into package
+#' calls. Unlike [rwisecondorx_predict()], this wrapper does not expose the
+#' native `parallel` argument used for `ParDNAcopy`; segmentation behavior is
+#' delegated entirely to the upstream Python WisecondorX CLI.
 #'
 #' @param npz Path to the sample `.npz` file (from [bam_convert_npz()]).
 #' @param ref Path to the reference `.npz` file (from [wisecondorx_newref()]).
@@ -314,8 +328,6 @@ wisecondorx_predict <- function(npz,
   }
 }
 
-.wisecondorx_env_state <- new.env(parent = emptyenv())
-
 .condathis_safe_wd <- function() {
   wd <- tryCatch(getwd(), error = function(e) NULL)
   wd_ok <- is.character(wd) &&
@@ -332,10 +344,11 @@ wisecondorx_predict <- function(npz,
   fallback
 }
 
-.with_condathis_cache <- function(expr) {
+.condathis_isolate <- function(expr) {
   # condathis resets most conda/mamba env vars itself, but libmamba still uses
-  # HOME/XDG cache roots for proc-lock state. Isolating both avoids stale
-  # ~/.cache/mamba/proc/proc.lock failures from unrelated sessions.
+  # HOME/XDG cache roots for proc-lock state. Run condathis calls inside an
+  # isolated HOME/XDG sandbox to avoid stale proc-lock failures from unrelated
+  # sessions, while restoring the caller environment on exit.
   old_xdg_cache <- Sys.getenv("XDG_CACHE_HOME", unset = NA_character_)
   old_home <- Sys.getenv("HOME", unset = NA_character_)
   old_xdg_data <- Sys.getenv("XDG_DATA_HOME", unset = NA_character_)
@@ -384,25 +397,11 @@ wisecondorx_predict <- function(npz,
 }
 
 .bundled_wisecondorx_cbs_script <- function() {
-  path <- system.file("extdata", "wisecondorx_CBS.R", package = "RWisecondorX")
-  if (is.character(path) && length(path) == 1L && nzchar(path) && file.exists(path)) {
-    return(normalizePath(path, winslash = "/", mustWork = TRUE))
-  }
-
-  ns_path <- tryCatch(
-    getNamespaceInfo(asNamespace("RWisecondorX"), "path"),
-    error = function(e) NULL
-  )
-  if (is.character(ns_path) && length(ns_path) == 1L && nzchar(ns_path)) {
-    cand <- file.path(ns_path, "inst", "extdata", "wisecondorx_CBS.R")
-    if (file.exists(cand)) {
-      return(normalizePath(cand, winslash = "/", mustWork = TRUE))
-    }
-  }
-
-  stop(
-    "Bundled WisecondorX CBS.R helper is missing from the RWisecondorX package.",
-    call. = FALSE
+  normalizePath(
+    system.file("extdata", "wisecondorx_CBS.R",
+                package = "RWisecondorX", mustWork = TRUE),
+    winslash = "/",
+    mustWork = TRUE
   )
 }
 
@@ -427,13 +426,6 @@ wisecondorx_predict <- function(npz,
 }
 
 .prepare_wisecondorx_predict_shadow <- function(env_name) {
-  key <- paste0("predict_shadow__", env_name)
-  cached <- get0(key, envir = .wisecondorx_env_state, inherits = FALSE)
-  if (is.character(cached) && length(cached) == 1L &&
-      nzchar(cached) && dir.exists(file.path(cached, "wisecondorx"))) {
-    return(cached)
-  }
-
   pkg_dir <- .wisecondorx_site_package_dir(env_name)
   cbs_src <- .bundled_wisecondorx_cbs_script()
   shadow_root <- file.path(tempdir(), sprintf("rwisecondorx-wcx-shadow-%s", env_name))
@@ -460,7 +452,6 @@ wisecondorx_predict <- function(npz,
          call. = FALSE)
   }
 
-  assign(key, shadow_root, envir = .wisecondorx_env_state)
   shadow_root
 }
 
@@ -499,14 +490,13 @@ wisecondorx_predict <- function(npz,
 }
 
 .ensure_wisecondorx_env <- function(env_name) {
-  if (isTRUE(get0(env_name, envir = .wisecondorx_env_state, inherits = FALSE))) {
+  if (isTRUE(condathis::env_exists(env_name))) {
     return(invisible(NULL))
   }
 
   # Create the environment if it does not exist yet.
-  # condathis::create_env() is idempotent if the env already exists.
   tryCatch(
-    .with_condathis_cache(
+    .condathis_isolate(
       condathis::create_env(
         packages  = "wisecondorx",
         channels  = c("bioconda", "conda-forge"),
@@ -522,13 +512,12 @@ wisecondorx_predict <- function(npz,
       )
     }
   )
-  assign(env_name, TRUE, envir = .wisecondorx_env_state)
   invisible(NULL)
 }
 
 .run_wisecondorx_cli <- function(args, env_name) {
   runner <- function() {
-    .with_condathis_cache(
+    .condathis_isolate(
       do.call(
         condathis::run,
         c(list("wisecondorx"), as.list(args), list(env_name = env_name))
@@ -537,6 +526,10 @@ wisecondorx_predict <- function(npz,
   }
 
   if (length(args) >= 1L && identical(args[[1L]], "predict")) {
+    # Upstream Python WisecondorX still shells out to include/CBS.R during
+    # predict, so the shadow copy is required to force the bundled CBS.R used
+    # by RWisecondorX conformance runs; without it, upstream predict would use
+    # the environment's own include/CBS.R instead.
     .with_wisecondorx_predict_patch(runner(), env_name = env_name)
   } else {
     runner()

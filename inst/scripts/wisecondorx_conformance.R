@@ -34,6 +34,16 @@ option_list <- list(
               help = "Predict z-score threshold [default %default]."),
   make_option("--alpha", type = "double", default = 1e-4,
               help = "Predict CBS alpha [default %default]."),
+  make_option("--optimal-cutoff-sd-multiplier", type = "double", default = 3,
+              help = "Native predict: multiplier applied to the population SD when deriving the optimal distance cutoff [default %default]."),
+  make_option("--within-sample-mask-iterations", type = "integer", default = 3L,
+              help = "Native predict: within-sample masking passes [default %default]."),
+  make_option("--within-sample-mask-quantile", type = "double", default = 0.99,
+              help = "Native predict: z-quantile used to mask aberrant bins between passes [default %default]."),
+  make_option("--cbs-split-min-gap-bp", type = "integer", default = 2000000L,
+              help = "Native predict: minimum NA gap size in bp used to split CBS segments [default %default]."),
+  make_option("--segment-zscore-cap", type = "double", default = 1000,
+              help = "Native predict: absolute cap applied to segment z-scores [default %default]."),
   make_option("--seed", type = "integer", default = 42L,
               help = "Predict seed [default %default]."),
   make_option("--overwrite", action = "store_true", default = FALSE,
@@ -49,24 +59,30 @@ opt <- parse_args(parser)
 .fail <- function(...) stop(sprintf(...), call. = FALSE)
 
 .validate_inputs <- function(opt) {
-  if (is.null(opt$rwisecondorx_ref) || !nzchar(opt$rwisecondorx_ref)) {
+  native_ref <- opt[["rwisecondorx-ref"]]
+  upstream_ref <- opt[["wisecondorx-ref"]]
+  case_manifest <- opt[["case-manifest"]]
+  bed_dir <- opt[["bed-dir"]]
+  npz_dir <- opt[["npz-dir"]]
+
+  if (is.null(native_ref) || !nzchar(native_ref)) {
     .fail("--rwisecondorx-ref is required.")
   }
-  if (is.null(opt$wisecondorx_ref) || !nzchar(opt$wisecondorx_ref)) {
+  if (is.null(upstream_ref) || !nzchar(upstream_ref)) {
     .fail("--wisecondorx-ref is required.")
   }
-  if (!file.exists(opt$rwisecondorx_ref)) {
-    .fail("Native reference not found: %s", opt$rwisecondorx_ref)
+  if (!file.exists(native_ref)) {
+    .fail("Native reference not found: %s", native_ref)
   }
-  if (!file.exists(opt$wisecondorx_ref)) {
-    .fail("Upstream reference not found: %s", opt$wisecondorx_ref)
+  if (!file.exists(upstream_ref)) {
+    .fail("Upstream reference not found: %s", upstream_ref)
   }
-  has_manifest <- !is.null(opt$case_manifest)
-  has_dirs <- !is.null(opt$bed_dir) || !is.null(opt$npz_dir)
+  has_manifest <- !is.null(case_manifest)
+  has_dirs <- !is.null(bed_dir) || !is.null(npz_dir)
   if (has_manifest == has_dirs) {
     .fail("Provide either --case-manifest or the pair --bed-dir/--npz-dir.")
   }
-  if (has_dirs && (is.null(opt$bed_dir) || is.null(opt$npz_dir))) {
+  if (has_dirs && (is.null(bed_dir) || is.null(npz_dir))) {
     .fail("--bed-dir and --npz-dir must be provided together.")
   }
 }
@@ -95,28 +111,34 @@ opt <- parse_args(parser)
 }
 
 .resolve_cases <- function(opt) {
-  cases <- if (!is.null(opt$case_manifest)) {
-    .read_case_manifest(opt$case_manifest)
+  case_manifest <- opt[["case-manifest"]]
+  bed_dir <- opt[["bed-dir"]]
+  npz_dir <- opt[["npz-dir"]]
+  bed_pattern <- opt[["bed-pattern"]]
+  npz_pattern <- opt[["npz-pattern"]]
+
+  cases <- if (!is.null(case_manifest)) {
+    .read_case_manifest(case_manifest)
   } else {
-    if (!dir.exists(opt$bed_dir)) {
-      .fail("BED directory not found: %s", opt$bed_dir)
+    if (!dir.exists(bed_dir)) {
+      .fail("BED directory not found: %s", bed_dir)
     }
-    if (!dir.exists(opt$npz_dir)) {
-      .fail("NPZ directory not found: %s", opt$npz_dir)
+    if (!dir.exists(npz_dir)) {
+      .fail("NPZ directory not found: %s", npz_dir)
     }
-    beds <- list.files(opt$bed_dir, pattern = opt$bed_pattern, full.names = TRUE)
-    npzs <- list.files(opt$npz_dir, pattern = opt$npz_pattern, full.names = TRUE)
+    beds <- list.files(bed_dir, pattern = bed_pattern, full.names = TRUE)
+    npzs <- list.files(npz_dir, pattern = npz_pattern, full.names = TRUE)
     if (length(beds) == 0L) {
-      .fail("No BED cases found in %s", opt$bed_dir)
+      .fail("No BED cases found in %s", bed_dir)
     }
     if (length(npzs) == 0L) {
-      .fail("No NPZ cases found in %s", opt$npz_dir)
+      .fail("No NPZ cases found in %s", npz_dir)
     }
     bed_stems <- sub("\\.bed\\.gz$", "", basename(beds), ignore.case = TRUE)
     npz_stems <- sub("\\.npz$", "", basename(npzs), ignore.case = TRUE)
     shared <- intersect(bed_stems, npz_stems)
     if (length(shared) == 0L) {
-      .fail("No shared sample stems between %s and %s", opt$bed_dir, opt$npz_dir)
+      .fail("No shared sample stems between %s and %s", bed_dir, npz_dir)
     }
     data.frame(
       sample = shared,
@@ -182,12 +204,17 @@ opt <- parse_args(parser)
 
 .validate_inputs(opt)
 cases <- .resolve_cases(opt)
-dir.create(opt$out_dir, recursive = TRUE, showWarnings = FALSE)
+out_dir <- opt[["out-dir"]]
+sample_binsize <- opt[["sample-binsize"]]
+native_ref_path <- opt[["rwisecondorx-ref"]]
+upstream_ref_path <- opt[["wisecondorx-ref"]]
 
-native_ref <- readRDS(opt$rwisecondorx_ref)
+dir.create(out_dir, recursive = TRUE, showWarnings = FALSE)
+
+native_ref <- readRDS(native_ref_path)
 native_ref_binsize <- as.integer(native_ref$binsize)
 if (is.na(native_ref_binsize) || native_ref_binsize < 1L) {
-  .fail("Could not determine binsize from native reference: %s", opt$rwisecondorx_ref)
+  .fail("Could not determine binsize from native reference: %s", native_ref_path)
 }
 
 summary_rows <- vector("list", nrow(cases))
@@ -197,7 +224,7 @@ for (i in seq_len(nrow(cases))) {
   sample_name <- case$sample[[1L]]
   bed <- case$bed[[1L]]
   npz <- case$npz[[1L]]
-  case_dir <- file.path(opt$out_dir, sample_name)
+  case_dir <- file.path(out_dir, sample_name)
 
   if (dir.exists(case_dir) && !isTRUE(opt$overwrite)) {
     .fail("Case output exists, use --overwrite to replace: %s", case_dir)
@@ -205,28 +232,34 @@ for (i in seq_len(nrow(cases))) {
   unlink(case_dir, recursive = TRUE, force = TRUE)
   dir.create(case_dir, recursive = TRUE, showWarnings = FALSE)
 
-  message(sprintf("[%d/%d] %s", i, length(cases), sample_name))
+  message(sprintf("[%d/%d] %s", i, nrow(cases), sample_name))
 
   native_prefix <- file.path(case_dir, "native")
   upstream_prefix <- file.path(case_dir, "upstream")
-  sample <- bed_to_sample(bed, binsize = opt$sample_binsize)
+  sample <- bed_to_sample(bed, binsize = sample_binsize)
 
   pred_native <- rwisecondorx_predict(
     sample = sample,
     reference = native_ref,
-    sample_binsize = opt$sample_binsize,
+    sample_binsize = sample_binsize,
     outprefix = native_prefix,
     minrefbins = opt$minrefbins,
     maskrepeats = opt$maskrepeats,
     zscore = opt$zscore,
     alpha = opt$alpha,
+    optimal_cutoff_sd_multiplier = opt$`optimal-cutoff-sd-multiplier`,
+    within_sample_mask_iterations = opt$`within-sample-mask-iterations`,
+    within_sample_mask_quantile = opt$`within-sample-mask-quantile`,
+    cbs_split_min_gap_bp = opt$`cbs-split-min-gap-bp`,
+    segment_zscore_cap = opt$`segment-zscore-cap`,
     seed = opt$seed,
+    parallel = FALSE, # keep native CBS deterministic for side-by-side conformance runs
     cpus = opt$cpus
   )
 
   wisecondorx_predict(
     npz = npz,
-    ref = opt$wisecondorx_ref,
+    ref = upstream_ref_path,
     output_prefix = upstream_prefix,
     minrefbins = opt$minrefbins,
     maskrepeats = opt$maskrepeats,
@@ -254,7 +287,7 @@ for (i in seq_len(nrow(cases))) {
     native_bins = native_bins,
     upstream_bins = upstream_bins,
     native_ref_binsize = native_ref_binsize,
-    sample_binsize = opt$sample_binsize,
+    sample_binsize = sample_binsize,
     ok = cmp$ok,
     native_rows = cmp$native_rows,
     upstream_rows = cmp$upstream_rows,
@@ -269,7 +302,7 @@ for (i in seq_len(nrow(cases))) {
 }
 
 summary_df <- do.call(rbind, summary_rows)
-summary_path <- file.path(opt$out_dir, "wisecondorx_conformance_summary.tsv")
+summary_path <- file.path(out_dir, "wisecondorx_conformance_summary.tsv")
 utils::write.table(
   summary_df,
   file = summary_path,

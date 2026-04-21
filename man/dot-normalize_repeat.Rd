@@ -4,7 +4,16 @@
 \alias{.normalize_repeat}
 \title{Within-sample normalization with iterative aberration masking (3 iterations)}
 \usage{
-.normalize_repeat(test_data, ref, optimal_cutoff, ct, cp, ap)
+.normalize_repeat(
+  test_data,
+  ref,
+  optimal_cutoff,
+  ct,
+  cp,
+  ap,
+  iterations = 3L,
+  mask_quantile = 0.99
+)
 }
 \description{
 Within-sample normalization with iterative aberration masking (3 iterations)

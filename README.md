@@ -24,10 +24,10 @@ kernel bundled in `Rduckhts`, with no Python dependency. `bam_convert()`
 returns per-bin read counts in memory; `bam_convert_bed()` writes them
 to a bgzipped, tabix-indexed BED file readable by DuckDB or any
 tabix-aware tool; and `bam_convert_npz()` serialises them to a
-WisecondorX-compatible `.npz` via `reticulate`. The convert
-implementation exactly replicates the upstream `larp` / `larp2`
-streaming deduplication behaviour, achieving bin-for-bin agreement with
-the Python implementation.
+WisecondorX-compatible `.npz` via `reticulate` for Python CLI
+conformance and interop. The convert implementation exactly replicates
+the upstream `larp` / `larp2` streaming deduplication behaviour,
+achieving bin-for-bin agreement with the Python implementation.
 
 The NIPTeR statistical layer provides GC correction (via on-the-fly
 FASTA computation, not bundled tables), chi-squared overdispersion
@@ -105,8 +105,8 @@ implementations of the full WisecondorX algorithm — reference building,
 PCA correction, within-sample normalisation, CBS segmentation, and
 aberration calling — with no Python dependency. Performance-critical KNN
 reference-bin finding is compiled via Rcpp with OpenMP parallelisation.
-CBS segmentation uses DNAcopy (or ParDNAcopy for parallel operation)
-directly.
+CBS segmentation uses DNAcopy directly, or `ParDNAcopy` when `parallel =
+TRUE`.
 
 ``` r
 control_bams <- c("ctrl_01.dm.bam", "ctrl_02.dm.bam", "ctrl_03.dm.bam")
@@ -128,6 +128,10 @@ pred <- rwisecondorx_predict(test_sample, ref, zscore = 5, seed = 42L, cpus = 4L
 pred$aberrations
 ```
 
+`rwisecondorx_predict(parallel = TRUE)` requires `ParDNAcopy`. If that
+package is not installed, call `rwisecondorx_predict(..., parallel =
+FALSE)` to use serial `DNAcopy::segment()`.
+
 ### Multi-File BED Input For Reference Building
 
 `rwisecondorx_newref()` also accepts a directory of 4-column BED.gz
@@ -146,10 +150,14 @@ ref <- rwisecondorx_newref(
 
 ## Optional NPZ And CLI Workflow
 
-When the full upstream WisecondorX pipeline is needed,
-`wisecondorx_convert()` wraps `wisecondorx convert` via `condathis` and
-produces an `.npz` through the official Python implementation. All three
-wrappers handle conda environment creation automatically on first use.
+`bam_convert_npz()` and the `wisecondorx_*()` CLI wrappers are the
+conformance and interoperability path. The production native path is
+`bam_convert_bed()`/`bam_convert()` with `rwisecondorx_newref()` and
+`rwisecondorx_predict()`. When the full upstream Python WisecondorX
+pipeline is needed, `wisecondorx_convert()` wraps `wisecondorx convert`
+via `condathis` and produces an `.npz` through the official
+implementation. All three wrappers handle conda environment creation
+automatically on first use.
 
 ``` r
 wisecondorx_convert(

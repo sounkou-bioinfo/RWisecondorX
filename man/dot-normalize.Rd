@@ -4,7 +4,15 @@
 \alias{.normalize}
 \title{Run the full normalization chain for one gender partition}
 \usage{
-.normalize(sample, ref, ref_gender, maskrepeats)
+.normalize(
+  sample,
+  ref,
+  ref_gender,
+  maskrepeats,
+  optimal_cutoff_sd_multiplier = 3,
+  within_sample_mask_iterations = 3L,
+  within_sample_mask_quantile = 0.99
+)
 }
 \arguments{
 \item{sample}{Named list of bin counts.}

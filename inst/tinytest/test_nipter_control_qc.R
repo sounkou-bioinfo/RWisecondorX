@@ -34,7 +34,9 @@ expect_identical(qc$sample_names, control_names(cg),
 expect_true(all(c("chromosome", "mean_fraction", "sd_fraction",
                   "cv_fraction", "shapiro_p_value",
                   "method_family", "method_label", "model_status",
-                  "n_reference_samples", "n_training_samples", "n_stat_samples") %in%
+                  "n_reference_samples", "n_training_samples", "n_stat_samples",
+                  "train_fraction_requested", "train_fraction_effective",
+                  "split_mode", "split_seed") %in%
                   names(qc$chromosome_summary)),
             info = "chromosome summary exposes the expected CV statistics")
 expect_identical(qc$settings$outlier_rule, "any_aberrant_score",
@@ -86,9 +88,12 @@ expect_equal(qc_cv_21, manual_cv_21,
 
 expect_true(all(c("z_fraction", "ncv", "rbz") %in% qc$chromosome_summary$method_family),
             info = "chromosome summary includes post-chi fraction, NCV, and RBZ rows")
-expect_true(all(c("combined", "ncv", paste0("predictor_set_", 1:4)) %in%
+expect_true(all(c("combined", "ncv", paste0("predictor_set_", 1:4),
+                  "XX", "XY") %in%
                   qc$chromosome_summary$method_label),
             info = "chromosome summary includes combined, NCV, and all four RBZ predictor-set labels")
+expect_true(all(c("X_XX", "Y_XX", "X_XY", "Y_XY") %in% qc$chromosome_summary$chromosome),
+            info = "chromosome summary now stores the XX/XY sex-model rows directly")
 rbz_chr21 <- qc$chromosome_summary[
   qc$chromosome_summary$chromosome == "21" &
     qc$chromosome_summary$method_family == "rbz" &
@@ -98,10 +103,33 @@ rbz_chr21 <- qc$chromosome_summary[
 ]
 expect_identical(rbz_chr21$n_reference_samples, 6L,
                  info = "RBZ chromosome summary keeps the full control-group size as the reference count")
-expect_identical(rbz_chr21$n_training_samples, 4L,
-                 info = "RBZ chromosome summary records the regression training-set size separately")
-expect_identical(rbz_chr21$n_stat_samples, 2L,
-                 info = "RBZ chromosome summary records the held-out statistic-set size separately")
+expect_identical(rbz_chr21$n_training_samples, 6L,
+                 info = "RBZ chromosome summary defaults to full-control training")
+expect_identical(rbz_chr21$n_stat_samples, 6L,
+                 info = "RBZ chromosome summary defaults to full-control statistics")
+expect_identical(rbz_chr21$split_mode, "all_samples",
+                 info = "RBZ chromosome summary records the all-samples split mode")
+expect_identical(rbz_chr21$train_fraction_requested, 1,
+                 info = "RBZ chromosome summary records the requested training fraction")
+expect_identical(rbz_chr21$train_fraction_effective, 1,
+                 info = "RBZ chromosome summary records the effective training fraction")
+
+qc_split <- nipter_control_group_qc(cg, rbz_train_fraction = 0.6, rbz_seed = 42L)
+rbz_split_chr21 <- qc_split$chromosome_summary[
+  qc_split$chromosome_summary$chromosome == "21" &
+    qc_split$chromosome_summary$method_family == "rbz" &
+    qc_split$chromosome_summary$method_label == "predictor_set_1",
+  ,
+  drop = FALSE
+]
+expect_identical(rbz_split_chr21$n_training_samples, 4L,
+                 info = "RBZ chromosome summary exposes the train-set size when a split is requested")
+expect_identical(rbz_split_chr21$n_stat_samples, 2L,
+                 info = "RBZ chromosome summary exposes the stat-set size when a split is requested")
+expect_identical(rbz_split_chr21$split_mode, "train_test",
+                 info = "RBZ chromosome summary exposes the train/test split mode")
+expect_identical(rbz_split_chr21$split_seed, 42L,
+                 info = "RBZ chromosome summary exposes the split seed")
 
 mm <- nipter_match_matrix(cg)
 manual_mean_ssd_1 <- mean(mm[1L, -1L])

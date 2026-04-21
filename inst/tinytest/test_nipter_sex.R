@@ -873,3 +873,32 @@ expect_error(nipter_y_unique_ratio(.tmp_fake_bam,
                                    regions_file = "nonexistent_regions.txt"),
              info = "y_unique_ratio rejects nonexistent regions file")
 unlink(.tmp_fake_bam)
+
+
+# ===================================================================
+# nipter_y_unique_ratio — BED coverage backend regression
+# ===================================================================
+
+.fixture_mixed_bam <- system.file("extdata", "fixture_mixed.bam", package = "Rduckhts")
+.fixture_mixed_regions <- system.file("extdata", "fixture_mixed_regions.bed", package = "Rduckhts")
+
+expect_true(file.exists(.fixture_mixed_bam),
+            info = "Rduckhts mixed BAM fixture is available")
+expect_true(file.exists(.fixture_mixed_regions),
+            info = "Rduckhts mixed BED fixture is available")
+
+fixture_yu <- nipter_y_unique_ratio(
+  .fixture_mixed_bam,
+  mapq = 0L,
+  exclude_flags = 1796L,
+  regions_file = .fixture_mixed_regions
+)
+
+expect_identical(fixture_yu$y_unique_reads, 4L,
+                 info = "Y-unique backend sums post-filter BED coverage counts across intervals")
+expect_identical(fixture_yu$total_nuclear_reads, 8L,
+                 info = "Y-unique backend uses post-filter nuclear reads as the denominator")
+expect_equal(fixture_yu$ratio, 0.5,
+             info = "Y-unique ratio equals covered reads divided by total nuclear reads")
+expect_identical(nrow(fixture_yu$regions), 3L,
+                 info = "Y-unique ratio returns the intervals actually used")

@@ -33,6 +33,21 @@ write_wisecondorx_output <- function(prediction, outprefix) {
   .write_statistics(prediction, outprefix)
 }
 
+.wcx_num_string <- function(x, zero_as_nan = FALSE) {
+  x <- as.numeric(x)
+  if (!is.finite(x) || (isTRUE(zero_as_nan) && x == 0)) {
+    return("nan")
+  }
+  for (digits in 1:17) {
+    txt <- format(x, digits = digits, scientific = NA, trim = TRUE)
+    parsed <- suppressWarnings(as.numeric(txt))
+    if (!is.na(parsed) && identical(parsed, x)) {
+      return(txt)
+    }
+  }
+  format(x, digits = 17, scientific = NA, trim = TRUE)
+}
+
 
 #' Write bins BED file
 #' @keywords internal
@@ -55,8 +70,10 @@ write_wisecondorx_output <- function(prediction, outprefix) {
 
     feat <- 1L
     for (i in seq_len(n)) {
-      ri <- if (r[i] == 0) "nan" else as.character(round(r[i], 6))
-      zi <- if (z[i] == 0) "nan" else as.character(round(z[i], 6))
+      ri <- .wcx_num_string(r[i], zero_as_nan = TRUE)
+      zi <- .wcx_num_string(z[i], zero_as_nan = TRUE)
+      # The fourth BED column is an upstream-conformant ID string duplicating
+      # the interval already present in columns 1-3.
       feat_str <- sprintf("%s:%d-%d", chr_name, feat, feat + binsize - 1L)
       lines[li] <- paste(chr_name, feat, feat + binsize - 1L,
                                feat_str, ri, zi, sep = "\t")
@@ -86,8 +103,8 @@ write_wisecondorx_output <- function(prediction, outprefix) {
       start_bp <- as.integer(rc$start[i] * binsize + 1L)
       end_bp   <- as.integer(rc$end[i] * binsize)
       lines[i + 1L] <- paste(chr_name, start_bp, end_bp,
-                               round(rc$ratio[i], 6),
-                               round(rc$zscore[i], 6), sep = "\t")
+                               .wcx_num_string(rc$ratio[i]),
+                               .wcx_num_string(rc$zscore[i]), sep = "\t")
     }
   }
 
@@ -112,8 +129,8 @@ write_wisecondorx_output <- function(prediction, outprefix) {
       start_bp <- as.integer(ab$start[i] * binsize + 1L)
       end_bp   <- as.integer(ab$end[i] * binsize)
       lines[i + 1L] <- paste(chr_name, start_bp, end_bp,
-                               round(ab$ratio[i], 6),
-                               round(ab$zscore[i], 6),
+                               .wcx_num_string(ab$ratio[i]),
+                               .wcx_num_string(ab$zscore[i]),
                                ab$type[i], sep = "\t")
     }
   }
@@ -134,9 +151,13 @@ write_wisecondorx_output <- function(prediction, outprefix) {
   lines[1L] <- "chr\tratio.mean\tratio.median\tzscore"
 
   for (i in seq_len(n_rows)) {
-    lines[i + 1L] <- paste(stats_df$chr[i], stats_df$ratio_mean[i],
-                             stats_df$ratio_median[i], stats_df$zscore[i],
-                             sep = "\t")
+    lines[i + 1L] <- paste(
+      stats_df$chr[i],
+      .wcx_num_string(stats_df$ratio_mean[i]),
+      .wcx_num_string(stats_df$ratio_median[i]),
+      .wcx_num_string(stats_df$zscore[i]),
+      sep = "\t"
+    )
   }
 
   # Append summary lines
@@ -145,11 +166,11 @@ write_wisecondorx_output <- function(prediction, outprefix) {
                             prediction$gender)
   lines[li + 1L] <- sprintf("Number of reads: %d", prediction$n_reads)
   lines[li + 2L] <- sprintf("Standard deviation of the ratios per chromosome: %s",
-                             round(stats::sd(stats_df$ratio_mean, na.rm = TRUE), 5))
+                             .wcx_num_string(round(.wcx_population_sd(stats_df$ratio_mean), 5)))
   lines[li + 3L] <- sprintf("Median segment variance per bin (doi: 10.1093/nar/gky1263): %s",
-                             .get_msv(prediction$results_c, prediction$results_r))
+                             .wcx_num_string(round(stats_df$msv[1L], 5)))
   lines[li + 4L] <- sprintf("Copy number profile abnormality (CPA) score (doi: 10.1186/s13073-020-00735-4): %s",
-                             .get_cpa(prediction$results_c, prediction$binsize))
+                             .wcx_num_string(round(stats_df$cpa[1L], 5)))
 
   writeLines(lines, path)
   invisible(path)

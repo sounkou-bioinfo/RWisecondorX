@@ -28,4 +28,4 @@
 ^review\.md$
 ^rwisecondorx_claude_review\.md$
 ^simutation\.txt$
-^\..rlib/.*$
+^\.rlib/.*$

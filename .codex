@@ -1,0 +1,318 @@
+# RWisecondorX Code Review — Pass 2
+
+**Scope (pass 2)**: All R source under `R/` (WisecondorX layer + full NIPTeR
+layer) and `inst/scripts/`.
+**Prior pass**: Original review items 1–28 (WisecondorX layer only) and
+S-1–S-9 (scripts). Fixed items are listed at the end of this file.
+
+---
+
+## Section 1 — Upstream Python CLI wrappers (`wisecondorx_cli.R`)
+
+### 1-A · Shadow-patch mechanism still active and still needed
+
+**Status**: Required for CBS conformance — keep, but document.
+
+`.with_wisecondorx_predict_patch()` copies the upstream Python package to a
+tempdir and injects the bundled `inst/extdata/wisecondorx_CBS.R` before every
+upstream `wisecondorx predict` call. This mechanism is correct and still
+needed.
+
+Action: Add a single-line block comment above `.bundled_wisecondorx_cbs_script()`
+explaining why the shadow copy exists (conformance with the native CBS, not a
+monkey-patch for bug fixes). This prevents future maintainers from removing it.
+
+### 1-B · `.condathis_isolate()` mutates four process env vars and cwd
+
+The function modifies `HOME`, `XDG_CACHE_HOME`, `XDG_DATA_HOME`,
+`XDG_CONFIG_HOME`, and `cwd` for every upstream CLI call. Cleanup is now
+correct (`on.exit` is registered before the mutations — the order matters and
+is correct). However, this still makes any upstream condathis call non-reentrant
+(a second call during the first's execution would double-restore). There is
+currently no reentrance guard.
+
+If this ever becomes a concern, a reference-count flag (`on.exit` increment/
+decrement) would protect against it.
+
+---
+
+## Section 2 — Reference building (`rwisecondorx_newref.R`)
+
+### 2-A · 26-parameter public signature
+
+`rwisecondorx_newref()` now has 26 parameters — correctly documented, but
+cognitively heavy for callers. The PCA-distance parameters (7 values) could
+be grouped into a single `pca_distance` named list argument similar to how
+`algorithm_params` is stored in the returned reference. This would cut the
+visible signature to ~20 parameters and make override patterns cleaner.
+
+Low priority — do not change if it breaks existing call sites.
+
+### 2-B · `message()` calls inside `.build_sub_reference()`
+
+`.build_sub_reference()` emits `message()` calls ("Building autosomal
+reference...", "  Finding reference bins...", etc.). This makes the function
+impure and hard to test silently. Extract progress reporting to the caller
+(`rwisecondorx_newref()`) and pass a `verbose` flag or use a callback.
+
+---
+
+## Section 3 — Gender model (`rwisecondorx_utils.R`, `mclust_utils.R`)
+
+### 3-A · `.mclust_fit_in_namespace()` requires at least one of `modelNames`/`equalPro`
+
+`mclust_utils.R:20`: if both are NULL the function stops with an error.
+This constraint is correct but the error message is not surfaced by the
+public callers' documentation. Both `.mclust_gender_fit()` and `.mclust_fit()`
+supply at least one — so no bug — but the precondition should be captured in
+the function signature (e.g., assert-style stopifnot at top with a clear
+message rather than a silent path-dependent stop).
+
+---
+
+## Section 4 — Prediction (`rwisecondorx_predict.R`)
+
+### 4-A · `stringsAsFactors = FALSE` everywhere — still widespread
+
+R ≥ 4.0 changed `stringsAsFactors` default to `FALSE`. The explicit argument
+is now redundant. It appears in:
+
+- `nipter_bin.R` (×3), `nipter_chi.R`, `nipter_gc.R`, `nipter_sex.R` (×2),
+  `nipter_reference.R`, `nipter_control_qc.R` (×9), `nipter_gaunosome_score.R`,
+  `nipter_gaunosome_report.R`, `nipter_sex_score.R`, `sample_metrics.R` (×3),
+  `convert.R`, `aaa.R`.
+
+Also in `read.csv`/`read.delim` calls in `sample_metrics.R`.
+
+These are harmless but add noise. Remove in a single mechanical pass. The
+minimum required R version should be pinned in `DESCRIPTION` as `R (>= 4.0)`
+if not already.
+
+---
+
+## Section 5 — NIPTeR class system (`nipter_classes.R`)
+
+### 5-A · `1:22` / `as.character(1:22)` widespread in new NIPTeR code
+
+`1:22` evaluates to an integer sequence starting from 1, so `1:0` gives
+`c(1, 0)` — a classic R footgun. The correct form is `seq_len(22L)`.
+
+Occurrences found in new files:
+- `nipter_classes.R`: lines 380, 662, 852, 894, 895, 1074
+- `nipter_chi.R`: line 242
+- `nipter_bin.R`: lines 352, 395, 498, 504, 523, 581
+- `nipter_gc.R`: lines 48, 246, 281, 326, 444
+- `bed_reader.R`: lines 64, 344, 374, 398, 513
+- `nipter_control_qc.R`: lines 419, 469, 903
+- `nipter_reference.R`: line 336
+- `convert.R`: lines 328, 341
+
+Fix mechanically with a single `sed` pass across the new files.
+
+### 5-B · `NIPTControlGroup` `.cache` serializes stale values
+
+The `.cache = new.env(parent = emptyenv())` property is a per-instance mutable
+cache environment. The cache invalidation path is correct for in-process
+mutation (`$samples<-` reinitializes `.cache`). However, `saveRDS`/`readRDS`
+serializes the cache contents alongside the object — a deserialized reference
+model may carry cached `fractions_auto` values that predate any post-load
+sample changes.
+
+Fix: replace `default = quote(new.env(parent = emptyenv()))` with `default =
+quote(NULL)` and initialize lazily in the generic methods:
+
+```r
+S7::method(fractions_auto, CombinedControlGroup) <- function(cg) {
+  if (is.null(cg@.cache)) cg@.cache <- new.env(parent = emptyenv())
+  if (exists("fractions_auto", envir = cg@.cache, inherits = FALSE)) ...
+}
+```
+
+Alternatively document the invariant: "Do not modify samples after
+`saveRDS`/`readRDS`; re-build the cache by calling `fractions_auto()` once."
+
+### 5-C · `.legacy_field` / `.legacy_set_field` shim layer growing
+
+`nipter_classes.R` exports `~20` `.legacy_*` helpers and S7 `switch` dispatch
+tables for backward-compat `$` and `[[` access on old S3 `NIPTeRSample`
+objects. This layer will continue to grow with each new field. Set a concrete
+deadline for dropping S3 support and add a `lifecycle::deprecate_soft()`
+warning to the S3 paths.
+
+---
+
+## Section 6 — NIPTeR reference building (`nipter_reference.R`)
+
+### 6-A · `outlier_threshold = 3` not exposed through `nipter_build_reference()`
+
+`nipter_build_reference()` calls `.augment_reference_frame_for_sex()` which
+internally calls `.annotate_reference_frame_sex(outlier_threshold = 3)`.
+The `3` is not forwarded from the public API. A user who needs tighter or
+looser sex-outlier classification (e.g., for a small cohort) has no way to
+adjust this without modifying source.
+
+Add `sex_outlier_threshold = 3L` to `nipter_build_reference()` and forward it.
+
+### 6-B · `.nipt_reference_count_cols[1:22]` fragile numeric index
+
+`nipter_reference.R:336`:
+```r
+frame[, .nipt_reference_count_cols[1:22], drop = FALSE]
+```
+This relies on the autosomal columns being the first 22 entries of
+`.nipt_reference_count_cols`. This happens to be true (the vector is defined
+as `paste0("NChrReads_", c(1:22, "X", "Y"))`), but a future reordering would
+silently produce wrong results. Replace with:
+```r
+frame[, .nipt_reference_count_cols[seq_len(22L)], drop = FALSE]
+```
+
+---
+
+## Section 7 — NIPTeR sex model (`nipter_sex.R`)
+
+### 7-A · `nipter_y_unique_ratio()` writes two tempfiles per call
+
+The function creates two BED tempfiles (`y_bed_path`, `nuclear_bed_path`),
+writes them via `write.table()`, passes them to duckhts coverage, then
+`unlink()`s them via `on.exit`. This is correct but creates a disk-write/
+read round-trip for data that is already in R memory.
+
+The duckhts API (`rduckhts_bam_bed_coverage`) requires a `bed_path` argument.
+If a future Rduckhts version supports in-memory BED frames, remove the
+tempfile path. For now: document the tempfile lifecycle with a comment.
+
+### 7-B · `nipter_as_control_group()` silently removes duplicate sample names
+
+`nipter_control.R:62`:
+```r
+if (any(dups)) {
+  message("Removing ", sum(dups), " duplicate sample(s) by name.")
+```
+A `message()` is emitted but duplicate sample names are almost certainly a
+bug in the caller's data. Promote to `warning()` or add a `stop_on_duplicate`
+parameter (default `TRUE`).
+
+---
+
+## Section 8 — NIPTeR control-group QC (`nipter_control_qc.R`)
+
+### 8-A · Bare `for (chrom in 1:22)` at line 469
+
+```r
+for (chrom in 1:22) {
+  reg <- tryCatch(...)
+}
+```
+Same `1:N` hazard as 5-A. Replace with `for (chrom in seq_len(22L))`.
+
+---
+
+## Section 9 — BED reader (`bed_reader.R`)
+
+### 9-A · Double matrix construction when corrected columns are present
+
+In both `.rows_to_nipter_combined()` and `.rows_to_nipter_sep()`, four raw
+count matrices are always built. Then, when corrected values are available,
+a second set of corrected matrices is also built. When both `use_corr_auto`
+and `use_corr_sex` are `TRUE`, the raw matrices are never used. This wastes
+O(n_bins × 4) memory allocations per call.
+
+Fix: check `has_corrected` early and skip raw matrix construction when all
+compartments will use corrected columns.
+
+---
+
+## Section 10 — inst/scripts/ (updated)
+
+### S-1 · `run_preprocess_cohort_nohup.out` — remove from repo
+
+**Status**: Not verified in this pass; may already be deleted. Confirm and
+add `*.out` to `.gitignore` if not done.
+
+### S-2 · `run_preprocess_cohort_nohup.sh` — hardcoded site paths
+
+**Status**: Not verified. Check if absolute paths (`/mnt/data/...`) are still
+present.
+
+### S-6 · `predict_cohort.R` — `%||%` dependency on unexported RWisecondorX internal
+
+**Status**: Not verified in this pass. Confirm `%||%` is exported or defined
+locally.
+
+### S-7 · `build_reference.R` — duplicated `nipter_build_reference()` block
+
+**Status**: Not verified in this pass. The public API of `nipter_build_reference()`
+now accepts QC filtering parameters directly (`min_total_unique_reads`,
+`gc_mad_cutoff`, etc.), so the double-call pattern may be obsolete — confirm
+and collapse.
+
+### S-8 · `convert_sample.R` — triple-colon internal calls
+
+**Status**: Not verified. If `.seqff_metric_record` and `.match_metric_row` are
+now exported, remove the `:::` calls.
+
+### S-9 · `wisecondorx_conformance.R` — `.opt_get()` dead wrapper
+
+**Status**: Not verified. Remove if still present.
+
+---
+
+## Summary table — outstanding items
+
+| ID  | File(s)                     | Category      | Action                                             |
+|-----|-----------------------------|---------------|----------------------------------------------------|
+| 1-A | wisecondorx_cli.R           | Documentation | Add comment explaining shadow-patch purpose        |
+| 1-B | wisecondorx_cli.R           | Architecture  | Document non-reentrant condathis_isolate risk      |
+| 2-A | rwisecondorx_newref.R       | Ergonomics    | Group pca_distance params into one list arg        |
+| 2-B | rwisecondorx_newref.R       | Purity        | Move message() calls out of .build_sub_reference() |
+| 3-A | mclust_utils.R              | Ergonomics    | Clarify precondition in .mclust_fit_in_namespace() |
+| 4-A | all R                       | Cleanup       | Remove stringsAsFactors=FALSE (R≥4.0)              |
+| 5-A | nipter_classes.R + 9 files  | Correctness   | Replace 1:22 / 1:24 with seq_len()                |
+| 5-B | nipter_classes.R            | Correctness   | Fix .cache stale-after-deserialize risk            |
+| 5-C | nipter_classes.R            | Architecture  | Schedule S3 legacy shim removal                   |
+| 6-A | nipter_reference.R          | Ergonomics    | Expose sex_outlier_threshold in nipter_build_ref() |
+| 6-B | nipter_reference.R          | Correctness   | Replace [1:22] with [seq_len(22L)]                |
+| 7-A | nipter_sex.R                | Documentation | Comment tempfile lifecycle in y_unique_ratio()     |
+| 7-B | nipter_control.R            | API           | Promote duplicate-sample message() to warning()   |
+| 8-A | nipter_control_qc.R:469     | Correctness   | Replace for (chrom in 1:22) with seq_len(22L)      |
+| 9-A | bed_reader.R                | Performance   | Skip raw matrix build when corrected cols present  |
+| S-1 | nohup.out                   | Hygiene       | Confirm deleted; add *.out to .gitignore           |
+| S-6 | predict_cohort.R            | Correctness   | Confirm %||% exported or define locally            |
+| S-7 | build_reference.R           | Duplication   | Confirm double nipter_build_reference() collapsed  |
+| S-8 | convert_sample.R            | API surface   | Confirm ::: calls removed or functions exported    |
+| S-9 | wisecondorx_conformance.R   | Dead code     | Confirm .opt_get() removed                        |
+
+---
+
+## Fixed since pass 1
+
+| Original ID | What was fixed                                                   |
+|-------------|------------------------------------------------------------------|
+| 2-A         | Manual key-copy loops → `modifyList()`                          |
+| 2-B/D       | `null_ratio_max_samples` exposed; `bed_dir` con lifecycle fixed |
+| 3-A         | mclust namespace duplication → `mclust_utils.R`                 |
+| 3-B/C       | `gender_model_names` exposed; `gmm_density()` guard added       |
+| 4-A         | Autosomal remapping extracted to `.remap_autosomal_to_partition()`|
+| 5-A/B/C     | Gender model density/grid params all exposed                    |
+| 6-A         | RNG state: `set.seed()` now saves/restores `.Random.seed`       |
+| 6-B (CBS)   | `verbose=1` + capture → `verbose=0` directly                   |
+| 7-A/B       | `.wcx_population_sd()` moved to utils; MSV/CPA stored in stats  |
+| 8-A         | `1:N` loops fixed in WisecondorX layer (rwisecondorx_* files)   |
+| S-3         | `store_true+default=TRUE` anti-pattern fixed                    |
+| S-4         | `<<-` in mclapply workers replaced with return values           |
+| S-5         | `.with_duckhts_con()` simplified; SAM flag constants defined    |
+
+---
+
+## What NOT to change
+
+- Algorithmic constants mirroring upstream Python: 5% mask threshold, 5 PCA
+  components, `refsize=300`, `maskrepeats=5`, `zscore=5`, `alpha=1e-4`.
+- KNN global-vs-local index semantics (documented in AGENTS.md).
+- Upstream bug replications: CPA +1 overcount, last-bin drop.
+- The `G=2, modelNames="V"` GMM default — expose as a parameter (done) but
+  do not change the default.
+- Any Rcpp C++ code (`src/knn_reference.cpp`, `src/nipter_matching.cpp`).
+- `bam_convert()` DuckDB/SQL logic in `convert.R`.
+- `bam_convert_npz()` Python/reticulate path — conformance-only.

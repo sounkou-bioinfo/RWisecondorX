@@ -63,6 +63,10 @@ produced by \code{\link[=bam_convert_npz]{bam_convert_npz()}}. The NPZ files mus
 This wrapper exposes the current upstream \verb{wisecondorx newref} CLI flags
 documented in the WisecondorX README: \code{--nipt}, \code{--binsize}, \code{--refsize},
 \code{--yfrac}, \code{--plotyfrac}, and \code{--cpus}.
+
+Conda execution is run inside an isolated HOME/XDG sandbox so stale
+libmamba lock files in the user's global cache do not leak into package
+calls.
 }
 \examples{
 \dontrun{

@@ -11,7 +11,8 @@ nipter_y_unique_ratio(
   exclude_flags = 0L,
   regions_file = NULL,
   con = NULL,
-  reference = NULL
+  reference = NULL,
+  decompression_threads = 0L
 )
 }
 \arguments{
@@ -37,6 +38,10 @@ custom file for GRCh38 or other assemblies.}
 created.}
 
 \item{reference}{Optional FASTA reference path for CRAM inputs.}
+
+\item{decompression_threads}{Integer; number of htslib decompression worker
+threads to use for BAM/CRAM decoding in the BED-coverage path. Default
+\code{0L}.}
 }
 \value{
 A list with elements:
@@ -68,11 +73,16 @@ semantics.
 
 The BAM must be indexed (\code{.bai} or \code{.csi}).
 
-Read counting uses DuckDB/duckhts with index-based region queries
-(\code{read_bam(region := ...)}) issued once per Y-unique interval, and a
-separate full-genome scan for the nuclear total. Interval chromosome names
-are matched to the BAM header so both \code{Y} and \code{chrY}-style
-contigs work. Both query paths apply the same MAPQ and flag filters.
+Read counting uses DuckDB/duckhts BED coverage summaries via
+\code{\link[Rduckhts:rduckhts_bam_bed_coverage]{Rduckhts::rduckhts_bam_bed_coverage()}}. Interval chromosome names are
+matched to the BAM header so both \code{Y} and \code{chrY}-style contigs
+work. Both the Y-target BED and the whole-nuclear BED apply the same MAPQ
+and flag filters.
+
+Y-target reads are summed across the supplied intervals exactly as listed in
+\code{regions_file}. This intentionally preserves the historical
+interval-wise summation semantics: if two target intervals overlap, a read
+contributing to both intervals is counted twice.
 }
 \examples{
 \dontrun{

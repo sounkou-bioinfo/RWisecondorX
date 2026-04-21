@@ -50,6 +50,19 @@ library(optparse)
   unique(parts[nzchar(parts)])
 }
 
+.parse_integer_arg <- function(x, label) {
+  if (is.null(x) || !nzchar(x)) {
+    return(integer())
+  }
+  parts <- trimws(strsplit(x, ",", fixed = TRUE)[[1L]])
+  parts <- parts[nzchar(parts)]
+  vals <- suppressWarnings(as.integer(parts))
+  if (!length(vals) || any(is.na(vals))) {
+    stop(label, " must be a comma-separated list of integers.", call. = FALSE)
+  }
+  unique(vals)
+}
+
 .sanitize_inline_name_arg <- function(values) {
   values <- unique(values[nzchar(values)])
   if (length(values) == 1L && file.exists(values)) {
@@ -354,6 +367,38 @@ option_list <- list(
               help = "Reference output binsize for wisecondorx/rwisecondorx [default: same as --binsize for rwisecondorx, 100000 for wisecondorx]"),
   make_option("--refsize", type = "integer", default = 300L,
               help = "KNN neighbors for wisecondorx/rwisecondorx reference building [default: %default]"),
+  make_option("--yfrac", type = "double", default = NA_real_,
+              help = "rwisecondorx mode: manual Y-fraction cutoff; leave NA to fit it from the cohort [default: %default]"),
+  make_option("--female-partition-min-samples", type = "integer", default = 5L,
+              help = "rwisecondorx mode: minimum female samples required before applying female-specific masking and building the female gonosomal partition [default: %default]"),
+  make_option("--male-partition-min-samples", type = "integer", default = 5L,
+              help = "rwisecondorx mode: minimum male samples required before applying male-specific masking and building the male gonosomal partition [default: %default]"),
+  make_option("--mask-min-median-coverage-fraction", type = "double", default = 0.05,
+              help = "rwisecondorx mode: mask bins below this fraction of the median normalized coverage [default: %default]"),
+  make_option("--gender-model-grid-min", type = "double", default = 0,
+              help = "rwisecondorx mode: lower bound of the density grid used to locate the Y-fraction cutoff [default: %default]"),
+  make_option("--gender-model-grid-max", type = "double", default = 0.02,
+              help = "rwisecondorx mode: upper bound of the density grid used to locate the Y-fraction cutoff [default: %default]"),
+  make_option("--gender-model-grid-length", type = "integer", default = 5000L,
+              help = "rwisecondorx mode: number of grid points used to locate the Y-fraction cutoff [default: %default]"),
+  make_option("--pca-components", type = "integer", default = 5L,
+              help = "rwisecondorx mode: PCA components retained during reference building [default: %default]"),
+  make_option("--pca-distance-min-class-bins", type = "integer", default = 10L,
+              help = "rwisecondorx mode: minimum masked bins before class-specific PCA-distance pruning is applied [default: %default]"),
+  make_option("--pca-distance-autosome-mad-multiplier", type = "double", default = 20,
+              help = "rwisecondorx mode: autosomal PCA-distance MAD multiplier [default: %default]"),
+  make_option("--pca-distance-autosome-floor", type = "double", default = 10,
+              help = "rwisecondorx mode: autosomal PCA-distance floor [default: %default]"),
+  make_option("--pca-distance-chrX-mad-multiplier", type = "double", default = 20,
+              help = "rwisecondorx mode: chrX PCA-distance MAD multiplier [default: %default]"),
+  make_option("--pca-distance-chrX-floor", type = "double", default = 10,
+              help = "rwisecondorx mode: chrX PCA-distance floor [default: %default]"),
+  make_option("--pca-distance-chrY-mad-multiplier", type = "double", default = 50,
+              help = "rwisecondorx mode: chrY PCA-distance MAD multiplier [default: %default]"),
+  make_option("--pca-distance-chrY-floor", type = "double", default = 15,
+              help = "rwisecondorx mode: chrY PCA-distance floor [default: %default]"),
+  make_option("--null-ratio-max-samples", type = "integer", default = 100L,
+              help = "rwisecondorx mode: maximum cohort samples used for null-ratio estimation [default: %default]"),
   make_option("--nipt", action = "store_true", default = FALSE,
               help = "Enable NIPT mode in wisecondorx/rwisecondorx reference building [default: %default]"),
   make_option("--cpus", type = "integer", default = 4L,
@@ -424,6 +469,12 @@ option_list <- list(
               help = "nipter mode: maximum pruning iterations [default: %default]"),
   make_option("--prune-collapse-strands", action = "store_true", default = FALSE,
               help = "nipter mode: collapse separated strands during outlier diagnosis instead of using strand-resolved diagnostics [default: %default]"),
+  make_option("--rbz-train-fraction", type = "double", default = 1,
+              help = "nipter mode: fraction of retained controls used to fit autosomal RBZ QC models; use 1 to fit and score on all controls [default: %default]"),
+  make_option("--rbz-seed", type = "integer", default = 1995L,
+              help = "nipter mode: seed used when --rbz-train-fraction < 1 [default: %default]"),
+  make_option("--rbz-exclude-chromosomes", type = "character", default = "13,18,21",
+              help = "nipter mode: comma-separated chromosomes excluded from autosomal RBZ predictor search [default: %default]"),
   make_option("--drop-ref-sex-outliers", action = "store_true", default = FALSE,
               help = "nipter mode: after a provisional reference build, drop ConsensusGender sex outliers and rebuild the final model on the same retained set [default: %default]")
 )
@@ -467,6 +518,10 @@ has_npz_dir <- !is.null(opts$`npz-dir`)
 has_npz_list <- !is.null(opts$`npz-list`)
 autosomal_source <- match.arg(tolower(opts$`nipter-autosomal-source`), c("auto", "raw", "corrected"))
 sex_counts <- match.arg(tolower(opts$`nipter-sex-counts`), c("match", "raw", "corrected"))
+rbz_exclude_chromosomes <- .parse_integer_arg(
+  opts$`rbz-exclude-chromosomes`,
+  "--rbz-exclude-chromosomes"
+)
 
 include_samples <- unique(c(
   .sanitize_inline_name_arg(.parse_name_arg(opts$`include-samples`)),
@@ -566,6 +621,22 @@ if (mode == "rwisecondorx") {
     binsize = ref_binsize,
     nipt = opts$nipt,
     refsize = as.integer(opts$refsize),
+    yfrac = if (is.finite(opts$yfrac)) as.numeric(opts$yfrac) else NULL,
+    female_partition_min_samples = as.integer(opts$`female-partition-min-samples`),
+    male_partition_min_samples = as.integer(opts$`male-partition-min-samples`),
+    mask_min_median_coverage_fraction = as.numeric(opts$`mask-min-median-coverage-fraction`),
+    gender_model_grid_min = as.numeric(opts$`gender-model-grid-min`),
+    gender_model_grid_max = as.numeric(opts$`gender-model-grid-max`),
+    gender_model_grid_length = as.integer(opts$`gender-model-grid-length`),
+    pca_components = as.integer(opts$`pca-components`),
+    pca_distance_min_class_bins = as.integer(opts$`pca-distance-min-class-bins`),
+    pca_distance_autosome_mad_multiplier = as.numeric(opts$`pca-distance-autosome-mad-multiplier`),
+    pca_distance_autosome_floor = as.numeric(opts$`pca-distance-autosome-floor`),
+    pca_distance_chrX_mad_multiplier = as.numeric(opts$`pca-distance-chrX-mad-multiplier`),
+    pca_distance_chrX_floor = as.numeric(opts$`pca-distance-chrX-floor`),
+    pca_distance_chrY_mad_multiplier = as.numeric(opts$`pca-distance-chrY-mad-multiplier`),
+    pca_distance_chrY_floor = as.numeric(opts$`pca-distance-chrY-floor`),
+    null_ratio_max_samples = as.integer(opts$`null-ratio-max-samples`),
     cpus = as.integer(opts$cpus)
   )
   .ensure_parent_dir(opts$out)
@@ -689,6 +760,37 @@ if (mode == "rwisecondorx") {
     }
   }
 
+  .build_nipter_ref <- function(control_group,
+                                y_unique_values,
+                                dropped_reference_sex_outliers = NULL) {
+    nipter_build_reference(
+      control_group,
+      y_unique_ratios = y_unique_values,
+      sample_qc = sample_qc,
+      sample_qc_sample_col = opts$`sample-qc-sample-col`,
+      sample_qc_total_unique_reads_col = opts$`sample-qc-total-unique-reads-col`,
+      sample_qc_gc_col = opts$`sample-qc-gc-col`,
+      min_total_unique_reads = opts$`min-total-unique-reads`,
+      max_total_unique_reads = opts$`max-total-unique-reads`,
+      gc_mad_cutoff = opts$`gc-mad-cutoff`,
+      build_params = c(
+        list(
+          control_group_rds = normalizePath(opts$out, winslash = "/", mustWork = FALSE),
+          source_type = if (has_bed_dir) "bed_dir" else "bed_list",
+          autosomal_source = autosomal_source,
+          sex_counts = sex_counts,
+          prune_outliers = isTRUE(opts$`prune-outliers`),
+          prune_outlier_rule = opts$`prune-outlier-rule`
+        ),
+        if (length(dropped_reference_sex_outliers)) {
+          list(dropped_reference_sex_outliers = dropped_reference_sex_outliers)
+        } else {
+          list()
+        }
+      )
+    )
+  }
+
   current_names <- control_names(ctrl)
   current_y_unique <- .normalize_named_by_samples(y_unique_ratios, current_names)
 
@@ -699,24 +801,9 @@ if (mode == "rwisecondorx") {
   } else {
     opts$`model-rds`
   }
-  ref_model <- nipter_build_reference(
-    ctrl,
-    y_unique_ratios = current_y_unique,
-    sample_qc = sample_qc,
-    sample_qc_sample_col = opts$`sample-qc-sample-col`,
-    sample_qc_total_unique_reads_col = opts$`sample-qc-total-unique-reads-col`,
-    sample_qc_gc_col = opts$`sample-qc-gc-col`,
-    min_total_unique_reads = opts$`min-total-unique-reads`,
-    max_total_unique_reads = opts$`max-total-unique-reads`,
-    gc_mad_cutoff = opts$`gc-mad-cutoff`,
-    build_params = list(
-      control_group_rds = normalizePath(opts$out, winslash = "/", mustWork = FALSE),
-      source_type = if (has_bed_dir) "bed_dir" else "bed_list",
-      autosomal_source = autosomal_source,
-      sex_counts = sex_counts,
-      prune_outliers = isTRUE(opts$`prune-outliers`),
-      prune_outlier_rule = opts$`prune-outlier-rule`
-    )
+  ref_model <- .build_nipter_ref(
+    control_group = ctrl,
+    y_unique_values = current_y_unique
   )
   ctrl <- ref_model$control_group
 
@@ -735,25 +822,10 @@ if (mode == "rwisecondorx") {
       current_y_unique <- .normalize_named_by_samples(y_unique_ratios, current_names)
       .ensure_parent_dir(opts$out)
       saveRDS(ctrl, opts$out)
-      ref_model <- nipter_build_reference(
-        ctrl,
-        y_unique_ratios = current_y_unique,
-        sample_qc = sample_qc,
-        sample_qc_sample_col = opts$`sample-qc-sample-col`,
-        sample_qc_total_unique_reads_col = opts$`sample-qc-total-unique-reads-col`,
-        sample_qc_gc_col = opts$`sample-qc-gc-col`,
-        min_total_unique_reads = opts$`min-total-unique-reads`,
-        max_total_unique_reads = opts$`max-total-unique-reads`,
-        gc_mad_cutoff = opts$`gc-mad-cutoff`,
-        build_params = list(
-          control_group_rds = normalizePath(opts$out, winslash = "/", mustWork = FALSE),
-          source_type = if (has_bed_dir) "bed_dir" else "bed_list",
-          autosomal_source = autosomal_source,
-          sex_counts = sex_counts,
-          prune_outliers = isTRUE(opts$`prune-outliers`),
-          prune_outlier_rule = opts$`prune-outlier-rule`,
-          dropped_reference_sex_outliers = sex_outliers
-        )
+      ref_model <- .build_nipter_ref(
+        control_group = ctrl,
+        y_unique_values = current_y_unique,
+        dropped_reference_sex_outliers = sex_outliers
       )
       ctrl <- ref_model$control_group
     }
@@ -778,7 +850,10 @@ if (mode == "rwisecondorx") {
     collapse_strands = isTRUE(opts$`prune-collapse-strands`),
     max_aberrant_chromosomes = as.integer(opts$`prune-max-aberrant-chromosomes`),
     outlier_rule = opts$`prune-outlier-rule`,
-    include_bins = isTRUE(opts$`include-bin-qc`)
+    include_bins = isTRUE(opts$`include-bin-qc`),
+    rbz_train_fraction = opts$`rbz-train-fraction`,
+    rbz_seed = opts$`rbz-seed`,
+    rbz_exclude_chromosomes = rbz_exclude_chromosomes
   )
   qc$settings <- c(
     qc$settings,
@@ -793,7 +868,10 @@ if (mode == "rwisecondorx") {
       prune_converged = if (is.null(prune_result)) NA else isTRUE(prune_result$converged),
       prune_stop_reason = if (is.null(prune_result)) NA_character_ else prune_result$stop_reason,
       n_pruned_autosomal_outliers = if (is.null(prune_result)) 0L else length(prune_result$dropped_samples),
-      n_dropped_reference_sex_outliers = length(sex_outliers)
+      n_dropped_reference_sex_outliers = length(sex_outliers),
+      rbz_train_fraction = opts$`rbz-train-fraction`,
+      rbz_seed = opts$`rbz-seed`,
+      rbz_exclude_chromosomes = rbz_exclude_chromosomes
     )
   )
   .write_nipter_qc_bundle(qc, qc_prefix)

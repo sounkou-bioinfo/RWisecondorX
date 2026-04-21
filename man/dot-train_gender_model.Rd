@@ -4,7 +4,14 @@
 \alias{.train_gender_model}
 \title{Train a gender model using GMM on Y-fractions}
 \usage{
-.train_gender_model(samples, yfrac = NULL)
+.train_gender_model(
+  samples,
+  yfrac = NULL,
+  gender_model_names = "V",
+  density_grid_min = 0,
+  density_grid_max = 0.02,
+  density_grid_length = 5000L
+)
 }
 \arguments{
 \item{samples}{List of sample objects.}

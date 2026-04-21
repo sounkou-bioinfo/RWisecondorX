@@ -13,6 +13,11 @@ rwisecondorx_predict(
   maskrepeats = 5L,
   alpha = 1e-04,
   zscore = 5,
+  optimal_cutoff_sd_multiplier = 3,
+  within_sample_mask_iterations = 3L,
+  within_sample_mask_quantile = 0.99,
+  cbs_split_min_gap_bp = 2000000L,
+  segment_zscore_cap = 1000,
   beta = NULL,
   blacklist = NULL,
   gender = NULL,
@@ -46,6 +51,23 @@ Default \code{5L}.}
 
 \item{zscore}{Numeric; Z-score cutoff for aberration calling. Default \code{5}.}
 
+\item{optimal_cutoff_sd_multiplier}{Numeric; number of population standard
+deviations added to the mean distance when iteratively deriving the
+optimal within-reference cutoff. Default \code{3}.}
+
+\item{within_sample_mask_iterations}{Integer; number of iterative
+within-sample masking passes. Default \code{3L}.}
+
+\item{within_sample_mask_quantile}{Numeric scalar in \verb{(0, 1)}; bins with
+\code{|z| >= qnorm(within_sample_mask_quantile)} are excluded from the
+next within-sample normalization pass. Default \code{0.99}.}
+
+\item{cbs_split_min_gap_bp}{Integer; NA stretches spanning more than this
+many base pairs trigger CBS segment splitting. Default \code{2000000L}.}
+
+\item{segment_zscore_cap}{Numeric; absolute cap applied to segment z-scores
+after they are derived from the null-ratio distributions. Default \code{1000}.}
+
 \item{beta}{Optional numeric; if given, ratio-based cutoff is used instead
 of Z-score. Should approximate purity (0, 1]. Default \code{NULL}.}
 
@@ -74,6 +96,8 @@ A list with class \code{"WisecondorXPrediction"} containing:
 \item{aberrations}{Data frame of called aberrations.}
 \item{statistics}{Data frame of per-chromosome statistics.}
 \item{gender}{Predicted (or forced) gender.}
+\item{algorithm_params}{Named list of native prediction parameters used
+for this result.}
 \item{n_reads}{Total read count.}
 \item{binsize}{Reference bin size.}
 }
@@ -87,7 +111,10 @@ and circular binary segmentation (CBS).
 \details{
 CBS is performed using the DNAcopy Bioconductor package (or optionally
 ParDNAcopy for parallel segmentation). Both must be available in
-\code{Suggests}.
+\code{Suggests}. Unlike \code{\link[=wisecondorx_predict]{wisecondorx_predict()}}, this function's \code{parallel}
+argument controls native R CBS execution through \code{ParDNAcopy::parSegment()};
+the upstream Python CLI wrapper delegates segmentation to upstream
+WisecondorX and does not expose this native switch.
 }
 \seealso{
 \code{\link[=rwisecondorx_newref]{rwisecondorx_newref()}}, \code{\link[=scale_sample]{scale_sample()}}

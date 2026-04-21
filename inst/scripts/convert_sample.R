@@ -72,6 +72,13 @@ option_list <- list(
   make_option("--nipter-gc-include-sex", action = "store_true", default = FALSE,
               help = paste0("NIPTeR mode: also GC-correct X/Y bins when writing corrected BED columns. ",
                             "Guarded off by default for compatibility [default: %default]")),
+  make_option("--gc-curve-plot-out", type = "character", default = NULL,
+              help = paste0("Optional PNG path for a per-sample NIPTeR GC-curve plot. ",
+                            "Only used in nipter mode when GC correction is applied.")),
+  make_option("--qc-plot-theme", type = "character", default = "minimal",
+              help = "QC plot theme: minimal, light, bw, classic [default: %default]"),
+  make_option("--qc-plot-base-size", type = "integer", default = 11L,
+              help = "QC plot base font size [default: %default]"),
   make_option("--tabix-metadata", action = "store_true", default = FALSE,
               help = paste0("BED outputs only: write optional ##RWX_<key>=<value> provenance lines ",
                             "into the bgzipped tabix file [default: %default]")),
@@ -197,6 +204,9 @@ if (!is.null(opts$fasta) && mode != "nipter") {
 if (isTRUE(opts$`nipter-gc-include-sex`) && mode != "nipter") {
   stop("--nipter-gc-include-sex is only valid in nipter mode", call. = FALSE)
 }
+if (!is.null(opts$`gc-curve-plot-out`) && mode != "nipter") {
+  stop("--gc-curve-plot-out is only valid in nipter mode", call. = FALSE)
+}
 
 if (!is.null(opts$`gc-table`) && !is.null(opts$fasta)) {
   stop("--gc-table and --fasta are mutually exclusive; provide one or the other", call. = FALSE)
@@ -245,24 +255,35 @@ if (mode == "rwisecondorx") {
 
 library(RWisecondorX)
 
+.match_metric_row <- getFromNamespace(".match_metric_row", "RWisecondorX")
+.seqff_metric_record <- getFromNamespace(".seqff_metric_record", "RWisecondorX")
+.y_unique_metric_record <- getFromNamespace(".y_unique_metric_record", "RWisecondorX")
+.sample_metrics_row <- getFromNamespace(".sample_metrics_row", "RWisecondorX")
+.sample_metrics_tabix_metadata <- getFromNamespace(".sample_metrics_tabix_metadata", "RWisecondorX")
+.merge_tabix_metadata <- getFromNamespace(".merge_tabix_metadata", "RWisecondorX")
+.native_bin_metric_record <- getFromNamespace(".native_bin_metric_record", "RWisecondorX")
+.bam_bin_count_rows <- getFromNamespace(".bam_bin_count_rows", "RWisecondorX")
+.bam_chr_lengths <- getFromNamespace(".bam_chr_lengths", "RWisecondorX")
+.nipter_rows_to_sample <- getFromNamespace(".nipter_rows_to_sample", "RWisecondorX")
+.bam_bin_stats_metadata <- getFromNamespace(".bam_bin_stats_metadata", "RWisecondorX")
+.nipter_preprocess_qc <- getFromNamespace(".nipter_preprocess_qc", "RWisecondorX")
+.write_nipter_gc_curve_plot <- getFromNamespace(".write_nipter_gc_curve_plot", "RWisecondorX")
+
+opts$`qc-plot-theme` <- match.arg(
+  tolower(opts$`qc-plot-theme`),
+  c("minimal", "light", "bw", "classic")
+)
+
 .resolve_y_regions_file <- function(path = NULL) {
   if (!is.null(path)) {
     return(normalizePath(path, winslash = "/", mustWork = TRUE))
   }
-  bundled <- system.file(
+  normalizePath(system.file(
     "extdata",
     "grch37_Y_chrom_blacklist.bed",
     package = "RWisecondorX",
-    mustWork = FALSE
-  )
-  if (!nzchar(bundled) || !file.exists(bundled)) {
-    stop(
-      "Cannot resolve the bundled legacy Y-interval file. ",
-      "Pass --y-regions-file explicitly.",
-      call. = FALSE
-    )
-  }
-  normalizePath(bundled, winslash = "/", mustWork = TRUE)
+    mustWork = TRUE
+  ), winslash = "/", mustWork = TRUE)
 }
 
 # ---------------------------------------------------------------------------
@@ -308,15 +329,16 @@ needs_sample_metrics <- !is.null(opts$`sample-metrics-out`) ||
 seqff_metrics <- NULL
 y_unique_metrics <- NULL
 sample_metrics_row <- NULL
+nipter_qc_metrics <- NULL
 
 if (needs_sample_metrics) {
   if (!is.null(opts$`seqff-tsv`)) {
-    seqff_metrics <- RWisecondorX:::.seqff_metric_record(
-      record = RWisecondorX:::.match_metric_row(opts$`seqff-tsv`, sample_name),
+    seqff_metrics <- .seqff_metric_record(
+      record = .match_metric_row(opts$`seqff-tsv`, sample_name),
       source = paste0("file:", basename(opts$`seqff-tsv`))
     )
   } else if (isTRUE(opts$`compute-seqff`)) {
-    seqff_metrics <- RWisecondorX:::.seqff_metric_record(
+    seqff_metrics <- .seqff_metric_record(
       pre = seqff_predict(
         input = bam,
         input_type = "bam",
@@ -338,13 +360,13 @@ if (needs_sample_metrics) {
   }
 
   if (!is.null(opts$`y-unique-tsv`)) {
-    y_unique_metrics <- RWisecondorX:::.y_unique_metric_record(
-      record = RWisecondorX:::.match_metric_row(opts$`y-unique-tsv`, sample_name),
+    y_unique_metrics <- .y_unique_metric_record(
+      record = .match_metric_row(opts$`y-unique-tsv`, sample_name),
       regions_file = y_regions_file,
       source = paste0("file:", basename(opts$`y-unique-tsv`))
     )
   } else if (isTRUE(opts$`compute-y-unique`)) {
-    y_unique_metrics <- RWisecondorX:::.y_unique_metric_record(
+    y_unique_metrics <- .y_unique_metric_record(
       pre = nipter_y_unique_ratio(
         bam = bam,
         mapq = metrics_pre_filters$mapq,
@@ -366,8 +388,8 @@ if (needs_sample_metrics) {
     )
   }
 
-  if (!is.null(seqff_metrics) || !is.null(y_unique_metrics)) {
-    sample_metrics_row <- RWisecondorX:::.sample_metrics_row(
+  if (mode != "nipter" && (!is.null(seqff_metrics) || !is.null(y_unique_metrics))) {
+    sample_metrics_row <- .sample_metrics_row(
       sample_name = sample_name,
       bam = bam,
       seqff = seqff_metrics,
@@ -395,9 +417,9 @@ if (mode == "rwisecondorx") {
     NULL
   }
   if (!is.null(bed_metadata) && !is.null(sample_metrics_row)) {
-    bed_metadata <- RWisecondorX:::.merge_tabix_metadata(
+    bed_metadata <- .merge_tabix_metadata(
       bed_metadata,
-      RWisecondorX:::.sample_metrics_tabix_metadata(
+      .sample_metrics_tabix_metadata(
         seqff = seqff_metrics,
         y_unique = y_unique_metrics,
         filters_pre = metrics_pre_filters,
@@ -479,7 +501,7 @@ if (mode == "rwisecondorx") {
   Rduckhts::rduckhts_load(con)
   on.exit(DBI::dbDisconnect(con, shutdown = TRUE), add = TRUE)
 
-  native_rows <- RWisecondorX:::.bam_bin_count_rows(
+  native_rows <- .bam_bin_count_rows(
     con = con,
     bam = bam,
     binsize = binsize,
@@ -491,41 +513,22 @@ if (mode == "rwisecondorx") {
     stats = "gc,mq",
     include_unmapped = TRUE
   )
-  native_metrics <- RWisecondorX:::.native_bin_metric_record(
+  native_metrics <- .native_bin_metric_record(
     rows = native_rows,
     source = "bam_bin_counts(gc,mq)"
   )
-  chr_lengths <- RWisecondorX:::.bam_chr_lengths(con, bam)
-  raw_sample <- RWisecondorX:::.nipter_rows_to_sample(
+  chr_lengths <- .bam_chr_lengths(con, bam)
+  raw_sample <- .nipter_rows_to_sample(
     rows = native_rows,
     chr_lengths = chr_lengths,
     binsize = binsize,
     name = sub("\\.cram$|\\.bam$", "", basename(bam), ignore.case = TRUE),
     separate_strands = isTRUE(opts$`separate-strands`)
   )
-  sample_metrics_row <- RWisecondorX:::.sample_metrics_row(
-    sample_name = sample_name,
-    bam = bam,
-    seqff = seqff_metrics,
-    y_unique = y_unique_metrics,
-    native = native_metrics,
-    filters_pre = metrics_pre_filters,
-    filters_post = metrics_post_filters
-  )
   if (!is.null(bed_metadata)) {
-    bed_metadata <- RWisecondorX:::.merge_tabix_metadata(
+    bed_metadata <- .merge_tabix_metadata(
       bed_metadata,
-      RWisecondorX:::.sample_metrics_tabix_metadata(
-        seqff = seqff_metrics,
-        y_unique = y_unique_metrics,
-        native = native_metrics,
-        filters_pre = metrics_pre_filters,
-        filters_post = metrics_post_filters
-      )
-    )
-    bed_metadata <- RWisecondorX:::.merge_tabix_metadata(
-      bed_metadata,
-      RWisecondorX:::.bam_bin_stats_metadata(native_rows)
+      .bam_bin_stats_metadata(native_rows)
     )
   }
 
@@ -548,6 +551,52 @@ if (mode == "rwisecondorx") {
         con = con
       )
     }
+  }
+
+  if (!is.null(corrected_sample)) {
+    nipter_qc <- .nipter_preprocess_qc(
+      sample = raw_sample,
+      corrected = corrected_sample,
+      gc_table = if (!is.null(gc_table)) gc_table else NULL,
+      fasta = if (is.null(gc_table)) gc_fasta else NULL,
+      binsize = binsize,
+      con = con
+    )
+    if (!is.null(opts$`gc-curve-plot-out`)) {
+      .write_nipter_gc_curve_plot(
+        curve_data = nipter_qc$curve_data,
+        sample_name = sample_name,
+        out_png = opts$`gc-curve-plot-out`,
+        theme = opts$`qc-plot-theme`,
+        base_size = as.integer(opts$`qc-plot-base-size`)
+      )
+      nipter_qc$metrics$gc_curve_plot <- opts$`gc-curve-plot-out`
+    }
+    nipter_qc_metrics <- nipter_qc$metrics
+  }
+
+  sample_metrics_row <- .sample_metrics_row(
+    sample_name = sample_name,
+    bam = bam,
+    seqff = seqff_metrics,
+    y_unique = y_unique_metrics,
+    native = native_metrics,
+    nipter_qc = nipter_qc_metrics,
+    filters_pre = metrics_pre_filters,
+    filters_post = metrics_post_filters
+  )
+  if (!is.null(bed_metadata)) {
+    bed_metadata <- .merge_tabix_metadata(
+      bed_metadata,
+      .sample_metrics_tabix_metadata(
+        seqff = seqff_metrics,
+        y_unique = y_unique_metrics,
+        native = native_metrics,
+        nipter_qc = nipter_qc_metrics,
+        filters_pre = metrics_pre_filters,
+        filters_post = metrics_post_filters
+      )
+    )
   }
 
   nipter_sample_to_bed(

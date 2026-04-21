@@ -12,14 +12,18 @@ if (nzchar(.helper_nipter)) {
   sys.source("inst/tinytest/helper_nipter.R", envir = environment())
 }
 
-plot_samples <- .sim_nipter_control_set(6L, seed = 77L)
+plot_samples <- .sim_nipter_control_set(10L, seed = 77L)
 plot_sex <- c(
   ctrl_01 = "female",
   ctrl_02 = "female",
   ctrl_03 = "female",
-  ctrl_04 = "male",
-  ctrl_05 = "male",
-  ctrl_06 = "male"
+  ctrl_04 = "female",
+  ctrl_05 = "female",
+  ctrl_06 = "male",
+  ctrl_07 = "male",
+  ctrl_08 = "male",
+  ctrl_09 = "male",
+  ctrl_10 = "male"
 )
 
 for (nm in names(plot_sex)) {
@@ -27,10 +31,10 @@ for (nm in names(plot_sex)) {
   sx <- plot_samples[[idx]]@sex_matrix_
   if (plot_sex[[nm]] == "female") {
     sx["X", ] <- 25L
-    sx["Y", ] <- 0L
+    sx["Y", ] <- 1L
   } else {
     sx["X", ] <- 12L
-    sx["Y", ] <- 4L
+    sx["Y", ] <- 5L
   }
   plot_samples[[idx]]@sex_matrix_ <- sx
 }
@@ -42,17 +46,32 @@ plot_cg <- nipter_as_control_group(
   sex_source = "synthetic_truth"
 )
 
-plot_qc <- nipter_control_group_qc(plot_cg, include_bins = TRUE)
 plot_ref <- nipter_build_reference(
   plot_cg,
   y_unique_ratios = c(
     ctrl_01 = 1e-05,
     ctrl_02 = 1.2e-05,
     ctrl_03 = 1.1e-05,
-    ctrl_04 = 1.5e-04,
-    ctrl_05 = 1.4e-04,
-    ctrl_06 = 1.6e-04
+    ctrl_04 = 0.9e-05,
+    ctrl_05 = 1.05e-05,
+    ctrl_06 = 1.5e-04,
+    ctrl_07 = 1.4e-04,
+    ctrl_08 = 1.6e-04,
+    ctrl_09 = 1.55e-04,
+    ctrl_10 = 1.45e-04
   )
+)
+plot_ref <- nipter_build_gaunosome_models(
+  plot_ref,
+  ncv_min_elements = 1L,
+  ncv_max_elements = 2L,
+  regression_n_predictors = 2L,
+  regression_extra_predictors = character()
+)
+plot_qc <- nipter_control_group_qc(
+  plot_cg,
+  include_bins = TRUE,
+  reference_model = plot_ref
 )
 
 p_chr <- nipter_plot_qc_chromosomes(plot_qc)
@@ -61,12 +80,17 @@ expect_true(inherits(p_chr, "ggplot"),
 expect_false(all(is.na(p_chr$data$chromosome)),
              info = "chromosome QC plot keeps chromosome labels after strand-aware ordering")
 expect_true(all(c("z_fraction", "ncv", "rbz") %in% p_chr$data$method_family),
-            info = "chromosome QC plot carries the expanded method families")
+            info = "chromosome QC plot keeps the three method families after merging in sex-model rows")
+expect_true(all(c("X_XX", "Y_XX", "X_XY", "Y_XY") %in% as.character(p_chr$data$chromosome)),
+            info = "chromosome QC plot includes the sex-model XX/XY X/Y rows")
 chr_y_scale <- p_chr$scales$get_scales("y")
 expect_equal(chr_y_scale$breaks(c(0, 0.13)), c(0, 0.05, 0.10, 0.15),
              info = "chromosome QC plot uses 0.05 y-axis increments from zero")
 expect_equal(chr_y_scale$limits(c(0.02, 0.13)), c(0, 0.15),
              info = "chromosome QC plot starts each y-axis at zero")
+big_chr_breaks <- RWisecondorX:::.cv_axis_major_breaks(c(0, 5), step = 0.05)
+expect_true(length(big_chr_breaks) < length(RWisecondorX:::.cv_axis_breaks(c(0, 5), step = 0.05)),
+            info = "chromosome QC plot uses coarser labeled breaks when the CV range is large")
 
 p_samples <- nipter_plot_qc_samples(plot_qc)
 expect_true(inherits(p_samples, "ggplot"),

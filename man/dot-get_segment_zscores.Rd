@@ -4,7 +4,13 @@
 \alias{.get_segment_zscores}
 \title{Compute between-sample Z-scores for CBS segments}
 \usage{
-.get_segment_zscores(cbs_result, results_nr, results_r, results_w)
+.get_segment_zscores(
+  cbs_result,
+  results_nr,
+  results_r,
+  results_w,
+  zscore_cap = 1000
+)
 }
 \arguments{
 \item{cbs_result}{Data frame with chr, start, end, ratio.}
@@ -14,6 +20,8 @@
 \item{results_r}{List of per-chromosome log2-ratio vectors.}
 
 \item{results_w}{List of per-chromosome weight vectors.}
+
+\item{zscore_cap}{Numeric; absolute cap applied to finite segment z-scores.}
 }
 \value{
 Numeric vector of Z-scores, one per segment.

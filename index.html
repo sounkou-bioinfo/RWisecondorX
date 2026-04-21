@@ -57,9 +57,17 @@
 <div class="section level2">
 <h2 id="installation">Installation<a class="anchor" aria-label="anchor" href="#installation"></a>
 </h2>
-<p>Install the development version from GitHub:</p>
+<p><code>RWisecondorX</code> is developed against the current edge of <code>Rduckhts</code>, not an older CRAN snapshot. Install <code>Rduckhts</code> from the r-universe first, then install <code>RWisecondorX</code>:</p>
 <div class="sourceCode" id="cb1"><pre class="downlit sourceCode r">
-<code class="sourceCode R"><span><span class="co"># install.packages("pak")</span></span>
+<code class="sourceCode R"><span><span class="fu"><a href="https://rdrr.io/r/utils/install.packages.html" class="external-link">install.packages</a></span><span class="op">(</span></span>
+<span>  <span class="st">"Rduckhts"</span>,</span>
+<span>  repos <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span></span>
+<span>    <span class="st">"https://rgenomicsetl.r-universe.dev"</span>,</span>
+<span>    <span class="st">"https://cloud.r-project.org"</span></span>
+<span>  <span class="op">)</span></span>
+<span><span class="op">)</span></span>
+<span></span>
+<span><span class="co"># install.packages("pak")</span></span>
 <span><span class="fu">pak</span><span class="fu">::</span><span class="fu"><a href="https://pak.r-lib.org/reference/pak.html" class="external-link">pak</a></span><span class="op">(</span><span class="st">"sounkou-bioinfo/RWisecondorX"</span><span class="op">)</span></span></code></pre></div>
 <p><code>RWisecondorX</code> imports <code>Rduckhts</code>, <code>DBI</code>, and <code>duckdb</code>. <code>reticulate</code> is needed only to write <code>.npz</code> files; <code>condathis</code> is needed only for the upstream CLI wrappers. Neither is required for the core convert step.</p>
 </div>
@@ -116,11 +124,48 @@
 <span><span class="va">pred</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/rwisecondorx_predict.html">rwisecondorx_predict</a></span><span class="op">(</span><span class="va">test_sample</span>, <span class="va">ref</span>, zscore <span class="op">=</span> <span class="fl">5</span>, seed <span class="op">=</span> <span class="fl">42L</span>, cpus <span class="op">=</span> <span class="fl">4L</span><span class="op">)</span></span>
 <span><span class="va">pred</span><span class="op">$</span><span class="va">aberrations</span></span></code></pre></div>
 <p><code>rwisecondorx_predict(parallel = TRUE)</code> requires <code>ParDNAcopy</code>. If that package is not installed, call <code>rwisecondorx_predict(..., parallel = FALSE)</code> to use serial <code><a href="https://rdrr.io/pkg/DNAcopy/man/segment.html" class="external-link">DNAcopy::segment()</a></code>.</p>
+<p>The native predictor also exposes the two upstream predict controls most often needed in practice:</p>
+<ul>
+<li>
+<code>beta</code> for purity-based ratio calling</li>
+<li>
+<code>gender = "F"</code> / <code>"M"</code> to force the gonosomal branch instead of using the Y-fraction classifier</li>
+</ul>
+<!-- end list --><div class="sourceCode" id="cb5"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span><span class="va">pred_forced</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/rwisecondorx_predict.html">rwisecondorx_predict</a></span><span class="op">(</span></span>
+<span>  <span class="va">test_sample</span>,</span>
+<span>  <span class="va">ref</span>,</span>
+<span>  gender <span class="op">=</span> <span class="st">"F"</span>,</span>
+<span>  beta <span class="op">=</span> <span class="cn">NULL</span>,</span>
+<span>  seed <span class="op">=</span> <span class="fl">42L</span></span>
+<span><span class="op">)</span></span></code></pre></div>
+<div class="section level3">
+<h3 id="native-wisecondorx-qc-and-outputs">Native WisecondorX QC And Outputs<a class="anchor" aria-label="anchor" href="#native-wisecondorx-qc-and-outputs"></a>
+</h3>
+<p>On the native R side, prediction output is currently tabular rather than graphical:</p>
+<ul>
+<li>
+<code><a href="reference/write_wisecondorx_output.html">write_wisecondorx_output()</a></code> writes
+<ul>
+<li><code>&lt;outprefix&gt;_bins.bed</code></li>
+<li><code>&lt;outprefix&gt;_segments.bed</code></li>
+<li><code>&lt;outprefix&gt;_aberrations.bed</code></li>
+<li><code>&lt;outprefix&gt;_statistics.txt</code></li>
+</ul>
+</li>
+<li>
+<code><a href="reference/rwisecondorx_ref_qc.html">rwisecondorx_ref_qc()</a></code> runs the upstream-style reference QC heuristics and returns a structured report, with optional JSON output</li>
+</ul>
+<!-- end list --><div class="sourceCode" id="cb6"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span><span class="va">qc</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/rwisecondorx_ref_qc.html">rwisecondorx_ref_qc</a></span><span class="op">(</span><span class="va">ref</span>, output_json <span class="op">=</span> <span class="st">"reference_qc.json"</span><span class="op">)</span></span>
+<span><span class="fu"><a href="reference/write_wisecondorx_output.html">write_wisecondorx_output</a></span><span class="op">(</span><span class="va">pred</span>, outprefix <span class="op">=</span> <span class="st">"results/sample_01"</span><span class="op">)</span></span></code></pre></div>
+<p>The package does <strong>not yet</strong> provide native ggplot helpers for <code>WisecondorXPrediction</code> objects. If you need the upstream PNG/PDF plotting behaviour, use the CLI wrapper <code>wisecondorx_predict(..., plot = TRUE)</code> instead.</p>
+</div>
 <div class="section level3">
 <h3 id="multi-file-bed-input-for-reference-building">Multi-File BED Input For Reference Building<a class="anchor" aria-label="anchor" href="#multi-file-bed-input-for-reference-building"></a>
 </h3>
 <p><code><a href="reference/rwisecondorx_newref.html">rwisecondorx_newref()</a></code> also accepts a directory of 4-column BED.gz files produced by <code><a href="reference/bam_convert_bed.html">bam_convert_bed()</a></code> via the <code>bed_dir</code> parameter. All matching files are loaded in a single DuckDB pass — no in-memory sample list needed:</p>
-<div class="sourceCode" id="cb5"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb7"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">ref</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/rwisecondorx_newref.html">rwisecondorx_newref</a></span><span class="op">(</span></span>
 <span>  bed_dir <span class="op">=</span> <span class="st">"bed_counts/"</span>,     <span class="co"># directory of *.bed.gz files</span></span>
 <span>  binsize <span class="op">=</span> <span class="fl">100000L</span>,</span>
@@ -133,14 +178,14 @@
 <h2 id="optional-npz-and-cli-workflow">Optional NPZ And CLI Workflow<a class="anchor" aria-label="anchor" href="#optional-npz-and-cli-workflow"></a>
 </h2>
 <p><code><a href="reference/bam_convert_npz.html">bam_convert_npz()</a></code> and the <code>wisecondorx_*()</code> CLI wrappers are the conformance and interoperability path. The production native path is <code><a href="reference/bam_convert_bed.html">bam_convert_bed()</a></code>/<code><a href="reference/bam_convert.html">bam_convert()</a></code> with <code><a href="reference/rwisecondorx_newref.html">rwisecondorx_newref()</a></code> and <code><a href="reference/rwisecondorx_predict.html">rwisecondorx_predict()</a></code>. When the full upstream Python WisecondorX pipeline is needed, <code><a href="reference/wisecondorx_convert.html">wisecondorx_convert()</a></code> wraps <code>wisecondorx convert</code> via <code>condathis</code> and produces an <code>.npz</code> through the official implementation. All three wrappers handle conda environment creation automatically on first use.</p>
-<div class="sourceCode" id="cb6"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb8"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="fu"><a href="reference/wisecondorx_convert.html">wisecondorx_convert</a></span><span class="op">(</span></span>
 <span>  bam     <span class="op">=</span> <span class="st">"sample.bam"</span>,</span>
 <span>  npz     <span class="op">=</span> <span class="st">"sample.npz"</span>,</span>
 <span>  binsize <span class="op">=</span> <span class="fl">100000L</span>,</span>
 <span>  normdup <span class="op">=</span> <span class="cn">FALSE</span>          <span class="co"># TRUE → --normdup (NIPT)</span></span>
 <span><span class="op">)</span></span></code></pre></div>
-<div class="sourceCode" id="cb7"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb9"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">fixture_npz</span> <span class="op">&lt;-</span> <span class="st">"sample.npz"</span></span>
 <span><span class="va">np</span> <span class="op">&lt;-</span> <span class="fu">reticulate</span><span class="fu">::</span><span class="fu"><a href="https://rstudio.github.io/reticulate/reference/import.html" class="external-link">import</a></span><span class="op">(</span><span class="st">"numpy"</span>, convert <span class="op">=</span> <span class="cn">FALSE</span><span class="op">)</span></span>
 <span></span>
@@ -152,7 +197,7 @@
 <span>  np      <span class="op">=</span> <span class="va">np</span></span>
 <span><span class="op">)</span></span></code></pre></div>
 <p>The CLI wrappers expose the upstream arguments documented in the WisecondorX README and delegate to the official <code>wisecondorx</code> bioconda package.</p>
-<div class="sourceCode" id="cb8"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb10"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="co"># Requires: condathis installed; wisecondorx bioconda package auto-installed</span></span>
 <span></span>
 <span><span class="va">npz_files</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/list.files.html" class="external-link">list.files</a></span><span class="op">(</span><span class="st">"controls/"</span>, <span class="st">"\\.npz$"</span>, full.names <span class="op">=</span> <span class="cn">TRUE</span><span class="op">)</span></span>
@@ -173,6 +218,11 @@
 <span>  bed           <span class="op">=</span> <span class="cn">TRUE</span>,</span>
 <span>  seed          <span class="op">=</span> <span class="fl">1L</span></span>
 <span><span class="op">)</span></span></code></pre></div>
+<p>The wrappers keep the upstream plotting and manual override controls explicit:</p>
+<ul>
+<li><code>wisecondorx_newref(..., yfrac = ..., plotyfrac = ...)</code></li>
+<li><code>wisecondorx_predict(..., beta = ..., gender = ..., plot = TRUE,     add_plot_title = TRUE, ylim = c(-0.5, 0.5), cairo = TRUE)</code></li>
+</ul>
 <p>For cohort preprocessing and reference building, the package now keeps the native and upstream WisecondorX paths explicit:</p>
 <ul>
 <li>
@@ -190,6 +240,8 @@
 <li>
 <code>inst/scripts/build_reference.R --mode wisecondorx</code> builds an upstream NPZ reference from NPZ files</li>
 <li>
+<code>inst/scripts/predict_cohort.R</code> scores a preprocessed cohort against native RWisecondorX and/or NIPTeR references</li>
+<li>
 <code>inst/scripts/wisecondorx_conformance.R</code> takes those prepared artifacts (<code>bed</code> + <code>npz</code> test cases, plus both references), runs both <code>predict</code> paths, and compares the resulting per-bin <code>_bins.bed</code> outputs</li>
 </ul>
 </div>
@@ -197,10 +249,10 @@
 <h2 id="beta-mode-somatic-cnv">Beta Mode (Somatic CNV)<a class="anchor" aria-label="anchor" href="#beta-mode-somatic-cnv"></a>
 </h2>
 <p><code><a href="reference/rwisecondorx_predict.html">rwisecondorx_predict()</a></code> supports a <code>beta</code> parameter for purity-based aberration calling, appropriate for somatic CNV analysis where tumour purity is known. When <code>beta</code> is supplied, ratio cutoffs replace Z-score thresholds:</p>
-<div class="sourceCode" id="cb9"><pre class="sourceCode R"><code class="sourceCode r"><span id="cb9-1"><a href="#cb9-1" tabindex="-1"></a>gain cutoff<span class="sc">:</span> <span class="fu">log2</span>((ploidy <span class="sc">+</span> beta<span class="sc">/</span><span class="dv">2</span>) <span class="sc">/</span> ploidy)</span>
-<span id="cb9-2"><a href="#cb9-2" tabindex="-1"></a>loss cutoff<span class="sc">:</span> <span class="fu">log2</span>((ploidy <span class="sc">-</span> beta<span class="sc">/</span><span class="dv">2</span>) <span class="sc">/</span> ploidy)</span></code></pre></div>
+<div class="sourceCode" id="cb11"><pre class="sourceCode R"><code class="sourceCode r"><span id="cb11-1"><a href="#cb11-1" tabindex="-1"></a>gain cutoff<span class="sc">:</span> <span class="fu">log2</span>((ploidy <span class="sc">+</span> beta<span class="sc">/</span><span class="dv">2</span>) <span class="sc">/</span> ploidy)</span>
+<span id="cb11-2"><a href="#cb11-2" tabindex="-1"></a>loss cutoff<span class="sc">:</span> <span class="fu">log2</span>((ploidy <span class="sc">-</span> beta<span class="sc">/</span><span class="dv">2</span>) <span class="sc">/</span> ploidy)</span></code></pre></div>
 <p><code>beta</code> is the tumour purity estimate (0–1; 0 = most liberal calling, 1 = most conservative; optimally close to true purity). This mode is <strong>not appropriate for NIPT</strong>, which uses the default Z-score calling.</p>
-<div class="sourceCode" id="cb10"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb12"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="co"># Somatic CNV: 40% purity tumour sample</span></span>
 <span><span class="va">pred_somatic</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/rwisecondorx_predict.html">rwisecondorx_predict</a></span><span class="op">(</span></span>
 <span>  sample    <span class="op">=</span> <span class="va">tumour_sample</span>,</span>
@@ -217,14 +269,14 @@
 <h3 id="binning">Binning<a class="anchor" aria-label="anchor" href="#binning"></a>
 </h3>
 <p><code><a href="reference/nipter_bin_bam.html">nipter_bin_bam()</a></code> produces <code>NIPTeRSample</code> objects compatible with all downstream functions. Pre-filtering flags mirror <code>samtools view -f</code>/<code>-F</code> conventions, so real-world NIPT pipelines that mark duplicates with Picard can pass <code>exclude_flags = 1024L</code> directly.</p>
-<div class="sourceCode" id="cb11"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb13"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">samples</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/lapply.html" class="external-link">lapply</a></span><span class="op">(</span><span class="va">bam_files</span>, <span class="va">nipter_bin_bam</span>, binsize <span class="op">=</span> <span class="fl">50000L</span><span class="op">)</span></span></code></pre></div>
 </div>
 <div class="section level3">
 <h3 id="control-group-construction">Control Group Construction<a class="anchor" aria-label="anchor" href="#control-group-construction"></a>
 </h3>
 <p>A control group is the reference cohort against which test samples are scored. <code><a href="reference/nipter_as_control_group.html">nipter_as_control_group()</a></code> validates and deduplicates the input samples. <code><a href="reference/nipter_diagnose_control_group.html">nipter_diagnose_control_group()</a></code> reports per-chromosome Z-scores and Shapiro-Wilk normality p-values across the group, useful for identifying outlier samples before scoring. When working with a large cohort, <code><a href="reference/nipter_match_control_group.html">nipter_match_control_group()</a></code> selects the closest-matching subset for a given test sample based on chromosomal fraction distance (Rcpp+OpenMP accelerated). <code><a href="reference/nipter_match_matrix.html">nipter_match_matrix()</a></code> computes the full N×N pairwise SSD matrix — useful for QC outlier detection before building the control group.</p>
-<div class="sourceCode" id="cb12"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb14"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">cg</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/nipter_as_control_group.html">nipter_as_control_group</a></span><span class="op">(</span><span class="va">samples</span><span class="op">)</span></span>
 <span><span class="va">diag</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/nipter_diagnose_control_group.html">nipter_diagnose_control_group</a></span><span class="op">(</span><span class="va">cg</span><span class="op">)</span></span>
 <span><span class="va">matched_cg</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/nipter_match_control_group.html">nipter_match_control_group</a></span><span class="op">(</span><span class="va">test_sample</span>, <span class="va">cg</span>, n <span class="op">=</span> <span class="fl">50L</span><span class="op">)</span></span>
@@ -234,7 +286,7 @@
 <h3 id="gc-correction">GC Correction<a class="anchor" aria-label="anchor" href="#gc-correction"></a>
 </h3>
 <p><code><a href="reference/nipter_gc_correct.html">nipter_gc_correct()</a></code> adjusts bin counts for GC-content bias. GC percentages are computed per bin from the reference FASTA via <code>rduckhts_fasta_nuc()</code> rather than from static bundled tables. Two methods are available: LOESS regression (default, matching NIPTeR) and bin-weight normalisation. For cohort workflows, <code><a href="reference/nipter_gc_precompute.html">nipter_gc_precompute()</a></code> pre-computes and saves GC fractions to a TSV.bgz file so the FASTA is only scanned once.</p>
-<div class="sourceCode" id="cb13"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb15"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="co"># Pre-compute GC table (one-time per genome / binsize)</span></span>
 <span><span class="fu"><a href="reference/nipter_gc_precompute.html">nipter_gc_precompute</a></span><span class="op">(</span>fasta <span class="op">=</span> <span class="st">"hg38.fa"</span>, binsize <span class="op">=</span> <span class="fl">50000L</span>,</span>
 <span>                     out <span class="op">=</span> <span class="st">"gc_table.tsv.bgz"</span><span class="op">)</span></span>
@@ -247,7 +299,7 @@
 <h3 id="chi-squared-correction">Chi-Squared Correction<a class="anchor" aria-label="anchor" href="#chi-squared-correction"></a>
 </h3>
 <p><code><a href="reference/nipter_chi_correct.html">nipter_chi_correct()</a></code> identifies overdispersed bins across the control group using a normalised chi-squared test and downweights them. The correction is applied simultaneously to both the test sample and control group, maintaining consistency for downstream scoring.</p>
-<div class="sourceCode" id="cb14"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb16"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">corrected</span>   <span class="op">&lt;-</span> <span class="fu"><a href="reference/nipter_chi_correct.html">nipter_chi_correct</a></span><span class="op">(</span><span class="va">test_sample</span>, <span class="va">cg</span>, chi_cutoff <span class="op">=</span> <span class="fl">3.5</span><span class="op">)</span></span>
 <span><span class="va">test_sample</span> <span class="op">&lt;-</span> <span class="va">corrected</span><span class="op">$</span><span class="va">sample</span></span>
 <span><span class="va">cg</span>          <span class="op">&lt;-</span> <span class="va">corrected</span><span class="op">$</span><span class="va">control_group</span></span></code></pre></div>
@@ -256,27 +308,74 @@
 <h3 id="scoring">Scoring<a class="anchor" aria-label="anchor" href="#scoring"></a>
 </h3>
 <p><code><a href="reference/nipter_z_score.html">nipter_z_score()</a></code> computes the chromosomal fraction Z-score for a focus chromosome. A Z-score above 3 is the conventional threshold for trisomy.</p>
-<div class="sourceCode" id="cb15"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb17"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">z21</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/nipter_z_score.html">nipter_z_score</a></span><span class="op">(</span><span class="va">test_sample</span>, <span class="va">cg</span>, chromo_focus <span class="op">=</span> <span class="fl">21</span><span class="op">)</span></span>
 <span><span class="va">z21</span><span class="op">$</span><span class="va">sample_z_score</span></span>
 <span><span class="va">z21</span><span class="op">$</span><span class="va">control_statistics</span></span></code></pre></div>
 <p><code><a href="reference/nipter_ncv_score.html">nipter_ncv_score()</a></code> computes the normalised chromosome value, searching for the denominator chromosome set that minimises control-group variance before computing the Z-score. More robust than the standard Z-score when the control group is small.</p>
-<div class="sourceCode" id="cb16"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb18"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">ncv21</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/nipter_ncv_score.html">nipter_ncv_score</a></span><span class="op">(</span><span class="va">test_sample</span>, <span class="va">cg</span>, chromo_focus <span class="op">=</span> <span class="fl">21</span><span class="op">)</span></span>
 <span><span class="va">ncv21</span><span class="op">$</span><span class="va">sample_ncv_score</span></span>
 <span><span class="va">ncv21</span><span class="op">$</span><span class="va">denominators</span></span></code></pre></div>
 <p><code><a href="reference/nipter_regression.html">nipter_regression()</a></code> uses forward stepwise linear regression to predict the focus chromosome’s fraction from other chromosomes, then scores the residual.</p>
-<div class="sourceCode" id="cb17"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb19"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">reg21</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/nipter_regression.html">nipter_regression</a></span><span class="op">(</span><span class="va">test_sample</span>, <span class="va">cg</span>, chromo_focus <span class="op">=</span> <span class="fl">21</span><span class="op">)</span></span>
 <span><span class="va">reg21</span><span class="op">$</span><span class="va">models</span><span class="op">[[</span><span class="fl">1</span><span class="op">]</span><span class="op">]</span><span class="op">$</span><span class="va">z_score</span></span>
 <span><span class="va">reg21</span><span class="op">$</span><span class="va">models</span><span class="op">[[</span><span class="fl">1</span><span class="op">]</span><span class="op">]</span><span class="op">$</span><span class="va">predictors</span></span></code></pre></div>
+</div>
+<div class="section level3">
+<h3 id="reference-building-qc-and-plots">Reference Building, QC, And Plots<a class="anchor" aria-label="anchor" href="#reference-building-qc-and-plots"></a>
+</h3>
+<p>For production NIPTeR workflows, the package now exposes a typed reference-building and QC layer rather than only the primitive scoring functions:</p>
+<ul>
+<li>
+<code><a href="reference/nipter_build_reference.html">nipter_build_reference()</a></code> packages the control group, sex models, and reference frame</li>
+<li>
+<code><a href="reference/nipter_build_gaunosome_models.html">nipter_build_gaunosome_models()</a></code> adds sex-stratified X/Y NCV and regression models</li>
+<li>
+<code><a href="reference/nipter_control_group_qc.html">nipter_control_group_qc()</a></code> computes chromosome-, sample-, sex-model-, and optional bin-level QC summaries</li>
+<li>
+<code><a href="reference/write_nipter_reference_plots.html">write_nipter_reference_plots()</a></code> writes the current QC/sex-model plot bundle</li>
+</ul>
+<!-- end list --><div class="sourceCode" id="cb20"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span><span class="va">reference</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/nipter_build_reference.html">nipter_build_reference</a></span><span class="op">(</span></span>
+<span>  <span class="va">cg</span>,</span>
+<span>  sample_sex <span class="op">=</span> <span class="va">sample_sex</span>,</span>
+<span>  y_unique_ratios <span class="op">=</span> <span class="va">y_unique_ratios</span></span>
+<span><span class="op">)</span></span>
+<span><span class="va">reference</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/nipter_build_gaunosome_models.html">nipter_build_gaunosome_models</a></span><span class="op">(</span><span class="va">reference</span><span class="op">)</span></span>
+<span></span>
+<span><span class="va">qc</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/nipter_control_group_qc.html">nipter_control_group_qc</a></span><span class="op">(</span></span>
+<span>  <span class="va">reference</span><span class="op">$</span><span class="va">control_group</span>,</span>
+<span>  reference_model <span class="op">=</span> <span class="va">reference</span>,</span>
+<span>  include_bins <span class="op">=</span> <span class="cn">TRUE</span></span>
+<span><span class="op">)</span></span>
+<span></span>
+<span><span class="va">plot_paths</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/write_nipter_reference_plots.html">write_nipter_reference_plots</a></span><span class="op">(</span></span>
+<span>  <span class="va">qc</span>,</span>
+<span>  <span class="va">reference</span>,</span>
+<span>  outprefix <span class="op">=</span> <span class="st">"nipter_reference_qc"</span></span>
+<span><span class="op">)</span></span></code></pre></div>
+<p>The current NIPTeR plotting helpers are:</p>
+<ul>
+<li>
+<code><a href="reference/nipter_plot_qc_chromosomes.html">nipter_plot_qc_chromosomes()</a></code> for chromosome CV summaries across Z, NCV, and RBZ, including XX/XY sex-model rows</li>
+<li>
+<code><a href="reference/nipter_plot_qc_samples.html">nipter_plot_qc_samples()</a></code> for retained-vs-outlier control diagnostics</li>
+<li>
+<code>nipter_plot_qc_bins(..., metric = "cv_scaled" | "chi_z")</code> for autosomal bin-level QC</li>
+<li>
+<code><a href="reference/nipter_plot_reference_sex_boxplots.html">nipter_plot_reference_sex_boxplots()</a></code> for fraction/Y-unique/sex-cluster-Z distributions</li>
+<li>
+<code>nipter_plot_reference_sex_scatter(..., space = "fraction" |     "ratio")</code> for X/Y and RR spaces</li>
+</ul>
 </div>
 </div>
 <div class="section level2">
 <h2 id="sex-prediction">Sex Prediction<a class="anchor" aria-label="anchor" href="#sex-prediction"></a>
 </h2>
 <p><code><a href="reference/nipter_sex_model.html">nipter_sex_model()</a></code> trains a 2-component Gaussian mixture model on chromosome fraction data from a control group for sex prediction. Three model types are available: Y-fraction alone, bivariate X+Y fractions, and Y-unique region read ratios from specific Y-chromosome genes. <code><a href="reference/nipter_predict_sex.html">nipter_predict_sex()</a></code> classifies a test sample using one or more models with majority-vote consensus (ties → female, the conservative choice for NIPT).</p>
-<div class="sourceCode" id="cb18"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb21"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="co"># Requires: mclust package; whole-genome BAMs; FASTA for GC correction</span></span>
 <span><span class="va">cg</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/nipter_as_control_group.html">nipter_as_control_group</a></span><span class="op">(</span><span class="va">samples</span><span class="op">)</span></span>
 <span><span class="va">cg</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/nipter_gc_correct.html">nipter_gc_correct</a></span><span class="op">(</span><span class="va">cg</span>, fasta <span class="op">=</span> <span class="st">"hg38.fa"</span><span class="op">)</span></span>
@@ -292,7 +391,7 @@
 <h2 id="sra-metadata-helpers">SRA Metadata Helpers<a class="anchor" aria-label="anchor" href="#sra-metadata-helpers"></a>
 </h2>
 <p><code><a href="reference/sra_runinfo.html">sra_runinfo_url()</a></code>, <code><a href="reference/sra_runinfo.html">download_sra_runinfo()</a></code>, and <code><a href="reference/sra_runinfo.html">read_sra_runinfo()</a></code> are small helpers for staging NCBI SRA run metadata.</p>
-<div class="sourceCode" id="cb19"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb22"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="fu"><a href="reference/sra_runinfo.html">sra_runinfo_url</a></span><span class="op">(</span><span class="st">"PRJNA400134"</span><span class="op">)</span></span>
 <span><span class="co">#&gt; [1] "https://trace.ncbi.nlm.nih.gov/Traces/sra-db-be/runinfo?acc=PRJNA400134"</span></span></code></pre></div>
 </div>

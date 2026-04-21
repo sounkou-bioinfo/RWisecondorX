@@ -31,7 +31,10 @@ The package is structured around three workflows:
 The native convert step is backed by the `bam_bin_counts(...)` kernel in
 `Rduckhts`. It reproduces the upstream WisecondorX `larp` / `larp2`
 streaming deduplication behaviour, while keeping all core processing
-inside R and DuckDB.
+inside R and DuckDB. Both native analysis paths also use Rcpp/OpenMP in
+their hot loops: WisecondorX for KNN reference finding and null-ratio
+construction, and NIPTeR for control matching, NCV search, and
+regression model search.
 
 ## Installation
 
@@ -152,6 +155,20 @@ practice:
 - `parallel = TRUE` with `ParDNAcopy`, or `parallel = FALSE` for serial
   [`DNAcopy::segment()`](https://rdrr.io/pkg/DNAcopy/man/segment.html)
 
+`gender` does **not** have the same operational meaning in every
+reference mode. Current native behaviour matches upstream WisecondorX:
+
+- with a non-NIPT reference, `gender` changes the operational gonosomal
+  branch and applies male sex-chromosome leveling when forced to `"M"`
+- with an NIPT-mode reference, `gender` only overrides the
+  reported/predicted gender label; gonosomal normalization still uses
+  the female/NIPT branch internally
+
+This asymmetry is upstream-compatible rather than ideal. A planned
+native extension is to support an explicit, opt-in operational branch
+override even in NIPT mode, to better align WisecondorX-side
+sex-chromosome handling with the native NIPTeR flow.
+
 ``` r
 pred_forced <- rwisecondorx_predict(
   test_sample,
@@ -228,7 +245,9 @@ This mode is for somatic CNV analysis, not routine NIPT trisomy calling.
 
 The native NIPTeR layer covers binning, control-group construction, GC
 correction, chi correction, autosomal scoring, sex prediction,
-sex-chromosome models, and reference QC plotting.
+sex-chromosome models, and reference QC plotting. Like the native
+WisecondorX path, it uses Rcpp-accelerated kernels in the expensive
+search/matching steps rather than pure R loops throughout.
 
 ### Binning
 

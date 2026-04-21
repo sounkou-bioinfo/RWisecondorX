@@ -68,7 +68,7 @@
 <strong>Optional upstream conformance</strong>: <code><a href="reference/bam_convert_npz.html">bam_convert_npz()</a></code> plus <code><a href="reference/wisecondorx_convert.html">wisecondorx_convert()</a></code>, <code><a href="reference/wisecondorx_newref.html">wisecondorx_newref()</a></code>, and <code><a href="reference/wisecondorx_predict.html">wisecondorx_predict()</a></code>
 </li>
 </ul>
-<p>The native convert step is backed by the <code>bam_bin_counts(...)</code> kernel in <code>Rduckhts</code>. It reproduces the upstream WisecondorX <code>larp</code> / <code>larp2</code> streaming deduplication behaviour, while keeping all core processing inside R and DuckDB.</p>
+<p>The native convert step is backed by the <code>bam_bin_counts(...)</code> kernel in <code>Rduckhts</code>. It reproduces the upstream WisecondorX <code>larp</code> / <code>larp2</code> streaming deduplication behaviour, while keeping all core processing inside R and DuckDB. Both native analysis paths also use Rcpp/OpenMP in their hot loops: WisecondorX for KNN reference finding and null-ratio construction, and NIPTeR for control matching, NCV search, and regression model search.</p>
 <div class="section level2">
 <h2 id="installation">Installation<a class="anchor" aria-label="anchor" href="#installation"></a>
 </h2>
@@ -221,7 +221,14 @@
 <code>parallel = TRUE</code> with <code>ParDNAcopy</code>, or <code>parallel = FALSE</code> for serial <code><a href="https://rdrr.io/pkg/DNAcopy/man/segment.html" class="external-link">DNAcopy::segment()</a></code>
 </li>
 </ul>
-<!-- end list --><div class="sourceCode" id="cb5"><pre class="downlit sourceCode r">
+<p><code>gender</code> does <strong>not</strong> have the same operational meaning in every reference mode. Current native behaviour matches upstream WisecondorX:</p>
+<ul>
+<li>with a non-NIPT reference, <code>gender</code> changes the operational gonosomal branch and applies male sex-chromosome leveling when forced to <code>"M"</code>
+</li>
+<li>with an NIPT-mode reference, <code>gender</code> only overrides the reported/predicted gender label; gonosomal normalization still uses the female/NIPT branch internally</li>
+</ul>
+<p>This asymmetry is upstream-compatible rather than ideal. A planned native extension is to support an explicit, opt-in operational branch override even in NIPT mode, to better align WisecondorX-side sex-chromosome handling with the native NIPTeR flow.</p>
+<div class="sourceCode" id="cb5"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">pred_forced</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/rwisecondorx_predict.html">rwisecondorx_predict</a></span><span class="op">(</span></span>
 <span>  <span class="va">test_sample</span>,</span>
 <span>  <span class="va">ref</span>,</span>
@@ -278,7 +285,7 @@ loss cutoff: log2((ploidy - beta/2) / ploidy)</code></pre>
 <div class="section level2">
 <h2 id="nipter-workflow">NIPTeR Workflow<a class="anchor" aria-label="anchor" href="#nipter-workflow"></a>
 </h2>
-<p>The native NIPTeR layer covers binning, control-group construction, GC correction, chi correction, autosomal scoring, sex prediction, sex-chromosome models, and reference QC plotting.</p>
+<p>The native NIPTeR layer covers binning, control-group construction, GC correction, chi correction, autosomal scoring, sex prediction, sex-chromosome models, and reference QC plotting. Like the native WisecondorX path, it uses Rcpp-accelerated kernels in the expensive search/matching steps rather than pure R loops throughout.</p>
 <div class="section level3">
 <h3 id="binning">Binning<a class="anchor" aria-label="anchor" href="#binning"></a>
 </h3>

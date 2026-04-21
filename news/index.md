@@ -2,6 +2,54 @@
 
 ## RWisecondorX 0.0.0.9001 (development version)
 
+### Contract and workflow hardening
+
+- Native RWisecondorX paths now fail more explicitly on invalid
+  analytical states instead of silently degrading. This includes
+  zero/non-finite sample totals during gender prediction,
+  zero/non-finite reference coverage during masking/normalization,
+  NA-gap CBS split mismatches, and inconsistent gonosomal
+  remapping/null-ratio contracts during prediction.
+
+- `WisecondorXReference` / `WisecondorXPrediction` validation is
+  stricter. Reference branch metadata now checks integer/non-negative
+  bin counts, cumulative masked-bin consistency, and mask cardinality.
+  Prediction objects now enforce finite non-negative per-chromosome bin
+  counts aligned with the returned chromosome result lists.
+
+- [`rwisecondorx_ref_qc()`](https://sounkou-bioinfo.github.io/RWisecondorX/reference/rwisecondorx_ref_qc.md)
+  now returns richer readiness metadata in addition to the existing
+  PASS/WARN/FAIL verdict: per-branch summaries, explicit missing
+  mean-distance counts, branch-level prediction readiness flags, and a
+  compact top-level readiness summary.
+
+### QC and cohort reporting
+
+- Preprocess and prediction cohort scripts now emit more
+  machine-readable QC surfaces. Sample-level outputs include metric
+  readiness/missingness flags, GC loess valid/invalid bin summaries,
+  optional GC-curve data TSVs, and new `sample_readiness.tsv`,
+  `qc_flag_summary.tsv`, and `prediction_readiness.tsv` artifacts
+  alongside the existing summary tables.
+
+- `sample_metrics` and NIPTeR QC/report helpers now propagate explicit
+  degraded-state signals instead of burying them in sparse side fields.
+  This includes missing metric counts, readiness flags, control-group
+  outlier counts, sex-model readiness counts, and clearer plotting
+  subtitles for sample QC views.
+
+### Script-path and test determinism
+
+- Shipped scripts `convert_sample.R`, `build_reference.R`, and
+  `precompute_gc.R` now use `this.path` for script-location discovery
+  instead of relying on working-directory assumptions.
+
+- Native RWisecondorX tinytests were tightened to match the stricter
+  contract behavior. The full synthetic reference-build test now uses an
+  explicit manual sex cutoff for deterministic execution, while
+  coverage/gender edge cases now assert explicit failures rather than
+  permissive fallback behavior.
+
 - The package and script-level reference-building CLIs are now aligned
   more strictly. `build_reference.R` now defaults WisecondorX references
   to a 100kb target binsize, keeps NIPTeR on its 50kb binsize path, and

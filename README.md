@@ -11,40 +11,34 @@
 
 `RWisecondorX` is an R toolkit for copy number analysis and trisomy
 prediction in non-invasive prenatal testing (NIPT), built on top of
-`Rduckhts` and DuckDB. It ports both
-[WisecondorX](https://github.com/CenterForMedicalGeneticsGhent/WisecondorX)
-(CNV detection) and [NIPTeR](https://github.com/molgenis/NIPTeR)
-(trisomy prediction via Z-scores, NCV, regression, and chi-squared
-correction), following the [rewrites.bio](https://rewrites.bio)
-principles: exact emulation of upstream outputs, full credit to the
-original authors, and transparency about AI assistance.
+`Rduckhts` and DuckDB. It covers two upstream method families:
 
-The core convert step now runs through the native `bam_bin_counts(...)`
-kernel bundled in `Rduckhts`, with no Python dependency. `bam_convert()`
-returns per-bin read counts in memory; `bam_convert_bed()` writes them
-to a bgzipped, tabix-indexed BED file readable by DuckDB or any
-tabix-aware tool; and `bam_convert_npz()` serialises them to a
-WisecondorX-compatible `.npz` via `reticulate` for Python CLI
-conformance and interop. The convert implementation exactly replicates
-the upstream `larp` / `larp2` streaming deduplication behaviour,
-achieving bin-for-bin agreement with the Python implementation.
+  - [WisecondorX](https://github.com/CenterForMedicalGeneticsGhent/WisecondorX)
+    for CNV detection
+  - [NIPTeR](https://github.com/molgenis/NIPTeR) for
+    chromosomal-fraction based trisomy prediction
 
-The NIPTeR statistical layer provides GC correction (via on-the-fly
-FASTA computation, not bundled tables), chi-squared overdispersion
-correction, chromosomal fraction Z-scores, normalised chromosome values
-(NCV), and forward stepwise regression — all operating on `NIPTeRSample`
-objects produced by `nipter_bin_bam()`.
+The package is structured around three workflows:
 
-For pipelines that need the full upstream toolchain, thin `condathis`
-wrappers cover every stage: `wisecondorx_convert()`,
-`wisecondorx_newref()`, and `wisecondorx_predict()` each delegate to the
-official bioconda package without requiring a manual conda setup.
+  - **Native R WisecondorX**: `bam_convert()`, `bam_convert_bed()`,
+    `rwisecondorx_newref()`, `rwisecondorx_predict()`
+  - **Native R NIPTeR**: `nipter_bin_bam()`, GC correction, chi
+    correction, Z-score, NCV, regression, sex prediction, reference QC,
+    and plotting
+  - **Optional upstream conformance**: `bam_convert_npz()` plus
+    `wisecondorx_convert()`, `wisecondorx_newref()`, and
+    `wisecondorx_predict()`
+
+The native convert step is backed by the `bam_bin_counts(...)` kernel in
+`Rduckhts`. It reproduces the upstream WisecondorX `larp` / `larp2`
+streaming deduplication behaviour, while keeping all core processing
+inside R and DuckDB.
 
 ## Installation
 
 `RWisecondorX` is developed against the current edge of `Rduckhts`, not
-an older CRAN snapshot. Install `Rduckhts` from the r-universe first,
-then install `RWisecondorX`:
+an older CRAN snapshot. Install `Rduckhts` from r-universe first, then
+install `RWisecondorX`:
 
 ``` r
 install.packages(
@@ -60,10 +54,26 @@ pak::pak("sounkou-bioinfo/RWisecondorX")
 ```
 
 `RWisecondorX` imports `Rduckhts`, `DBI`, and `duckdb`. `reticulate` is
-needed only to write `.npz` files; `condathis` is needed only for the
-upstream CLI wrappers. Neither is required for the core convert step.
+needed only to write `.npz` files. `condathis` is needed only for the
+upstream CLI wrappers.
 
-## Convert A BAM To Bin Counts
+## Workflow Overview
+
+| Goal                                         | Primary functions                                             | Main output                           |
+| -------------------------------------------- | ------------------------------------------------------------- | ------------------------------------- |
+| Convert BAM/CRAM to native WisecondorX bins  | `bam_convert()`, `bam_convert_bed()`                          | in-memory sample or 4-column BED.gz   |
+| Convert BAM/CRAM to native NIPTeR bins       | `nipter_bin_bam()`, `nipter_bin_bam_bed()`                    | `NIPTeRSample` or 5/9-column BED.gz   |
+| Build a native WisecondorX reference         | `rwisecondorx_newref()`                                       | `WisecondorXReference`                |
+| Predict native WisecondorX CNVs              | `rwisecondorx_predict()`                                      | `WisecondorXPrediction`               |
+| Build a NIPTeR-style reference and QC bundle | `nipter_build_reference()`, `nipter_build_gaunosome_models()` | typed reference object                |
+| Run upstream WisecondorX for conformance     | `bam_convert_npz()`, `wisecondorx_*()`                        | upstream `.npz` files and CLI outputs |
+
+If you only want the native R workflow, you can ignore `reticulate`,
+`condathis`, and the `wisecondorx_*()` wrappers.
+
+## Convert BAM To Bin Counts
+
+### WisecondorX-style bins
 
 ``` r
 bins <- bam_convert(
@@ -74,20 +84,17 @@ bins <- bam_convert(
 )
 ```
 
-The `rmdup` argument controls duplicate handling. `"streaming"` exactly
-replicates the upstream WisecondorX `larp` / `larp2` state machine and
-is the default. `"none"` skips deduplication entirely, matching
-`wisecondorx convert --normdup` for NIPT data where read depth is low.
-`"flag"` uses the SAM duplicate flag (`0x400`) for BAMs already
-processed by Picard or sambamba.
+The `rmdup` argument controls duplicate handling:
 
-## BED.gz Output And Round-Trip
+  - `"streaming"` reproduces upstream WisecondorX `larp` / `larp2`
+  - `"none"` skips deduplication entirely
+  - `"flag"` respects the SAM duplicate flag (`0x400`)
 
-`bam_convert_bed()` is the language-agnostic output path. It produces a
-bgzipped BED file (`chrom`, `start`, `end`, `count`; 0-based
-coordinates) and a tabix index, using `rduckhts_bgzip` and
-`rduckhts_tabix_index` from `Rduckhts` — no external tools or Python
-required.
+### BED.gz output and round-trip
+
+`bam_convert_bed()` writes a bgzipped, tabix-indexed BED-like TSV with
+columns `chrom`, `start`, `end`, and `count`. This is the main file
+format used by the native R WisecondorX workflow.
 
 ``` r
 bed_file <- "sample.wisecondorx.bed.gz"
@@ -99,24 +106,18 @@ bam_convert_bed(
   rmdup   = "streaming"
 )
 
-# Round-trip: reload into the named-list format for rwisecondorx_newref()
 sample_reloaded <- bed_to_sample(bed_file, binsize = 100000L)
 ```
 
-`bed_to_nipter_sample()` reads a 5-column NIPTeR BED.gz into a
-`NIPTeRSample` object compatible with all NIPTeR statistical functions.
-Column count is auto-detected (5 = CombinedStrands, 9 =
-SeparatedStrands).
+For the NIPTeR side, `bed_to_nipter_sample()` reads a 5-column or
+9-column BED.gz back into a `NIPTeRSample` object.
 
-## Native WisecondorX Pipeline (No Python)
+## Native WisecondorX
 
 `rwisecondorx_newref()` and `rwisecondorx_predict()` are pure R/Rcpp
-implementations of the full WisecondorX algorithm — reference building,
-PCA correction, within-sample normalisation, CBS segmentation, and
-aberration calling — with no Python dependency. Performance-critical KNN
-reference-bin finding is compiled via Rcpp with OpenMP parallelisation.
-CBS segmentation uses DNAcopy directly, or `ParDNAcopy` when `parallel =
-TRUE`.
+implementations of the reference-building and prediction stages. This is
+the main production path when you want WisecondorX-style CNV calling
+without a Python runtime dependency.
 
 ``` r
 control_bams <- c("ctrl_01.dm.bam", "ctrl_02.dm.bam", "ctrl_03.dm.bam")
@@ -138,16 +139,15 @@ pred <- rwisecondorx_predict(test_sample, ref, zscore = 5, seed = 42L, cpus = 4L
 pred$aberrations
 ```
 
-`rwisecondorx_predict(parallel = TRUE)` requires `ParDNAcopy`. If that
-package is not installed, call `rwisecondorx_predict(..., parallel =
-FALSE)` to use serial `DNAcopy::segment()`.
+### Key prediction controls
 
-The native predictor also exposes the two upstream predict controls most
-often needed in practice:
+The native predictor exposes the controls most commonly needed in
+practice:
 
   - `beta` for purity-based ratio calling
-  - `gender = "F"` / `"M"` to force the gonosomal branch instead of
-    using the Y-fraction classifier
+  - `gender = "F"` / `"M"` to override the Y-fraction classifier
+  - `parallel = TRUE` with `ParDNAcopy`, or `parallel = FALSE` for
+    serial `DNAcopy::segment()`
 
 <!-- end list -->
 
@@ -161,21 +161,17 @@ pred_forced <- rwisecondorx_predict(
 )
 ```
 
-### Native WisecondorX QC And Outputs
+### Outputs and QC
 
-On the native R side, prediction output is currently tabular rather than
-graphical:
+`write_wisecondorx_output()` writes:
 
-  - `write_wisecondorx_output()` writes
-      - `<outprefix>_bins.bed`
-      - `<outprefix>_segments.bed`
-      - `<outprefix>_aberrations.bed`
-      - `<outprefix>_statistics.txt`
-  - `rwisecondorx_ref_qc()` runs the upstream-style reference QC
-    heuristics and returns a structured report, with optional JSON
-    output
+  - `<outprefix>_bins.bed`
+  - `<outprefix>_segments.bed`
+  - `<outprefix>_aberrations.bed`
+  - `<outprefix>_statistics.txt`
 
-<!-- end list -->
+`rwisecondorx_ref_qc()` computes the upstream-style reference QC
+heuristics and returns a structured report, with optional JSON output.
 
 ``` r
 qc <- rwisecondorx_ref_qc(ref, output_json = "reference_qc.json")
@@ -184,170 +180,67 @@ write_wisecondorx_output(pred, outprefix = "results/sample_01")
 
 The package does **not yet** provide native ggplot helpers for
 `WisecondorXPrediction` objects. If you need the upstream PNG/PDF
-plotting behaviour, use the CLI wrapper `wisecondorx_predict(..., plot =
-TRUE)` instead.
+plotting behaviour, use `wisecondorx_predict(..., plot = TRUE)` through
+the optional CLI wrapper path.
 
-### Multi-File BED Input For Reference Building
+### Building a reference from BED files
 
-`rwisecondorx_newref()` also accepts a directory of 4-column BED.gz
-files produced by `bam_convert_bed()` via the `bed_dir` parameter. All
-matching files are loaded in a single DuckDB pass — no in-memory sample
-list needed:
+`rwisecondorx_newref()` can also load a directory of 4-column BED.gz
+files produced by `bam_convert_bed()`:
 
 ``` r
 ref <- rwisecondorx_newref(
-  bed_dir = "bed_counts/",     # directory of *.bed.gz files
+  bed_dir = "bed_counts/",
   binsize = 100000L,
   nipt    = TRUE,
   cpus    = 4L
 )
 ```
 
-## Optional NPZ And CLI Workflow
-
-`bam_convert_npz()` and the `wisecondorx_*()` CLI wrappers are the
-conformance and interoperability path. The production native path is
-`bam_convert_bed()`/`bam_convert()` with `rwisecondorx_newref()` and
-`rwisecondorx_predict()`. When the full upstream Python WisecondorX
-pipeline is needed, `wisecondorx_convert()` wraps `wisecondorx convert`
-via `condathis` and produces an `.npz` through the official
-implementation. All three wrappers handle conda environment creation
-automatically on first use.
-
-``` r
-wisecondorx_convert(
-  bam     = "sample.bam",
-  npz     = "sample.npz",
-  binsize = 100000L,
-  normdup = FALSE          # TRUE → --normdup (NIPT)
-)
-```
-
-``` r
-fixture_npz <- "sample.npz"
-np <- reticulate::import("numpy", convert = FALSE)
-
-bam_convert_npz(
-  bam     = "sample.dm.bam",
-  npz     = fixture_npz,
-  binsize = 100000L,
-  rmdup   = "streaming",
-  np      = np
-)
-```
-
-The CLI wrappers expose the upstream arguments documented in the
-WisecondorX README and delegate to the official `wisecondorx` bioconda
-package.
-
-``` r
-# Requires: condathis installed; wisecondorx bioconda package auto-installed
-
-npz_files <- list.files("controls/", "\\.npz$", full.names = TRUE)
-
-wisecondorx_newref(
-  npz_files   = npz_files,
-  output      = "reference.npz",
-  ref_binsize = 100000L,
-  nipt        = TRUE,
-  refsize     = 300L,
-  cpus        = 4L
-)
-
-wisecondorx_predict(
-  npz           = "sample.npz",
-  ref           = "reference.npz",
-  output_prefix = "results/sample",
-  bed           = TRUE,
-  seed          = 1L
-)
-```
-
-The wrappers keep the upstream plotting and manual override controls
-explicit:
-
-  - `wisecondorx_newref(..., yfrac = ..., plotyfrac = ...)`
-  - `wisecondorx_predict(..., beta = ..., gender = ..., plot = TRUE,
-    add_plot_title = TRUE, ylim = c(-0.5, 0.5), cairo = TRUE)`
-
-For cohort preprocessing and reference building, the package now keeps
-the native and upstream WisecondorX paths explicit:
-
-  - `inst/scripts/preprocess_cohort.R` stages a cohort manifest and
-    writes:
-      - SeqFF fetal-fraction estimates
-      - native `rwisecondorx` BED.gz files in `rwcx_beds/`
-      - optional upstream `wisecondorx` NPZ files in `wisecondorx_npz/`,
-        produced by the Python CLI wrapper
-      - NIPTeR BED.gz files
-  - `inst/scripts/build_reference.R --mode rwisecondorx` builds a native
-    RDS reference from BED.gz files
-  - `inst/scripts/build_reference.R --mode wisecondorx` builds an
-    upstream NPZ reference from NPZ files
-  - `inst/scripts/predict_cohort.R` scores a preprocessed cohort against
-    native RWisecondorX and/or NIPTeR references
-  - `inst/scripts/wisecondorx_conformance.R` takes those prepared
-    artifacts (`bed` + `npz` test cases, plus both references), runs
-    both `predict` paths, and compares the resulting per-bin `_bins.bed`
-    outputs
-
-## Beta Mode (Somatic CNV)
+### Somatic beta mode
 
 `rwisecondorx_predict()` supports a `beta` parameter for purity-based
-aberration calling, appropriate for somatic CNV analysis where tumour
-purity is known. When `beta` is supplied, ratio cutoffs replace Z-score
-thresholds:
-
-    gain cutoff: log2((ploidy + beta/2) / ploidy)
-    loss cutoff: log2((ploidy - beta/2) / ploidy)
-
-`beta` is the tumour purity estimate (0–1; 0 = most liberal calling, 1 =
-most conservative; optimally close to true purity). This mode is **not
-appropriate for NIPT**, which uses the default Z-score calling.
+aberration calling:
 
 ``` r
-# Somatic CNV: 40% purity tumour sample
 pred_somatic <- rwisecondorx_predict(
   sample    = tumour_sample,
   reference = ref,
-  beta      = 0.4,   # ~tumour purity
+  beta      = 0.4,
   seed      = 1L
 )
 ```
 
-## NIPTeR-Style Trisomy Prediction
+When `beta` is supplied, ratio cutoffs replace Z-score thresholds:
 
-`RWisecondorX` ports the statistical analysis layer from
-[NIPTeR](https://github.com/molgenis/NIPTeR) (de Weerd et al.),
-replacing `Rsamtools` with `Rduckhts` and bundled `sysdata.rda` tables
-with on-the-fly computation via `rduckhts_fasta_nuc()`. The analysis
-pipeline follows NIPTeR’s workflow: bin samples, build a control group,
-correct for GC bias and overdispersion, then compute Z-scores or NCV
-values for trisomy prediction.
+``` text
+gain cutoff: log2((ploidy + beta/2) / ploidy)
+loss cutoff: log2((ploidy - beta/2) / ploidy)
+```
+
+This mode is for somatic CNV analysis, not routine NIPT trisomy calling.
+
+## NIPTeR Workflow
+
+The native NIPTeR layer covers binning, control-group construction, GC
+correction, chi correction, autosomal scoring, sex prediction,
+sex-chromosome models, and reference QC plotting.
 
 ### Binning
 
 `nipter_bin_bam()` produces `NIPTeRSample` objects compatible with all
-downstream functions. Pre-filtering flags mirror `samtools view -f`/`-F`
-conventions, so real-world NIPT pipelines that mark duplicates with
-Picard can pass `exclude_flags = 1024L` directly.
+downstream NIPTeR-style functions.
 
 ``` r
 samples <- lapply(bam_files, nipter_bin_bam, binsize = 50000L)
 ```
 
-### Control Group Construction
+### Control group construction
 
-A control group is the reference cohort against which test samples are
-scored. `nipter_as_control_group()` validates and deduplicates the input
-samples. `nipter_diagnose_control_group()` reports per-chromosome
-Z-scores and Shapiro-Wilk normality p-values across the group, useful
-for identifying outlier samples before scoring. When working with a
-large cohort, `nipter_match_control_group()` selects the
-closest-matching subset for a given test sample based on chromosomal
-fraction distance (Rcpp+OpenMP accelerated). `nipter_match_matrix()`
-computes the full N×N pairwise SSD matrix — useful for QC outlier
-detection before building the control group.
+`nipter_as_control_group()` validates and deduplicates the reference
+cohort. `nipter_diagnose_control_group()` reports chromosome-level
+diagnostics. `nipter_match_control_group()` and `nipter_match_matrix()`
+support sample matching and outlier QC.
 
 ``` r
 cg <- nipter_as_control_group(samples)
@@ -356,32 +249,28 @@ matched_cg <- nipter_match_control_group(test_sample, cg, n = 50L)
 mm <- nipter_match_matrix(cg, cpus = 4L)
 ```
 
-### GC Correction
+### GC correction
 
-`nipter_gc_correct()` adjusts bin counts for GC-content bias. GC
-percentages are computed per bin from the reference FASTA via
-`rduckhts_fasta_nuc()` rather than from static bundled tables. Two
-methods are available: LOESS regression (default, matching NIPTeR) and
-bin-weight normalisation. For cohort workflows, `nipter_gc_precompute()`
-pre-computes and saves GC fractions to a TSV.bgz file so the FASTA is
-only scanned once.
+`nipter_gc_correct()` adjusts bin counts for GC-content bias. For
+repeated workflows, `nipter_gc_precompute()` stores the GC table once as
+a TSV.bgz file.
 
 ``` r
-# Pre-compute GC table (one-time per genome / binsize)
-nipter_gc_precompute(fasta = "hg38.fa", binsize = 50000L,
-                     out = "gc_table.tsv.bgz")
+nipter_gc_precompute(
+  fasta = "hg38.fa",
+  binsize = 50000L,
+  out = "gc_table.tsv.bgz"
+)
 
-# Apply GC correction using pre-computed table (fast)
-cg          <- nipter_gc_correct(cg, gc_table = "gc_table.tsv.bgz")
+cg <- nipter_gc_correct(cg, gc_table = "gc_table.tsv.bgz")
 test_sample <- nipter_gc_correct(test_sample, gc_table = "gc_table.tsv.bgz")
 ```
 
-### Chi-Squared Correction
+### Chi-squared correction
 
 `nipter_chi_correct()` identifies overdispersed bins across the control
-group using a normalised chi-squared test and downweights them. The
-correction is applied simultaneously to both the test sample and control
-group, maintaining consistency for downstream scoring.
+group and applies the correction to both the sample and the control
+cohort.
 
 ``` r
 corrected   <- nipter_chi_correct(test_sample, cg, chi_cutoff = 3.5)
@@ -391,19 +280,14 @@ cg          <- corrected$control_group
 
 ### Scoring
 
-`nipter_z_score()` computes the chromosomal fraction Z-score for a focus
-chromosome. A Z-score above 3 is the conventional threshold for trisomy.
+`nipter_z_score()` computes chromosomal fraction Z-scores:
 
 ``` r
 z21 <- nipter_z_score(test_sample, cg, chromo_focus = 21)
 z21$sample_z_score
-z21$control_statistics
 ```
 
-`nipter_ncv_score()` computes the normalised chromosome value, searching
-for the denominator chromosome set that minimises control-group variance
-before computing the Z-score. More robust than the standard Z-score when
-the control group is small.
+`nipter_ncv_score()` computes normalized chromosome values:
 
 ``` r
 ncv21 <- nipter_ncv_score(test_sample, cg, chromo_focus = 21)
@@ -411,9 +295,7 @@ ncv21$sample_ncv_score
 ncv21$denominators
 ```
 
-`nipter_regression()` uses forward stepwise linear regression to predict
-the focus chromosome’s fraction from other chromosomes, then scores the
-residual.
+`nipter_regression()` uses forward stepwise regression:
 
 ``` r
 reg21 <- nipter_regression(test_sample, cg, chromo_focus = 21)
@@ -421,11 +303,10 @@ reg21$models[[1]]$z_score
 reg21$models[[1]]$predictors
 ```
 
-### Reference Building, QC, And Plots
+### Reference building, QC, and plots
 
-For production NIPTeR workflows, the package now exposes a typed
-reference-building and QC layer rather than only the primitive scoring
-functions:
+For production use, the package exposes a typed reference-building and
+QC layer:
 
   - `nipter_build_reference()` packages the control group, sex models,
     and reference frame
@@ -433,8 +314,7 @@ functions:
     regression models
   - `nipter_control_group_qc()` computes chromosome-, sample-,
     sex-model-, and optional bin-level QC summaries
-  - `write_nipter_reference_plots()` writes the current QC/sex-model
-    plot bundle
+  - `write_nipter_reference_plots()` writes the current plot bundle
 
 <!-- end list -->
 
@@ -459,31 +339,22 @@ plot_paths <- write_nipter_reference_plots(
 )
 ```
 
-The current NIPTeR plotting helpers are:
+The current plotting helpers are:
 
-  - `nipter_plot_qc_chromosomes()` for chromosome CV summaries across Z,
-    NCV, and RBZ, including XX/XY sex-model rows
-  - `nipter_plot_qc_samples()` for retained-vs-outlier control
-    diagnostics
-  - `nipter_plot_qc_bins(..., metric = "cv_scaled" | "chi_z")` for
-    autosomal bin-level QC
-  - `nipter_plot_reference_sex_boxplots()` for
-    fraction/Y-unique/sex-cluster-Z distributions
+  - `nipter_plot_qc_chromosomes()`
+  - `nipter_plot_qc_samples()`
+  - `nipter_plot_qc_bins(..., metric = "cv_scaled" | "chi_z")`
+  - `nipter_plot_reference_sex_boxplots()`
   - `nipter_plot_reference_sex_scatter(..., space = "fraction" |
-    "ratio")` for X/Y and RR spaces
+    "ratio")`
 
-## Sex Prediction
+### Sex prediction
 
-`nipter_sex_model()` trains a 2-component Gaussian mixture model on
-chromosome fraction data from a control group for sex prediction. Three
-model types are available: Y-fraction alone, bivariate X+Y fractions,
-and Y-unique region read ratios from specific Y-chromosome genes.
-`nipter_predict_sex()` classifies a test sample using one or more models
-with majority-vote consensus (ties → female, the conservative choice for
-NIPT).
+`nipter_sex_model()` trains Gaussian-mixture models for sex prediction
+from Y-fraction, X/Y fraction pairs, or Y-unique ratios.
+`nipter_predict_sex()` combines one or more models by majority vote.
 
 ``` r
-# Requires: mclust package; whole-genome BAMs; FASTA for GC correction
 cg <- nipter_as_control_group(samples)
 cg <- nipter_gc_correct(cg, fasta = "hg38.fa")
 corrected <- nipter_chi_correct(samples[[1]], cg)
@@ -495,6 +366,72 @@ model_xy <- nipter_sex_model(cg, method = "xy_fraction")
 nipter_predict_sex(test_sample, models = list(model_y, model_xy))
 ```
 
+## Optional Upstream WisecondorX CLI
+
+The `wisecondorx_*()` wrappers are for upstream interoperability and
+conformance, not for the main native R workflow.
+
+Use them when you specifically need:
+
+  - upstream `.npz` files
+  - upstream Python plotting output
+  - direct comparison against the official `wisecondorx` implementation
+
+### Writing `.npz` files
+
+``` r
+fixture_npz <- "sample.npz"
+np <- reticulate::import("numpy", convert = FALSE)
+
+bam_convert_npz(
+  bam     = "sample.dm.bam",
+  npz     = fixture_npz,
+  binsize = 100000L,
+  rmdup   = "streaming",
+  np      = np
+)
+```
+
+### Wrapping the upstream CLI
+
+The wrappers expose the main upstream knobs explicitly:
+
+  - `wisecondorx_newref(..., yfrac = ..., plotyfrac = ...)`
+  - `wisecondorx_predict(..., beta = ..., gender = ..., plot = TRUE,
+    add_plot_title = TRUE, ylim = c(-0.5, 0.5), cairo = TRUE)`
+
+<!-- end list -->
+
+``` r
+# Requires: condathis installed; wisecondorx bioconda package auto-installed
+
+npz_files <- list.files("controls/", "\\.npz$", full.names = TRUE)
+
+wisecondorx_newref(
+  npz_files   = npz_files,
+  output      = "reference.npz",
+  ref_binsize = 100000L,
+  nipt        = TRUE,
+  refsize     = 300L,
+  cpus        = 4L
+)
+
+wisecondorx_predict(
+  npz           = "sample.npz",
+  ref           = "reference.npz",
+  output_prefix = "results/sample",
+  bed           = TRUE,
+  seed          = 1L
+)
+```
+
+For cohort workflows, the package also provides:
+
+  - `inst/scripts/preprocess_cohort.R`
+  - `inst/scripts/build_reference.R`
+  - `inst/scripts/predict_cohort.R`
+  - `inst/scripts/wisecondorx_conformance.R`
+
 ## SRA Metadata Helpers
 
 `sra_runinfo_url()`, `download_sra_runinfo()`, and `read_sra_runinfo()`
@@ -505,26 +442,21 @@ sra_runinfo_url("PRJNA400134")
 #> [1] "https://trace.ncbi.nlm.nih.gov/Traces/sra-db-be/runinfo?acc=PRJNA400134"
 ```
 
-## Validation And Conformance
+## Validation
 
 Per [rewrites.bio](https://rewrites.bio) principle 4.3, see
 [`VALIDATION.md`](VALIDATION.md) for a full account of what has been
 validated, on what data, against which upstream versions, and what
 remains unvalidated.
 
-**Summary of current status:**
+Current high-level status:
 
-  - `bam_convert()`: bin-for-bin identical to Python WisecondorX on
-    `HG00106.chrom11` (0 mismatches, 25,115 bins).
-  - NIPTeR statistical layer (Z-score, NCV, chi, regression): formulas
-    verified against inline reference implementations in
-    `test_nipter_conformance.R`.
-  - Native and upstream WisecondorX conformance is run on prepared
-    real-cohort artifacts via `inst/scripts/wisecondorx_conformance.R`,
-    comparing the resulting per-bin `_bins.bed` outputs from both
-    `predict` implementations.
-  - Beta mode (purity-based calling): implemented, not yet tested with
-    clinical samples.
+  - `bam_convert()` is bin-for-bin identical to Python WisecondorX on
+    the current convert fixture
+  - the NIPTeR statistical layer is covered by dedicated native tests
+  - native and upstream WisecondorX conformance is exercised on prepared
+    real-cohort artifacts via `inst/scripts/wisecondorx_conformance.R`
+  - beta mode is implemented but still needs more clinical validation
 
 ## Development
 

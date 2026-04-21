@@ -20,9 +20,10 @@ rwisecondorx_ref_qc(reference, min_ref_bins = 150L, output_json = NULL)
 
 - min_ref_bins:
 
-  Integer; minimum number of usable reference bins per target bin before
-  the report flags a warning. Default `150L`, matching the upstream
-  Python QC heuristic.
+  Integer; minimum number of usable normalizing reference bins retained
+  for a target bin before the report flags a warning. This is not the
+  number of cohort samples. Default `150L`, matching the upstream Python
+  QC heuristic.
 
 - output_json:
 
@@ -50,7 +51,8 @@ A named list with class `"WisecondorXReferenceQC"` containing:
 
   Named list of per-branch metrics (`A`, `F`, `M`) including verdict,
   message, mean/std of per-bin mean distances, outlier counts, and
-  low-reference counts. Male reports also include chrY metrics.
+  counts of target bins that fall below the normalizing-reference-bin
+  threshold. Male reports also include chrY metrics.
 
 ## Details
 

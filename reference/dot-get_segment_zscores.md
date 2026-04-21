@@ -7,7 +7,13 @@ Mirrors `overall_tools.get_z_score()`.
 ## Usage
 
 ``` r
-.get_segment_zscores(cbs_result, results_nr, results_r, results_w)
+.get_segment_zscores(
+  cbs_result,
+  results_nr,
+  results_r,
+  results_w,
+  zscore_cap = 1000
+)
 ```
 
 ## Arguments
@@ -27,6 +33,10 @@ Mirrors `overall_tools.get_z_score()`.
 - results_w:
 
   List of per-chromosome weight vectors.
+
+- zscore_cap:
+
+  Numeric; absolute cap applied to finite segment z-scores.
 
 ## Value
 

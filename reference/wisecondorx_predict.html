@@ -172,6 +172,11 @@ documented in the WisecondorX README: <code>--minrefbins</code>, <code>--maskrep
 <code>--zscore</code>, <code>--alpha</code>, <code>--beta</code>, <code>--blacklist</code>, <code>--gender</code>, <code>--bed</code>,
 <code>--plot</code>, <code>--add-plot-title</code>, <code>--regions</code>, <code>--ylim</code>, <code>--cairo</code>, and
 <code>--seed</code>.</p>
+<p>Conda execution is run inside an isolated HOME/XDG sandbox so stale
+libmamba lock files in the user's global cache do not leak into package
+calls. Unlike <code><a href="rwisecondorx_predict.html">rwisecondorx_predict()</a></code>, this wrapper does not expose the
+native <code>parallel</code> argument used for <code>ParDNAcopy</code>; segmentation behavior is
+delegated entirely to the upstream Python WisecondorX CLI.</p>
     </div>
     <div class="section level2">
     <h2 id="see-also">See also<a class="anchor" aria-label="anchor" href="#see-also"></a></h2>

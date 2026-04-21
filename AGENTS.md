@@ -55,7 +55,8 @@ and `rduckhts_tabix_index()` — no external tools.
 — thin `condathis` wrappers delegating to the official bioconda
 package. - `R/wisecondorx_npz.R`:
 [`bam_convert_npz()`](https://sounkou-bioinfo.github.io/RWisecondorX/reference/bam_convert_npz.md)
-— WisecondorX-compatible NPZ output via `reticulate`.
+— WisecondorX-compatible NPZ output via `reticulate`, kept for Python
+CLI conformance/interoperability rather than the native R pipeline.
 
 **NIPTeR binning layer — `R/nipter_bin.R`** -
 [`nipter_bin_bam()`](https://sounkou-bioinfo.github.io/RWisecondorX/reference/nipter_bin_bam.md):
@@ -202,6 +203,8 @@ Python runtime dependency.
   Also exports
   [`scale_sample()`](https://sounkou-bioinfo.github.io/RWisecondorX/reference/scale_sample.md)
   for rescaling bin sizes.
+- `R/mclust_utils.R` — Shared internal mclust namespace helper used by
+  both the NIPTeR and native WisecondorX sex-model code paths.
 - `R/rwisecondorx_newref.R` —
   [`rwisecondorx_newref()`](https://sounkou-bioinfo.github.io/RWisecondorX/reference/rwisecondorx_newref.md):
   reference building pipeline. Gender model training → global bin mask →
@@ -228,11 +231,11 @@ Python runtime dependency.
   [`.exec_cbs()`](https://sounkou-bioinfo.github.io/RWisecondorX/reference/dot-exec_cbs.md):
   CBS wrapper; `parallel = TRUE` (now the default) uses
   `ParDNAcopy::parSegment(num.cores = cpus)` with an explicit thread
-  count; falls back to
+  count and hard-stops if `ParDNAcopy` is absent; call with
+  `parallel = FALSE` to use
   [`DNAcopy::segment()`](https://rdrr.io/pkg/DNAcopy/man/segment.html)
-  with a message if ParDNAcopy is absent. Matches upstream conventions
-  (0→NA, 0 weights→1e-99, split segments at large NA gaps, recalculate
-  weighted means).
+  explicitly. Matches upstream conventions (0→NA, 0 weights→1e-99, split
+  segments at large NA gaps, recalculate weighted means).
   [`.get_segment_zscores()`](https://sounkou-bioinfo.github.io/RWisecondorX/reference/dot-get_segment_zscores.md):
   segment-level Z-scores from null ratio distributions.
 - `R/rwisecondorx_output.R` — BED and statistics output writers for
@@ -404,6 +407,10 @@ validation and extension:
 - `inst/extdata/` — synthetic BAM/CRAM fixtures (including
   `nipter_conformance_fixture.bam`) and bundled reference data
   (`grch37_Y_UniqueRegions.txt`).
+- `inst/extdata/write_compat_npz.py` — packaged Python helper used by
+  [`bam_convert_npz()`](https://sounkou-bioinfo.github.io/RWisecondorX/reference/bam_convert_npz.md)
+  to write numpy 1.x/2.x compatible NPZ payloads. Keep compatibility
+  helpers here; do not introduce an `inst/python/` directory.
 - `inst/scripts/make_cohort.R` — CLI wrapper for cohort generation.
 - `inst/scripts/build_reference.R` — optparse CLI for building
   WisecondorX references or NIPTeR control groups from BAM/CRAM or
@@ -428,7 +435,22 @@ validation and extension:
 - The NIPTeR upstream algorithm reference is `.sync/NIPTeR/`.
 - The WisecondorX conformance script is
   `../../duckhts/scripts/wisecondorx_convert_conformance.py`.
-- There is NO `inst/python/` directory.
+- There is NO `inst/python/` directory; packaged Python compatibility
+  helpers belong under `inst/extdata/`.
+
+### Known upstream WisecondorX deviations intentionally replicated
+
+- **CPA +1 overcount**: upstream Python computes segment length as
+  `end - start + 1` for half-open CBS intervals. `rwisecondorx_cbs.R`
+  replicates this in
+  [`.get_cpa()`](https://sounkou-bioinfo.github.io/RWisecondorX/reference/dot-get_cpa.md)
+  for conformance.
+- **Whole-chromosome last-bin drop**: upstream Python computes
+  whole-chromosome Z-scores using `end = bins_per_chr - 1`, which drops
+  the last bin under half-open slicing. `rwisecondorx_cbs.R` replicates
+  this in
+  [`.compute_statistics()`](https://sounkou-bioinfo.github.io/RWisecondorX/reference/dot-compute_statistics.md)
+  for conformance.
 
 ------------------------------------------------------------------------
 
@@ -673,6 +695,26 @@ Always read the existing implementation before changing it:
 - Use make targets: `make rd`, `make test`, `make readme`,
   `make fixtures`.
 - Keep build steps deterministic and non-interactive.
+
+## Development Dependency Source
+
+`RWisecondorX` development tracks the edge of `Rduckhts`, not the CRAN
+release. If an agent needs to install or update `Rduckhts` for local
+development or validation, use the r-universe repository first:
+
+``` r
+install.packages(
+  "Rduckhts",
+  repos = c(
+    "https://rgenomicsetl.r-universe.dev",
+    "https://cloud.r-project.org"
+  )
+)
+```
+
+Do not assume the CRAN build is current enough for this repository.
+Prefer an already installed edge build when available, and do not “fix”
+behaviour by downgrading expectations to match an older CRAN release.
 
 ## Conformance Testing Rules
 

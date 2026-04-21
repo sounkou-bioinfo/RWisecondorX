@@ -15,7 +15,8 @@ ratios. Exact port of upstream `CBS.R` logic.
   binsize,
   seed,
   parallel = TRUE,
-  cpus = 1L
+  cpus = 1L,
+  split_min_gap_bp = 2000000L
 )
 ```
 

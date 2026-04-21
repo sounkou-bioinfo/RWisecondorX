@@ -102,6 +102,9 @@ WisecondorX releases.</p></dd>
     <h2 id="details">Details<a class="anchor" aria-label="anchor" href="#details"></a></h2>
     <p>This wrapper exposes the upstream <code>wisecondorx convert</code> CLI flags:
 <code>--reference</code>, <code>--binsize</code>, and <code>--normdup</code>.</p>
+<p>Conda execution is run inside an isolated HOME/XDG sandbox so stale
+libmamba lock files in the user's global cache do not leak into package
+calls.</p>
 <p>For a fully native R implementation (no Python dependency) that uses
 Rduckhts instead of pysam, see <code><a href="bam_convert.html">bam_convert()</a></code> and <code><a href="bam_convert_npz.html">bam_convert_npz()</a></code>.</p>
     </div>

@@ -44,7 +44,8 @@ nipter_plot_qc_chromosomes(
 
 - cv_step:
 
-  Y-axis increment for CV facets. Default `0.05`.
+  Base CV increment used for zero-based y-axis scaling. Labeled major
+  breaks adapt when the facet range becomes large. Default `0.05`.
 
 ## Value
 

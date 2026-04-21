@@ -6,5 +6,14 @@ iterations)
 ## Usage
 
 ``` r
-.normalize_repeat(test_data, ref, optimal_cutoff, ct, cp, ap)
+.normalize_repeat(
+  test_data,
+  ref,
+  optimal_cutoff,
+  ct,
+  cp,
+  ap,
+  iterations = 3L,
+  mask_quantile = 0.99
+)
 ```

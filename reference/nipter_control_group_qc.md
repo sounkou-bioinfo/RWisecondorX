@@ -29,7 +29,10 @@ nipter_control_group_qc(
   collapse_strands = FALSE,
   max_aberrant_chromosomes = 2L,
   outlier_rule = c("any_aberrant_score", "bidirectional_or_multichromosome"),
-  include_bins = FALSE
+  include_bins = FALSE,
+  rbz_train_fraction = 1,
+  rbz_seed = 1995L,
+  rbz_exclude_chromosomes = c(13L, 18L, 21L)
 )
 ```
 
@@ -86,6 +89,21 @@ nipter_control_group_qc(
 
   Logical; when `TRUE`, compute the autosomal bin-level scaled-count CV
   and chi profile. Default `FALSE`.
+
+- rbz_train_fraction:
+
+  Fraction of controls used to fit autosomal RBZ QC models. Values below
+  `1` use a train/stat split; values greater than or equal to `1` fit
+  and score on all retained controls. Default `1`.
+
+- rbz_seed:
+
+  Integer seed used when `rbz_train_fraction < 1`. Default `1995L`.
+
+- rbz_exclude_chromosomes:
+
+  Integer vector excluded from autosomal RBZ predictor search. Default
+  `c(13L, 18L, 21L)`.
 
 ## Value
 

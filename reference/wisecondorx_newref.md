@@ -90,6 +90,10 @@ This wrapper exposes the current upstream `wisecondorx newref` CLI flags
 documented in the WisecondorX README: `--nipt`, `--binsize`,
 `--refsize`, `--yfrac`, `--plotyfrac`, and `--cpus`.
 
+Conda execution is run inside an isolated HOME/XDG sandbox so stale
+libmamba lock files in the user's global cache do not leak into package
+calls.
+
 ## See also
 
 [`bam_convert_npz()`](https://sounkou-bioinfo.github.io/RWisecondorX/reference/bam_convert_npz.md),

@@ -9,7 +9,14 @@ minimum of the fitted density is used as the male/female cutoff.
 ## Usage
 
 ``` r
-.train_gender_model(samples, yfrac = NULL)
+.train_gender_model(
+  samples,
+  yfrac = NULL,
+  gender_model_names = "V",
+  density_grid_min = 0,
+  density_grid_max = 0.02,
+  density_grid_length = 5000L
+)
 ```
 
 ## Arguments

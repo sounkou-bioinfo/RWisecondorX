@@ -44,7 +44,13 @@ Mirrors <code>overall_tools.get_z_score()</code>.</p>
 
     <div class="section level2">
     <h2 id="ref-usage">Usage<a class="anchor" aria-label="anchor" href="#ref-usage"></a></h2>
-    <div class="sourceCode"><pre class="sourceCode r"><code><span><span class="fu">.get_segment_zscores</span><span class="op">(</span><span class="va">cbs_result</span>, <span class="va">results_nr</span>, <span class="va">results_r</span>, <span class="va">results_w</span><span class="op">)</span></span></code></pre></div>
+    <div class="sourceCode"><pre class="sourceCode r"><code><span><span class="fu">.get_segment_zscores</span><span class="op">(</span></span>
+<span>  <span class="va">cbs_result</span>,</span>
+<span>  <span class="va">results_nr</span>,</span>
+<span>  <span class="va">results_r</span>,</span>
+<span>  <span class="va">results_w</span>,</span>
+<span>  zscore_cap <span class="op">=</span> <span class="fl">1000</span></span>
+<span><span class="op">)</span></span></code></pre></div>
     </div>
 
     <div class="section level2">
@@ -65,6 +71,10 @@ Mirrors <code>overall_tools.get_z_score()</code>.</p>
 
 <dt id="arg-results-w">results_w<a class="anchor" aria-label="anchor" href="#arg-results-w"></a></dt>
 <dd><p>List of per-chromosome weight vectors.</p></dd>
+
+
+<dt id="arg-zscore-cap">zscore_cap<a class="anchor" aria-label="anchor" href="#arg-zscore-cap"></a></dt>
+<dd><p>Numeric; absolute cap applied to finite segment z-scores.</p></dd>
 
 </dl></div>
     <div class="section level2">

@@ -56,6 +56,11 @@ and circular binary segmentation (CBS).</p>
 <span>  maskrepeats <span class="op">=</span> <span class="fl">5L</span>,</span>
 <span>  alpha <span class="op">=</span> <span class="fl">1e-04</span>,</span>
 <span>  zscore <span class="op">=</span> <span class="fl">5</span>,</span>
+<span>  optimal_cutoff_sd_multiplier <span class="op">=</span> <span class="fl">3</span>,</span>
+<span>  within_sample_mask_iterations <span class="op">=</span> <span class="fl">3L</span>,</span>
+<span>  within_sample_mask_quantile <span class="op">=</span> <span class="fl">0.99</span>,</span>
+<span>  cbs_split_min_gap_bp <span class="op">=</span> <span class="fl">2000000L</span>,</span>
+<span>  segment_zscore_cap <span class="op">=</span> <span class="fl">1000</span>,</span>
 <span>  beta <span class="op">=</span> <span class="cn">NULL</span>,</span>
 <span>  blacklist <span class="op">=</span> <span class="cn">NULL</span>,</span>
 <span>  gender <span class="op">=</span> <span class="cn">NULL</span>,</span>
@@ -107,6 +112,33 @@ Default <code>5L</code>.</p></dd>
 
 <dt id="arg-zscore">zscore<a class="anchor" aria-label="anchor" href="#arg-zscore"></a></dt>
 <dd><p>Numeric; Z-score cutoff for aberration calling. Default <code>5</code>.</p></dd>
+
+
+<dt id="arg-optimal-cutoff-sd-multiplier">optimal_cutoff_sd_multiplier<a class="anchor" aria-label="anchor" href="#arg-optimal-cutoff-sd-multiplier"></a></dt>
+<dd><p>Numeric; number of population standard
+deviations added to the mean distance when iteratively deriving the
+optimal within-reference cutoff. Default <code>3</code>.</p></dd>
+
+
+<dt id="arg-within-sample-mask-iterations">within_sample_mask_iterations<a class="anchor" aria-label="anchor" href="#arg-within-sample-mask-iterations"></a></dt>
+<dd><p>Integer; number of iterative
+within-sample masking passes. Default <code>3L</code>.</p></dd>
+
+
+<dt id="arg-within-sample-mask-quantile">within_sample_mask_quantile<a class="anchor" aria-label="anchor" href="#arg-within-sample-mask-quantile"></a></dt>
+<dd><p>Numeric scalar in <code>(0, 1)</code>; bins with
+<code>|z| &gt;= qnorm(within_sample_mask_quantile)</code> are excluded from the
+next within-sample normalization pass. Default <code>0.99</code>.</p></dd>
+
+
+<dt id="arg-cbs-split-min-gap-bp">cbs_split_min_gap_bp<a class="anchor" aria-label="anchor" href="#arg-cbs-split-min-gap-bp"></a></dt>
+<dd><p>Integer; NA stretches spanning more than this
+many base pairs trigger CBS segment splitting. Default <code>2000000L</code>.</p></dd>
+
+
+<dt id="arg-segment-zscore-cap">segment_zscore_cap<a class="anchor" aria-label="anchor" href="#arg-segment-zscore-cap"></a></dt>
+<dd><p>Numeric; absolute cap applied to segment z-scores
+after they are derived from the null-ratio distributions. Default <code>1000</code>.</p></dd>
 
 
 <dt id="arg-beta">beta<a class="anchor" aria-label="anchor" href="#arg-beta"></a></dt>
@@ -162,6 +194,10 @@ any other OpenMP-accelerated steps. Default <code>4L</code>.</p></dd>
 <dt>gender</dt>
 <dd><p>Predicted (or forced) gender.</p></dd>
 
+<dt>algorithm_params</dt>
+<dd><p>Named list of native prediction parameters used
+for this result.</p></dd>
+
 <dt>n_reads</dt>
 <dd><p>Total read count.</p></dd>
 
@@ -174,7 +210,10 @@ any other OpenMP-accelerated steps. Default <code>4L</code>.</p></dd>
     <h2 id="details">Details<a class="anchor" aria-label="anchor" href="#details"></a></h2>
     <p>CBS is performed using the DNAcopy Bioconductor package (or optionally
 ParDNAcopy for parallel segmentation). Both must be available in
-<code>Suggests</code>.</p>
+<code>Suggests</code>. Unlike <code><a href="wisecondorx_predict.html">wisecondorx_predict()</a></code>, this function's <code>parallel</code>
+argument controls native R CBS execution through <code><a href="https://rdrr.io/pkg/ParDNAcopy/man/parSegment.html" class="external-link">ParDNAcopy::parSegment()</a></code>;
+the upstream Python CLI wrapper delegates segmentation to upstream
+WisecondorX and does not expose this native switch.</p>
     </div>
     <div class="section level2">
     <h2 id="see-also">See also<a class="anchor" aria-label="anchor" href="#see-also"></a></h2>

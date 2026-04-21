@@ -68,6 +68,10 @@ wisecondorx_convert(
 This wrapper exposes the upstream `wisecondorx convert` CLI flags:
 `--reference`, `--binsize`, and `--normdup`.
 
+Conda execution is run inside an isolated HOME/XDG sandbox so stale
+libmamba lock files in the user's global cache do not leak into package
+calls.
+
 For a fully native R implementation (no Python dependency) that uses
 Rduckhts instead of pysam, see
 [`bam_convert()`](https://sounkou-bioinfo.github.io/RWisecondorX/reference/bam_convert.md)

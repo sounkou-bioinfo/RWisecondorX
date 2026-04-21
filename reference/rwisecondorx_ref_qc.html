@@ -60,9 +60,10 @@ distances, compatibility between autosomal and gonosomal mask prefixes, and
 
 
 <dt id="arg-min-ref-bins">min_ref_bins<a class="anchor" aria-label="anchor" href="#arg-min-ref-bins"></a></dt>
-<dd><p>Integer; minimum number of usable reference bins per
-target bin before the report flags a warning. Default <code>150L</code>, matching the
-upstream Python QC heuristic.</p></dd>
+<dd><p>Integer; minimum number of usable normalizing reference
+bins retained for a target bin before the report flags a warning. This is
+not the number of cohort samples. Default <code>150L</code>, matching the upstream
+Python QC heuristic.</p></dd>
 
 
 <dt id="arg-output-json">output_json<a class="anchor" aria-label="anchor" href="#arg-output-json"></a></dt>
@@ -86,7 +87,8 @@ issues between autosomal and gonosomal sub-references.</p></dd>
 <dt>metrics</dt>
 <dd><p>Named list of per-branch metrics (<code>A</code>, <code>F</code>, <code>M</code>) including
 verdict, message, mean/std of per-bin mean distances, outlier counts, and
-low-reference counts. Male reports also include chrY metrics.</p></dd>
+counts of target bins that fall below the normalizing-reference-bin
+threshold. Male reports also include chrY metrics.</p></dd>
 
 
 </dl></div>

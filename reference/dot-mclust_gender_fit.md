@@ -5,7 +5,7 @@ Fit a 2-component GMM using mclust (gender model)
 ## Usage
 
 ``` r
-.mclust_gender_fit(y_fractions)
+.mclust_gender_fit(y_fractions, modelNames = "V")
 ```
 
 ## Arguments

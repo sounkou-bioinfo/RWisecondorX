@@ -56,7 +56,9 @@ nipter_regression(
 
 - train_fraction:
 
-  Fraction of control samples used for training (default 0.6).
+  Fraction of control samples used for training. Values below `1`
+  perform a train/stat split; values greater than or equal to `1` fit
+  and score on all controls. Default `0.6`.
 
 - overdispersion_rate:
 
@@ -105,7 +107,9 @@ complementary strand remains available.
 
 The algorithm:
 
-1.  Split the control group 60/40 into train and test sets.
+1.  Split the control group into train and statistic sets according to
+    `train_fraction`. When `train_fraction >= 1`, all controls are used
+    for both fitting and statistic calculation.
 
 2.  Compute chromosomal fractions for all samples.
 

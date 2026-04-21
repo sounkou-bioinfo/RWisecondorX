@@ -54,6 +54,22 @@ via reticulate) and builds a PCA-based reference suitable for
 <span>  nipt <span class="op">=</span> <span class="cn">FALSE</span>,</span>
 <span>  refsize <span class="op">=</span> <span class="fl">300L</span>,</span>
 <span>  yfrac <span class="op">=</span> <span class="cn">NULL</span>,</span>
+<span>  gender_model_names <span class="op">=</span> <span class="st">"V"</span>,</span>
+<span>  female_partition_min_samples <span class="op">=</span> <span class="fl">5L</span>,</span>
+<span>  male_partition_min_samples <span class="op">=</span> <span class="fl">5L</span>,</span>
+<span>  mask_min_median_coverage_fraction <span class="op">=</span> <span class="fl">0.05</span>,</span>
+<span>  gender_model_grid_min <span class="op">=</span> <span class="fl">0</span>,</span>
+<span>  gender_model_grid_max <span class="op">=</span> <span class="fl">0.02</span>,</span>
+<span>  gender_model_grid_length <span class="op">=</span> <span class="fl">5000L</span>,</span>
+<span>  pca_components <span class="op">=</span> <span class="fl">5L</span>,</span>
+<span>  pca_distance_min_class_bins <span class="op">=</span> <span class="fl">10L</span>,</span>
+<span>  pca_distance_autosome_mad_multiplier <span class="op">=</span> <span class="fl">20</span>,</span>
+<span>  pca_distance_autosome_floor <span class="op">=</span> <span class="fl">10</span>,</span>
+<span>  pca_distance_chrX_mad_multiplier <span class="op">=</span> <span class="fl">20</span>,</span>
+<span>  pca_distance_chrX_floor <span class="op">=</span> <span class="fl">10</span>,</span>
+<span>  pca_distance_chrY_mad_multiplier <span class="op">=</span> <span class="fl">50</span>,</span>
+<span>  pca_distance_chrY_floor <span class="op">=</span> <span class="fl">15</span>,</span>
+<span>  null_ratio_max_samples <span class="op">=</span> <span class="fl">100L</span>,</span>
 <span>  cpus <span class="op">=</span> <span class="fl">4L</span>,</span>
 <span>  bed_dir <span class="op">=</span> <span class="cn">NULL</span>,</span>
 <span>  bed_pattern <span class="op">=</span> <span class="st">"*.bed.gz"</span>,</span>
@@ -95,6 +111,93 @@ Default <code>300L</code>.</p></dd>
 <dt id="arg-yfrac">yfrac<a class="anchor" aria-label="anchor" href="#arg-yfrac"></a></dt>
 <dd><p>Optional numeric; manual Y-fraction cutoff for gender
 classification. If <code>NULL</code> (default), the cutoff is derived from a GMM.</p></dd>
+
+
+<dt id="arg-gender-model-names">gender_model_names<a class="anchor" aria-label="anchor" href="#arg-gender-model-names"></a></dt>
+<dd><p>Character scalar; mclust covariance model name used
+for the Y-fraction Gaussian mixture during gender-model fitting. Default
+<code>"V"</code>, matching the current upstream WisecondorX implementation.</p></dd>
+
+
+<dt id="arg-female-partition-min-samples">female_partition_min_samples<a class="anchor" aria-label="anchor" href="#arg-female-partition-min-samples"></a></dt>
+<dd><p>Integer; minimum female samples required
+before applying female-specific masking and building the female gonosomal
+partition. In NIPT mode this is also the minimum female count required to
+proceed. Default <code>5L</code>.</p></dd>
+
+
+<dt id="arg-male-partition-min-samples">male_partition_min_samples<a class="anchor" aria-label="anchor" href="#arg-male-partition-min-samples"></a></dt>
+<dd><p>Integer; minimum male samples required
+before applying male-specific masking and building the male gonosomal
+partition in non-NIPT mode. Default <code>5L</code>.</p></dd>
+
+
+<dt id="arg-mask-min-median-coverage-fraction">mask_min_median_coverage_fraction<a class="anchor" aria-label="anchor" href="#arg-mask-min-median-coverage-fraction"></a></dt>
+<dd><p>Numeric scalar; bins with summed
+normalized coverage below this fraction of the global median are masked
+before model fitting. Default <code>0.05</code>.</p></dd>
+
+
+<dt id="arg-gender-model-grid-min">gender_model_grid_min<a class="anchor" aria-label="anchor" href="#arg-gender-model-grid-min"></a></dt>
+<dd><p>Numeric scalar; lower bound of the density grid
+used to locate the Y-fraction cutoff when <code>yfrac</code> is not provided.
+Default <code>0</code>.</p></dd>
+
+
+<dt id="arg-gender-model-grid-max">gender_model_grid_max<a class="anchor" aria-label="anchor" href="#arg-gender-model-grid-max"></a></dt>
+<dd><p>Numeric scalar; upper bound of that density
+grid. Default <code>0.02</code>.</p></dd>
+
+
+<dt id="arg-gender-model-grid-length">gender_model_grid_length<a class="anchor" aria-label="anchor" href="#arg-gender-model-grid-length"></a></dt>
+<dd><p>Integer; number of grid points used to
+locate the Y-fraction cutoff. Default <code>5000L</code>.</p></dd>
+
+
+<dt id="arg-pca-components">pca_components<a class="anchor" aria-label="anchor" href="#arg-pca-components"></a></dt>
+<dd><p>Integer; PCA components retained during between-sample
+normalization. Default <code>5L</code>.</p></dd>
+
+
+<dt id="arg-pca-distance-min-class-bins">pca_distance_min_class_bins<a class="anchor" aria-label="anchor" href="#arg-pca-distance-min-class-bins"></a></dt>
+<dd><p>Integer; minimum masked bins required
+before applying class-specific PCA-distance pruning. Default <code>10L</code>.</p></dd>
+
+
+<dt id="arg-pca-distance-autosome-mad-multiplier">pca_distance_autosome_mad_multiplier<a class="anchor" aria-label="anchor" href="#arg-pca-distance-autosome-mad-multiplier"></a></dt>
+<dd><p>Numeric; MAD multiplier used for
+autosomal PCA-distance pruning. Default <code>20</code>.</p></dd>
+
+
+<dt id="arg-pca-distance-autosome-floor">pca_distance_autosome_floor<a class="anchor" aria-label="anchor" href="#arg-pca-distance-autosome-floor"></a></dt>
+<dd><p>Numeric; minimum autosomal PCA-distance
+cutoff. Default <code>10</code>.</p></dd>
+
+
+<dt id="arg-pca-distance-chrx-mad-multiplier">pca_distance_chrX_mad_multiplier<a class="anchor" aria-label="anchor" href="#arg-pca-distance-chrx-mad-multiplier"></a></dt>
+<dd><p>Numeric; MAD multiplier used for
+chrX PCA-distance pruning. Default <code>20</code>.</p></dd>
+
+
+<dt id="arg-pca-distance-chrx-floor">pca_distance_chrX_floor<a class="anchor" aria-label="anchor" href="#arg-pca-distance-chrx-floor"></a></dt>
+<dd><p>Numeric; minimum chrX PCA-distance cutoff.
+Default <code>10</code>.</p></dd>
+
+
+<dt id="arg-pca-distance-chry-mad-multiplier">pca_distance_chrY_mad_multiplier<a class="anchor" aria-label="anchor" href="#arg-pca-distance-chry-mad-multiplier"></a></dt>
+<dd><p>Numeric; MAD multiplier used for
+chrY PCA-distance pruning. Default <code>50</code>.</p></dd>
+
+
+<dt id="arg-pca-distance-chry-floor">pca_distance_chrY_floor<a class="anchor" aria-label="anchor" href="#arg-pca-distance-chry-floor"></a></dt>
+<dd><p>Numeric; minimum chrY PCA-distance cutoff.
+Default <code>15</code>.</p></dd>
+
+
+<dt id="arg-null-ratio-max-samples">null_ratio_max_samples<a class="anchor" aria-label="anchor" href="#arg-null-ratio-max-samples"></a></dt>
+<dd><p>Integer; maximum number of cohort samples used
+when sampling columns for null-ratio estimation. Default <code>100L</code>, matching
+the current upstream implementation.</p></dd>
 
 
 <dt id="arg-cpus">cpus<a class="anchor" aria-label="anchor" href="#arg-cpus"></a></dt>
@@ -149,6 +252,10 @@ crediting the original WisecondorX authors.</p>
 
 <dt>has_male</dt>
 <dd><p>Logical; whether a male gonosomal reference exists.</p></dd>
+
+<dt>algorithm_params</dt>
+<dd><p>Named list of native reference-building
+parameters used to create the object.</p></dd>
 
 <dt>mask, bins_per_chr, masked_bins_per_chr, masked_bins_per_chr_cum,
 pca_components, pca_mean, indexes, distances, null_ratios</dt>

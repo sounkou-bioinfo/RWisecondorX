@@ -18,6 +18,11 @@ rwisecondorx_predict(
   maskrepeats = 5L,
   alpha = 1e-04,
   zscore = 5,
+  optimal_cutoff_sd_multiplier = 3,
+  within_sample_mask_iterations = 3L,
+  within_sample_mask_quantile = 0.99,
+  cbs_split_min_gap_bp = 2000000L,
+  segment_zscore_cap = 1000,
   beta = NULL,
   blacklist = NULL,
   gender = NULL,
@@ -69,6 +74,33 @@ rwisecondorx_predict(
 - zscore:
 
   Numeric; Z-score cutoff for aberration calling. Default `5`.
+
+- optimal_cutoff_sd_multiplier:
+
+  Numeric; number of population standard deviations added to the mean
+  distance when iteratively deriving the optimal within-reference
+  cutoff. Default `3`.
+
+- within_sample_mask_iterations:
+
+  Integer; number of iterative within-sample masking passes. Default
+  `3L`.
+
+- within_sample_mask_quantile:
+
+  Numeric scalar in `(0, 1)`; bins with
+  `|z| >= qnorm(within_sample_mask_quantile)` are excluded from the next
+  within-sample normalization pass. Default `0.99`.
+
+- cbs_split_min_gap_bp:
+
+  Integer; NA stretches spanning more than this many base pairs trigger
+  CBS segment splitting. Default `2000000L`.
+
+- segment_zscore_cap:
+
+  Numeric; absolute cap applied to segment z-scores after they are
+  derived from the null-ratio distributions. Default `1000`.
 
 - beta:
 
@@ -133,6 +165,10 @@ A list with class `"WisecondorXPrediction"` containing:
 
   Predicted (or forced) gender.
 
+- algorithm_params:
+
+  Named list of native prediction parameters used for this result.
+
 - n_reads:
 
   Total read count.
@@ -145,7 +181,13 @@ A list with class `"WisecondorXPrediction"` containing:
 
 CBS is performed using the DNAcopy Bioconductor package (or optionally
 ParDNAcopy for parallel segmentation). Both must be available in
-`Suggests`.
+`Suggests`. Unlike
+[`wisecondorx_predict()`](https://sounkou-bioinfo.github.io/RWisecondorX/reference/wisecondorx_predict.md),
+this function's `parallel` argument controls native R CBS execution
+through
+[`ParDNAcopy::parSegment()`](https://rdrr.io/pkg/ParDNAcopy/man/parSegment.html);
+the upstream Python CLI wrapper delegates segmentation to upstream
+WisecondorX and does not expose this native switch.
 
 ## See also
 

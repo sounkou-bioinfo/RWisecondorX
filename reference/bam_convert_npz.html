@@ -122,7 +122,10 @@ If <code>NULL</code> (default) it is imported automatically.</p></dd>
     </div>
     <div class="section level2">
     <h2 id="details">Details<a class="anchor" aria-label="anchor" href="#details"></a></h2>
-    <p>The resulting NPZ has three top-level keys:</p><dl><dt><code>sample</code></dt>
+    <p>This function exists for Python WisecondorX CLI conformance and
+interoperability. The native R pipeline uses <code><a href="bam_convert_bed.html">bam_convert_bed()</a></code> together
+with <code><a href="rwisecondorx_newref.html">rwisecondorx_newref()</a></code> and <code><a href="rwisecondorx_predict.html">rwisecondorx_predict()</a></code>.</p>
+<p>The resulting NPZ has three top-level keys:</p><dl><dt><code>sample</code></dt>
 <dd><p>0-d object array wrapping a dict mapping <code>"1"</code>..<code>"24"</code>
 to int32 arrays (chromosome bin counts).</p></dd>
 
@@ -150,7 +153,8 @@ header-span contract.</p>
     </div>
     <div class="section level2">
     <h2 id="see-also">See also<a class="anchor" aria-label="anchor" href="#see-also"></a></h2>
-    <div class="dont-index"><p><code><a href="bam_convert.html">bam_convert()</a></code>, <code><a href="wisecondorx_newref.html">wisecondorx_newref()</a></code>, <code><a href="wisecondorx_predict.html">wisecondorx_predict()</a></code></p></div>
+    <div class="dont-index"><p><code><a href="bam_convert.html">bam_convert()</a></code>, <code><a href="bam_convert_bed.html">bam_convert_bed()</a></code>, <code><a href="rwisecondorx_newref.html">rwisecondorx_newref()</a></code>,
+<code><a href="rwisecondorx_predict.html">rwisecondorx_predict()</a></code>, <code><a href="wisecondorx_newref.html">wisecondorx_newref()</a></code>, <code><a href="wisecondorx_predict.html">wisecondorx_predict()</a></code></p></div>
     </div>
 
     <div class="section level2">

@@ -137,6 +137,14 @@ flags documented in the WisecondorX README: `--minrefbins`,
 `--gender`, `--bed`, `--plot`, `--add-plot-title`, `--regions`,
 `--ylim`, `--cairo`, and `--seed`.
 
+Conda execution is run inside an isolated HOME/XDG sandbox so stale
+libmamba lock files in the user's global cache do not leak into package
+calls. Unlike
+[`rwisecondorx_predict()`](https://sounkou-bioinfo.github.io/RWisecondorX/reference/rwisecondorx_predict.md),
+this wrapper does not expose the native `parallel` argument used for
+`ParDNAcopy`; segmentation behavior is delegated entirely to the
+upstream Python WisecondorX CLI.
+
 ## See also
 
 [`bam_convert_npz()`](https://sounkou-bioinfo.github.io/RWisecondorX/reference/bam_convert_npz.md),

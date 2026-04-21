@@ -38,7 +38,15 @@
 
     <div class="section level2">
     <h2 id="ref-usage">Usage<a class="anchor" aria-label="anchor" href="#ref-usage"></a></h2>
-    <div class="sourceCode"><pre class="sourceCode r"><code><span><span class="fu">.normalize</span><span class="op">(</span><span class="va">sample</span>, <span class="va">ref</span>, <span class="va">ref_gender</span>, <span class="va">maskrepeats</span><span class="op">)</span></span></code></pre></div>
+    <div class="sourceCode"><pre class="sourceCode r"><code><span><span class="fu">.normalize</span><span class="op">(</span></span>
+<span>  <span class="va">sample</span>,</span>
+<span>  <span class="va">ref</span>,</span>
+<span>  <span class="va">ref_gender</span>,</span>
+<span>  <span class="va">maskrepeats</span>,</span>
+<span>  optimal_cutoff_sd_multiplier <span class="op">=</span> <span class="fl">3</span>,</span>
+<span>  within_sample_mask_iterations <span class="op">=</span> <span class="fl">3L</span>,</span>
+<span>  within_sample_mask_quantile <span class="op">=</span> <span class="fl">0.99</span></span>
+<span><span class="op">)</span></span></code></pre></div>
     </div>
 
     <div class="section level2">

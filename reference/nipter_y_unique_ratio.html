@@ -51,7 +51,8 @@ univariate sex predictor used in the clinical NIPT pipeline mirrored here.</p>
 <span>  exclude_flags <span class="op">=</span> <span class="fl">0L</span>,</span>
 <span>  regions_file <span class="op">=</span> <span class="cn">NULL</span>,</span>
 <span>  con <span class="op">=</span> <span class="cn">NULL</span>,</span>
-<span>  reference <span class="op">=</span> <span class="cn">NULL</span></span>
+<span>  reference <span class="op">=</span> <span class="cn">NULL</span>,</span>
+<span>  decompression_threads <span class="op">=</span> <span class="fl">0L</span></span>
 <span><span class="op">)</span></span></code></pre></div>
     </div>
 
@@ -95,6 +96,12 @@ created.</p></dd>
 <dt id="arg-reference">reference<a class="anchor" aria-label="anchor" href="#arg-reference"></a></dt>
 <dd><p>Optional FASTA reference path for CRAM inputs.</p></dd>
 
+
+<dt id="arg-decompression-threads">decompression_threads<a class="anchor" aria-label="anchor" href="#arg-decompression-threads"></a></dt>
+<dd><p>Integer; number of htslib decompression worker
+threads to use for BAM/CRAM decoding in the BED-coverage path. Default
+<code>0L</code>.</p></dd>
+
 </dl></div>
     <div class="section level2">
     <h2 id="value">Value<a class="anchor" aria-label="anchor" href="#value"></a></h2>
@@ -129,11 +136,15 @@ be supplied explicitly through <code>regions_file</code>, but it is no longer th
 default because it does not reproduce the legacy <code>YUniqueRatioFiltered</code>
 semantics.</p>
 <p>The BAM must be indexed (<code>.bai</code> or <code>.csi</code>).</p>
-<p>Read counting uses DuckDB/duckhts with index-based region queries
-(<code>read_bam(region := ...)</code>) issued once per Y-unique interval, and a
-separate full-genome scan for the nuclear total. Interval chromosome names
-are matched to the BAM header so both <code>Y</code> and <code>chrY</code>-style
-contigs work. Both query paths apply the same MAPQ and flag filters.</p>
+<p>Read counting uses DuckDB/duckhts BED coverage summaries via
+<code>Rduckhts::rduckhts_bam_bed_coverage()</code>. Interval chromosome names are
+matched to the BAM header so both <code>Y</code> and <code>chrY</code>-style contigs
+work. Both the Y-target BED and the whole-nuclear BED apply the same MAPQ
+and flag filters.</p>
+<p>Y-target reads are summed across the supplied intervals exactly as listed in
+<code>regions_file</code>. This intentionally preserves the historical
+interval-wise summation semantics: if two target intervals overlap, a read
+contributing to both intervals is counted twice.</p>
     </div>
     <div class="section level2">
     <h2 id="see-also">See also<a class="anchor" aria-label="anchor" href="#see-also"></a></h2>

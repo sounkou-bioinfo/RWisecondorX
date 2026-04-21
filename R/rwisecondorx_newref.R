@@ -249,6 +249,8 @@ rwisecondorx_newref <- function(samples         = NULL,
   # ---------- Step 1: rescale all samples ----------
   if (!is.null(sample_binsizes)) {
     stopifnot(length(sample_binsizes) == length(samples))
+    stopifnot(is.numeric(sample_binsizes), all(is.finite(sample_binsizes)),
+              all(sample_binsizes > 0))
     for (i in seq_along(samples)) {
       samples[[i]] <- scale_sample(samples[[i]],
                                    from_size = sample_binsizes[i],

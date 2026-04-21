@@ -75,20 +75,33 @@
   distances <- x[[paste0("distances", suffix)]]
   null_ratios <- x[[paste0("null_ratios", suffix)]]
 
-  if (!is.numeric(bins_per_chr) || length(bins_per_chr) != expected_chr_count) {
-    return(sprintf("bins_per_chr%s must be a numeric vector of length %d.",
+  if (!is.numeric(bins_per_chr) || length(bins_per_chr) != expected_chr_count ||
+      any(!is.finite(bins_per_chr)) || any(bins_per_chr < 0) ||
+      any(as.integer(bins_per_chr) != bins_per_chr)) {
+    return(sprintf("bins_per_chr%s must be a finite non-negative integer vector of length %d.",
                    suffix, expected_chr_count))
   }
-  if (!is.numeric(masked_bins_per_chr) || length(masked_bins_per_chr) != expected_chr_count) {
-    return(sprintf("masked_bins_per_chr%s must align with bins_per_chr%s.",
+  if (!is.numeric(masked_bins_per_chr) || length(masked_bins_per_chr) != expected_chr_count ||
+      any(!is.finite(masked_bins_per_chr)) || any(masked_bins_per_chr < 0) ||
+      any(as.integer(masked_bins_per_chr) != masked_bins_per_chr)) {
+    return(sprintf("masked_bins_per_chr%s must be a finite non-negative integer vector aligned with bins_per_chr%s.",
                    suffix, suffix))
   }
-  if (!is.numeric(masked_bins_per_chr_cum) || length(masked_bins_per_chr_cum) != expected_chr_count) {
-    return(sprintf("masked_bins_per_chr_cum%s must align with bins_per_chr%s.",
+  if (any(masked_bins_per_chr > bins_per_chr)) {
+    return(sprintf("masked_bins_per_chr%s cannot exceed bins_per_chr%s.", suffix, suffix))
+  }
+  if (!is.numeric(masked_bins_per_chr_cum) || length(masked_bins_per_chr_cum) != expected_chr_count ||
+      any(!is.finite(masked_bins_per_chr_cum)) ||
+      any(as.integer(masked_bins_per_chr_cum) != masked_bins_per_chr_cum) ||
+      !identical(as.integer(masked_bins_per_chr_cum), as.integer(cumsum(masked_bins_per_chr)))) {
+    return(sprintf("masked_bins_per_chr_cum%s must equal cumsum(masked_bins_per_chr%s).",
                    suffix, suffix))
   }
   if (!is.logical(mask) || length(mask) != sum(as.integer(bins_per_chr))) {
     return(sprintf("mask%s must have length sum(bins_per_chr%s).", suffix, suffix))
+  }
+  if (sum(mask) != sum(as.integer(masked_bins_per_chr))) {
+    return(sprintf("mask%s TRUE count must equal sum(masked_bins_per_chr%s).", suffix, suffix))
   }
   if (!is.matrix(indexes) || !is.matrix(distances) || !identical(dim(indexes), dim(distances))) {
     return(sprintf("indexes%s and distances%s must be matrices with identical dimensions.",
@@ -228,8 +241,13 @@ WisecondorXPrediction <- S7::new_class(
     if (!is.numeric(self$binsize) || length(self$binsize) != 1L || self$binsize < 1L) {
       return("Prediction 'binsize' must be a positive scalar.")
     }
-    if (!is.numeric(self$bins_per_chr)) {
-      return("Prediction 'bins_per_chr' must be numeric.")
+    if (!is.numeric(self$bins_per_chr) || any(!is.finite(self$bins_per_chr)) ||
+        any(self$bins_per_chr < 0) ||
+        any(as.integer(self$bins_per_chr) != self$bins_per_chr)) {
+      return("Prediction 'bins_per_chr' must be a finite non-negative integer vector.")
+    }
+    if (!identical(length(self$bins_per_chr), length(self$results_r))) {
+      return("Prediction 'bins_per_chr' must align with per-chromosome result lists.")
     }
     NULL
   }

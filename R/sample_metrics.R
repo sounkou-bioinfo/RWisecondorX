@@ -17,6 +17,33 @@
   any(vals < as.numeric(min_reads))
 }
 
+.is_finite_scalar <- function(x) {
+  if (is.null(x) || !length(x)) {
+    return(FALSE)
+  }
+  val <- suppressWarnings(as.numeric(x[[1L]]))
+  length(val) == 1L && is.finite(val)
+}
+
+.metric_group_status <- function(values, observed = FALSE) {
+  has_any <- isTRUE(observed) || any(vapply(values, function(v) !is.null(v), logical(1L)))
+  if (!has_any) {
+    return(list(
+      missing_flag = NA,
+      ready_flag = NA,
+      n_missing = NA_integer_,
+      n_expected = as.integer(length(values))
+    ))
+  }
+  finite <- vapply(values, .is_finite_scalar, logical(1L))
+  list(
+    missing_flag = any(!finite),
+    ready_flag = all(finite),
+    n_missing = as.integer(sum(!finite)),
+    n_expected = as.integer(length(values))
+  )
+}
+
 .read_metrics_table <- function(path) {
   stopifnot(is.character(path), length(path) == 1L, nzchar(path))
   stopifnot(file.exists(path))
@@ -376,6 +403,52 @@
     count_post = native$count_post
   )
 
+  seqff_status <- .metric_group_status(
+    list(
+      seqff$seqff_pre,
+      seqff$enet_pre,
+      seqff$wrsc_pre,
+      seqff$seqff_post,
+      seqff$enet_post,
+      seqff$wrsc_post
+    ),
+    observed = !is.null(seqff$source)
+  )
+  y_unique_status <- .metric_group_status(
+    list(
+      y_unique$ratio_pre,
+      y_unique$reads_pre,
+      y_unique$total_pre,
+      y_unique$ratio_post,
+      y_unique$reads_post,
+      y_unique$total_post
+    ),
+    observed = !is.null(y_unique$source) || !is.null(y_unique$regions_file)
+  )
+  native_status <- .metric_group_status(
+    list(
+      native$count_pre,
+      native$count_post,
+      native$gc_pre,
+      native$gc_post,
+      native$mean_mapq_post
+    ),
+    observed = !is.null(native$source)
+  )
+  nipter_qc_status <- .metric_group_status(
+    list(
+      nipter_qc$gc_loess_valid_bins,
+      nipter_qc$nipter_autosomal_bin_cv_pre,
+      nipter_qc$nipter_autosomal_bin_cv_post,
+      nipter_qc$nipter_corrected_bin_ratio_mean,
+      nipter_qc$nipter_corrected_bin_ratio_sd,
+      nipter_qc$nipter_corrected_bin_ratio_cv,
+      nipter_qc$nipter_gc_correlation_pre,
+      nipter_qc$nipter_gc_correlation_post
+    ),
+    observed = !is.null(nipter_qc$gc_loess_valid_bins)
+  )
+
   data.frame(
     sample_name = sample_name,
     sample = sample_name,
@@ -386,6 +459,16 @@
     native_count_rev_sum = unname(.null_coalesce(native$count_rev, NA_real_)),
     native_n_nonzero_bins_post = unname(.null_coalesce(native$n_nonzero_bins_post, NA_real_)),
     gc_loess_valid_bins = unname(.null_coalesce(nipter_qc$gc_loess_valid_bins, NA_real_)),
+    gc_loess_total_bins = unname(.null_coalesce(nipter_qc$gc_loess_total_bins, NA_real_)),
+    gc_loess_invalid_bins = unname(.null_coalesce(nipter_qc$gc_loess_invalid_bins, NA_real_)),
+    gc_loess_valid_bin_fraction_pct = unname(.null_coalesce(nipter_qc$gc_loess_valid_bin_fraction_pct, NA_real_)),
+    gc_loess_invalid_gc_missing_or_nonfinite = unname(.null_coalesce(nipter_qc$gc_loess_invalid_gc_missing_or_nonfinite, NA_real_)),
+    gc_loess_invalid_gc_nonpositive = unname(.null_coalesce(nipter_qc$gc_loess_invalid_gc_nonpositive, NA_real_)),
+    gc_loess_invalid_raw_nonfinite = unname(.null_coalesce(nipter_qc$gc_loess_invalid_raw_nonfinite, NA_real_)),
+    gc_loess_invalid_raw_nonpositive = unname(.null_coalesce(nipter_qc$gc_loess_invalid_raw_nonpositive, NA_real_)),
+    gc_loess_invalid_corrected_nonfinite = unname(.null_coalesce(nipter_qc$gc_loess_invalid_corrected_nonfinite, NA_real_)),
+    gc_curve_has_valid_bins = .null_coalesce(nipter_qc$gc_curve_has_valid_bins, NA),
+    gc_curve_has_loess_support = .null_coalesce(nipter_qc$gc_curve_has_loess_support, NA),
     nipter_autosomal_bin_cv_pre = unname(.null_coalesce(nipter_qc$nipter_autosomal_bin_cv_pre, NA_real_)),
     nipter_autosomal_bin_cv_post = unname(.null_coalesce(nipter_qc$nipter_autosomal_bin_cv_post, NA_real_)),
     nipter_corrected_bin_ratio_mean = unname(.null_coalesce(nipter_qc$nipter_corrected_bin_ratio_mean, NA_real_)),
@@ -394,6 +477,7 @@
     nipter_gc_correlation_pre = unname(.null_coalesce(nipter_qc$nipter_gc_correlation_pre, NA_real_)),
     nipter_gc_correlation_post = unname(.null_coalesce(nipter_qc$nipter_gc_correlation_post, NA_real_)),
     nipter_gc_curve_png = .null_coalesce(nipter_qc$gc_curve_plot, NA_character_),
+    nipter_gc_curve_data_tsv = .null_coalesce(nipter_qc$gc_curve_data_tsv, NA_character_),
     gc_read_perc_pre = unname(.null_coalesce(native$gc_pre, NA_real_)),
     gc_read_perc_post = unname(.null_coalesce(native$gc_post, NA_real_)),
     mean_mapq_post = unname(.null_coalesce(native$mean_mapq_post, NA_real_)),
@@ -405,6 +489,27 @@
     TotalUniqueReadsPercent = unname(unique_pct),
     TotalUniqueReadsPercentMapped = unname(unique_pct),
     too_few_reads_for_metrics = unname(too_few_reads_for_metrics),
+    missing_seqff_metrics = seqff_status$missing_flag,
+    missing_y_unique_metrics = y_unique_status$missing_flag,
+    missing_native_metrics = native_status$missing_flag,
+    missing_nipter_preprocess_qc_metrics = nipter_qc_status$missing_flag,
+    seqff_metrics_ready = seqff_status$ready_flag,
+    y_unique_metrics_ready = y_unique_status$ready_flag,
+    native_metrics_ready = native_status$ready_flag,
+    nipter_preprocess_qc_ready = nipter_qc_status$ready_flag,
+    sample_metrics_ready = {
+      flags <- c(
+        seqff_status$ready_flag,
+        y_unique_status$ready_flag,
+        native_status$ready_flag,
+        nipter_qc_status$ready_flag
+      )
+      if (all(is.na(flags))) {
+        NA
+      } else {
+        all(flags[!is.na(flags)])
+      }
+    },
     SeqFF_pre = unname(.null_coalesce(seqff$seqff_pre, NA_real_)),
     Enet_pre = unname(.null_coalesce(seqff$enet_pre, NA_real_)),
     WRSC_pre = unname(.null_coalesce(seqff$wrsc_pre, NA_real_)),
@@ -437,6 +542,14 @@
     seqff_source = .null_coalesce(seqff$source, NA_character_),
     y_unique_source = .null_coalesce(y_unique$source, NA_character_),
     native_stats_source = .null_coalesce(native$source, NA_character_),
+    seqff_metrics_missing_count = seqff_status$n_missing,
+    y_unique_metrics_missing_count = y_unique_status$n_missing,
+    native_metrics_missing_count = native_status$n_missing,
+    nipter_preprocess_qc_metrics_missing_count = nipter_qc_status$n_missing,
+    seqff_metrics_expected_count = seqff_status$n_expected,
+    y_unique_metrics_expected_count = y_unique_status$n_expected,
+    native_metrics_expected_count = native_status$n_expected,
+    nipter_preprocess_qc_metrics_expected_count = nipter_qc_status$n_expected,
     stringsAsFactors = FALSE
   )
 }
@@ -489,6 +602,52 @@
   filters_pre <- .null_coalesce(.record_to_list(filters_pre), list())
   filters_post <- .null_coalesce(.record_to_list(filters_post), list())
 
+  seqff_status <- .metric_group_status(
+    list(
+      seqff$seqff_pre,
+      seqff$enet_pre,
+      seqff$wrsc_pre,
+      seqff$seqff_post,
+      seqff$enet_post,
+      seqff$wrsc_post
+    ),
+    observed = !is.null(seqff$source)
+  )
+  y_unique_status <- .metric_group_status(
+    list(
+      y_unique$ratio_pre,
+      y_unique$reads_pre,
+      y_unique$total_pre,
+      y_unique$ratio_post,
+      y_unique$reads_post,
+      y_unique$total_post
+    ),
+    observed = !is.null(y_unique$source) || !is.null(y_unique$regions_file)
+  )
+  native_status <- .metric_group_status(
+    list(
+      native$count_pre,
+      native$count_post,
+      native$gc_pre,
+      native$gc_post,
+      native$mean_mapq_post
+    ),
+    observed = !is.null(native$source)
+  )
+  nipter_qc_status <- .metric_group_status(
+    list(
+      nipter_qc$gc_loess_valid_bins,
+      nipter_qc$nipter_autosomal_bin_cv_pre,
+      nipter_qc$nipter_autosomal_bin_cv_post,
+      nipter_qc$nipter_corrected_bin_ratio_mean,
+      nipter_qc$nipter_corrected_bin_ratio_sd,
+      nipter_qc$nipter_corrected_bin_ratio_cv,
+      nipter_qc$nipter_gc_correlation_pre,
+      nipter_qc$nipter_gc_correlation_post
+    ),
+    observed = !is.null(nipter_qc$gc_loess_valid_bins)
+  )
+
   meta <- list(
     metrics_pre_mapq = .metric_scalar(filters_pre, c("mapq"), "numeric"),
     metrics_pre_require_flags = .metric_scalar(filters_pre, c("require_flags"), "numeric"),
@@ -514,6 +673,16 @@
     y_unique_source = y_unique$source,
     y_unique_regions_file = y_unique$regions_file,
     gc_loess_valid_bins = nipter_qc$gc_loess_valid_bins,
+    gc_loess_total_bins = nipter_qc$gc_loess_total_bins,
+    gc_loess_invalid_bins = nipter_qc$gc_loess_invalid_bins,
+    gc_loess_valid_bin_fraction_pct = nipter_qc$gc_loess_valid_bin_fraction_pct,
+    gc_loess_invalid_gc_missing_or_nonfinite = nipter_qc$gc_loess_invalid_gc_missing_or_nonfinite,
+    gc_loess_invalid_gc_nonpositive = nipter_qc$gc_loess_invalid_gc_nonpositive,
+    gc_loess_invalid_raw_nonfinite = nipter_qc$gc_loess_invalid_raw_nonfinite,
+    gc_loess_invalid_raw_nonpositive = nipter_qc$gc_loess_invalid_raw_nonpositive,
+    gc_loess_invalid_corrected_nonfinite = nipter_qc$gc_loess_invalid_corrected_nonfinite,
+    gc_curve_has_valid_bins = nipter_qc$gc_curve_has_valid_bins,
+    gc_curve_has_loess_support = nipter_qc$gc_curve_has_loess_support,
     nipter_autosomal_bin_cv_pre = nipter_qc$nipter_autosomal_bin_cv_pre,
     nipter_autosomal_bin_cv_post = nipter_qc$nipter_autosomal_bin_cv_post,
     nipter_corrected_bin_ratio_mean = nipter_qc$nipter_corrected_bin_ratio_mean,
@@ -545,6 +714,14 @@
       count_post = native$count_post
     ),
     too_few_reads_for_metrics_min_reads = 1e5,
+    missing_seqff_metrics = seqff_status$missing_flag,
+    missing_y_unique_metrics = y_unique_status$missing_flag,
+    missing_native_metrics = native_status$missing_flag,
+    missing_nipter_preprocess_qc_metrics = nipter_qc_status$missing_flag,
+    seqff_metrics_ready = seqff_status$ready_flag,
+    y_unique_metrics_ready = y_unique_status$ready_flag,
+    native_metrics_ready = native_status$ready_flag,
+    nipter_preprocess_qc_ready = nipter_qc_status$ready_flag,
     native_stats_source = native$source
   )
 

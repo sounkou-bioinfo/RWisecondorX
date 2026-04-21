@@ -113,8 +113,20 @@ scale_sample <- function(sample, from_size, to_size) {
   total <- sum(vapply(sample, function(x) {
     if (is.null(x)) 0 else sum(as.numeric(x))
   }, numeric(1)))
+  if (!is.finite(total) || total <= 0) {
+    stop(
+      "Cannot predict RWisecondorX sample gender: total read count is non-finite or zero.",
+      call. = FALSE
+    )
+  }
   y_sum <- if (is.null(sample[["24"]])) 0 else sum(as.numeric(sample[["24"]]))
   y_frac <- y_sum / total
+  if (!is.finite(y_frac)) {
+    stop(
+      "Cannot predict RWisecondorX sample gender: chrY fraction is non-finite.",
+      call. = FALSE
+    )
+  }
   if (y_frac > trained_cutoff) "M" else "F"
 }
 
@@ -174,7 +186,14 @@ scale_sample <- function(sample, from_size, to_size) {
 
   # Normalize each sample column by total reads
   col_sums <- colSums(all_data)
-  col_sums[col_sums == 0] <- 1  # avoid division by zero
+  bad_cols <- which(!is.finite(col_sums) | col_sums <= 0)
+  if (length(bad_cols)) {
+    stop(
+      "Cannot build RWisecondorX mask: reference sample(s) with non-finite or zero total coverage in selected bins: ",
+      paste(bad_cols, collapse = ", "),
+      call. = FALSE
+    )
+  }
   all_data <- sweep(all_data, 2, col_sums, "/")
 
   sum_per_bin <- rowSums(all_data)
@@ -335,7 +354,14 @@ scale_sample <- function(sample, from_size, to_size) {
 
   # Normalize each sample by total reads
   col_sums <- colSums(all_data)
-  col_sums[col_sums == 0] <- 1
+  bad_cols <- which(!is.finite(col_sums) | col_sums <= 0)
+  if (length(bad_cols)) {
+    stop(
+      "Cannot normalize RWisecondorX reference matrix: sample(s) with non-finite or zero total coverage in selected chromosomes: ",
+      paste(bad_cols, collapse = ", "),
+      call. = FALSE
+    )
+  }
   all_data <- sweep(all_data, 2, col_sums, "/")
 
   # Apply mask

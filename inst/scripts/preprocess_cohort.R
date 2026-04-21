@@ -19,7 +19,6 @@ if (!requireNamespace("optparse", quietly = TRUE)) {
   stop("optparse is required. Install it with install.packages('optparse').",
        call. = FALSE)
 }
-
 library(optparse)
 
 .read_file_list <- function(path) {
@@ -309,6 +308,7 @@ dirs <- list(
   wisecondorx_npz = .ensure_dir(file.path(out_root, "wisecondorx_npz")),
   nipter_beds = .ensure_dir(file.path(out_root, "nipter_beds")),
   nipter_gc_curves = .ensure_dir(file.path(out_root, "nipter_gc_curves")),
+  nipter_gc_curve_data = .ensure_dir(file.path(out_root, "nipter_gc_curve_data")),
   mosdepth_raw_50k = .ensure_dir(file.path(out_root, "mosdepth_raw_50k")),
   mosdepth_filtered_50k = .ensure_dir(file.path(out_root, "mosdepth_filtered_50k")),
   logs = .ensure_dir(file.path(out_root, "logs"))
@@ -419,14 +419,23 @@ metrics_post_filters <- list(
   "TotalMappedReads", "TotalUniqueReads", "TotalUniqueReadsMapped",
   "TotalUniqueReadsPercent", "TotalUniqueReadsPercentMapped",
   "too_few_reads_for_metrics",
+  "missing_seqff_metrics", "missing_y_unique_metrics",
+  "missing_native_metrics", "missing_nipter_preprocess_qc_metrics",
+  "seqff_metrics_ready", "y_unique_metrics_ready",
+  "native_metrics_ready", "nipter_preprocess_qc_ready", "sample_metrics_ready",
   "native_count_pre_sum", "native_count_post_sum",
   "native_count_fwd_sum", "native_count_rev_sum", "native_n_nonzero_bins_post",
-  "gc_loess_valid_bins",
+  "gc_loess_valid_bins", "gc_loess_total_bins", "gc_loess_invalid_bins",
+  "gc_loess_valid_bin_fraction_pct",
+  "gc_loess_invalid_gc_missing_or_nonfinite", "gc_loess_invalid_gc_nonpositive",
+  "gc_loess_invalid_raw_nonfinite", "gc_loess_invalid_raw_nonpositive",
+  "gc_loess_invalid_corrected_nonfinite",
+  "gc_curve_has_valid_bins", "gc_curve_has_loess_support",
   "nipter_autosomal_bin_cv_pre", "nipter_autosomal_bin_cv_post",
   "nipter_corrected_bin_ratio_mean", "nipter_corrected_bin_ratio_sd",
   "nipter_corrected_bin_ratio_cv",
   "nipter_gc_correlation_pre", "nipter_gc_correlation_post",
-  "nipter_gc_curve_png",
+  "nipter_gc_curve_png", "nipter_gc_curve_data_tsv",
   "gc_read_perc_pre", "gc_read_perc_post", "mean_mapq_post",
   "GCPCTBeforeFiltering", "GCPCTAfterFiltering",
   "SeqFF_pre", "Enet_pre", "WRSC_pre",
@@ -442,6 +451,10 @@ metrics_post_filters <- list(
   "metrics_pre_mapq", "metrics_pre_require_flags", "metrics_pre_exclude_flags",
   "metrics_post_mapq", "metrics_post_require_flags", "metrics_post_exclude_flags",
   "seqff_source", "y_unique_source", "native_stats_source",
+  "seqff_metrics_missing_count", "y_unique_metrics_missing_count",
+  "native_metrics_missing_count", "nipter_preprocess_qc_metrics_missing_count",
+  "seqff_metrics_expected_count", "y_unique_metrics_expected_count",
+  "native_metrics_expected_count", "nipter_preprocess_qc_metrics_expected_count",
   "nipter_bed_status", "nipter_bed_written", "nipter_bed_error"
 )
 
@@ -782,6 +795,16 @@ if (isTRUE(opts$`wcx-write-npz`)) {
           binsize = as.integer(opts$`nipter-binsize`),
           con = con
         )
+        curve_tsv <- file.path(dirs$nipter_gc_curve_data, paste0(stem, ".gc_curve_data.tsv"))
+        utils::write.table(
+          nipter_qc$curve_data,
+          file = curve_tsv,
+          sep = "\t",
+          row.names = FALSE,
+          col.names = TRUE,
+          quote = FALSE
+        )
+        nipter_qc$metrics$gc_curve_data_tsv <- curve_tsv
         if (isTRUE(opts$`nipter-gc-curves`)) {
           curve_png <- file.path(dirs$nipter_gc_curves, paste0(stem, ".gc_curve.png"))
           .write_nipter_gc_curve_plot(
@@ -910,6 +933,59 @@ if (isTRUE(opts$`wcx-write-npz`)) {
     col.names = TRUE,
     quote = FALSE
   )
+
+  qc_flag_cols <- c(
+    "too_few_reads_for_metrics",
+    "missing_seqff_metrics",
+    "missing_y_unique_metrics",
+    "missing_native_metrics",
+    "missing_nipter_preprocess_qc_metrics",
+    "seqff_metrics_ready",
+    "y_unique_metrics_ready",
+    "native_metrics_ready",
+    "nipter_preprocess_qc_ready",
+    "sample_metrics_ready",
+    "gc_curve_has_valid_bins",
+    "gc_curve_has_loess_support",
+    "nipter_bed_written"
+  )
+  qc_flag_summary <- do.call(
+    rbind,
+    lapply(qc_flag_cols, function(col) {
+      vals <- sample_qc_summary[[col]]
+      data.frame(
+        metric = col,
+        n_true = sum(vals %in% TRUE, na.rm = TRUE),
+        n_false = sum(vals %in% FALSE, na.rm = TRUE),
+        n_na = sum(is.na(vals)),
+        stringsAsFactors = FALSE
+      )
+    })
+  )
+  utils::write.table(
+    qc_flag_summary,
+    file = file.path(dirs$sample_metrics, "qc_flag_summary.tsv"),
+    sep = "\t",
+    row.names = FALSE,
+    col.names = TRUE,
+    quote = FALSE
+  )
+
+  readiness_summary <- sample_qc_summary[, c(
+    "sample_name", "bam",
+    "seqff_metrics_ready", "y_unique_metrics_ready",
+    "native_metrics_ready", "nipter_preprocess_qc_ready",
+    "sample_metrics_ready", "nipter_bed_written",
+    "nipter_bed_status", "nipter_bed_error"
+  ), drop = FALSE]
+  utils::write.table(
+    readiness_summary,
+    file = file.path(dirs$sample_metrics, "sample_readiness.tsv"),
+    sep = "\t",
+    row.names = FALSE,
+    col.names = TRUE,
+    quote = FALSE
+  )
 }, sprintf("Convert %d BAMs to NIPTeR BED.gz", length(bams)))
 
 .run_one({
@@ -992,11 +1068,14 @@ cat("  seqff:       ", dirs$seqff, "\n", sep = "")
 cat("  y_unique:    ", dirs$y_unique, "\n", sep = "")
 cat("  sample_qc:   ", file.path(dirs$sample_metrics, "sample_qc.tsv"), "\n", sep = "")
 cat("  sample_failures: ", file.path(dirs$sample_metrics, "sample_failures.tsv"), "\n", sep = "")
+cat("  sample_readiness: ", file.path(dirs$sample_metrics, "sample_readiness.tsv"), "\n", sep = "")
+cat("  qc_flag_summary: ", file.path(dirs$sample_metrics, "qc_flag_summary.tsv"), "\n", sep = "")
 cat("  rwcx_header_qc: ", file.path(dirs$sample_metrics, "rwcx_bed_header_qc.tsv"), "\n", sep = "")
 cat("  nipter_header_qc: ", file.path(dirs$sample_metrics, "nipter_bed_header_qc.tsv"), "\n", sep = "")
 cat("  rwcx_beds:   ", dirs$rwcx_beds, "\n", sep = "")
 cat("  wisecondorx_npz: ", dirs$wisecondorx_npz, "\n", sep = "")
 cat("  nipter_beds: ", dirs$nipter_beds, "\n", sep = "")
 cat("  nipter_gc_curves: ", dirs$nipter_gc_curves, "\n", sep = "")
+cat("  nipter_gc_curve_data: ", dirs$nipter_gc_curve_data, "\n", sep = "")
 cat("  mosdepth_raw_50k: ", dirs$mosdepth_raw_50k, "\n", sep = "")
 cat("  mosdepth_filtered_50k: ", dirs$mosdepth_filtered_50k, "\n", sep = "")

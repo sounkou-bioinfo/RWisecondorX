@@ -68,7 +68,14 @@ rwisecondorx_ref_qc <- function(reference,
     overall_verdict = "PASS",
     worst_severity = 0L,
     compat_issues = compat_issues,
-    metrics = list()
+    metrics = list(),
+    branch_summary = data.frame(stringsAsFactors = FALSE),
+    readiness = list(
+      reference_mask_compatible = !length(compat_issues),
+      any_branch_fail = NA,
+      ready_for_prediction = NA,
+      evaluated_branches = character(0)
+    )
   )
 
   for (label in names(suffixes)) {
@@ -89,7 +96,9 @@ rwisecondorx_ref_qc <- function(reference,
     branch_report <- list(
       n_bins = metrics$n_bins,
       n_valid = metrics$n_valid,
+      n_missing_mean_distance = as.integer(metrics$n_bins - metrics$n_valid),
       verdict = verdict$verdict,
+      severity = as.integer(verdict$severity),
       message = verdict$message,
       min_reference_bins_threshold = as.integer(min_ref_bins),
       mean_of_means = metrics$mean_of_means,
@@ -97,16 +106,55 @@ rwisecondorx_ref_qc <- function(reference,
       n_mean_outlier = metrics$n_mean_outlier,
       outlier_pct = metrics$outlier_pct,
       n_low_refs = metrics$n_low_refs,
-      n_target_bins_below_reference_bin_threshold = metrics$n_low_refs
+      n_target_bins_below_reference_bin_threshold = metrics$n_low_refs,
+      has_low_reference_bins = isTRUE(metrics$n_low_refs > 0L),
+      has_outlier_bins = isTRUE(metrics$n_mean_outlier > 0L),
+      branch_ready_for_prediction = isTRUE(verdict$severity < 2L)
     )
     if (!is.null(metrics$chrY)) {
       branch_report$chrY <- metrics$chrY
+      if (isTRUE(metrics$chrY$n_valid > 0L) && is.finite(metrics$chrY$usable_pct)) {
+        branch_report$has_chrY_low_usable_pct_warn <-
+          metrics$chrY$usable_pct < .ref_qc_chry_min_usable_pct_warn
+        branch_report$has_chrY_low_usable_pct_fail <-
+          metrics$chrY$usable_pct < .ref_qc_chry_min_usable_pct_fail
+      } else {
+        branch_report$has_chrY_low_usable_pct_warn <- NA
+        branch_report$has_chrY_low_usable_pct_fail <- NA
+      }
     }
     qc$metrics[[label]] <- branch_report
   }
 
   qc$worst_severity <- as.integer(worst)
   qc$overall_verdict <- c("PASS", "WARN", "FAIL")[qc$worst_severity + 1L]
+  if (length(qc$metrics)) {
+    qc$branch_summary <- do.call(
+      rbind,
+      lapply(names(qc$metrics), function(branch) {
+        m <- qc$metrics[[branch]]
+        data.frame(
+          branch = branch,
+          verdict = m$verdict,
+          severity = m$severity,
+          n_bins = m$n_bins,
+          n_valid = m$n_valid,
+          n_missing_mean_distance = m$n_missing_mean_distance,
+          n_low_refs = m$n_low_refs,
+          has_low_reference_bins = m$has_low_reference_bins,
+          has_outlier_bins = m$has_outlier_bins,
+          branch_ready_for_prediction = m$branch_ready_for_prediction,
+          stringsAsFactors = FALSE
+        )
+      })
+    )
+  }
+  qc$readiness <- list(
+    reference_mask_compatible = !length(compat_issues),
+    any_branch_fail = any(vapply(qc$metrics, function(x) identical(x$verdict, "FAIL"), logical(1L))),
+    ready_for_prediction = (qc$worst_severity < 2L) && !length(compat_issues),
+    evaluated_branches = names(qc$metrics)
+  )
   qc <- .as_wcx_reference_qc(qc)
 
   if (!is.null(output_json)) {

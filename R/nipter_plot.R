@@ -210,6 +210,13 @@ nipter_plot_qc_samples <- function(qc) {
     label_prune |
     (!is.na(df$max_abs_z) & df$max_abs_z > 3)
 
+  subtitle_counts <- sprintf(
+    "matching_outliers=%d | chromosomal_outliers=%d | aberrant_rows>0=%d",
+    sum(df$is_matching_outlier %in% TRUE, na.rm = TRUE),
+    sum(df$is_chromosomal_outlier %in% TRUE, na.rm = TRUE),
+    sum(df$n_aberrant_rows > 0L, na.rm = TRUE)
+  )
+
   ggplot2::ggplot(
     df,
     ggplot2::aes(x = mean_ssd, y = max_abs_z, color = status)
@@ -239,11 +246,13 @@ nipter_plot_qc_samples <- function(qc) {
       title = "Control Matching QC",
       subtitle = if (identical(qc$settings$outlier_rule, "bidirectional_or_multichromosome")) {
         paste(
+          subtitle_counts,
           "Only samples present in the supplied control group are plotted.",
           "This rule can retain points above |Z| when they do not meet the bidirectional-or-multi-chromosome drop condition."
         )
       } else {
         paste(
+          subtitle_counts,
           "Only samples present in the supplied control group are plotted.",
           "Under any_aberrant_score, retained samples should not exceed the pruning z cutoff."
         )

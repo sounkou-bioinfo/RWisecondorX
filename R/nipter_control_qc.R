@@ -195,6 +195,26 @@ nipter_control_group_qc <- function(control_group,
   )
   bin_summary <- if (isTRUE(include_bins)) .chi_profile_bin_summary(chi_profile) else NULL
 
+  n_matching_outliers <- sum(sample_summary$is_matching_outlier %in% TRUE, na.rm = TRUE)
+  n_chromosomal_outliers <- sum(sample_summary$is_chromosomal_outlier %in% TRUE, na.rm = TRUE)
+  n_samples_with_aberrant_rows <- sum(sample_summary$n_aberrant_rows > 0L, na.rm = TRUE)
+  n_reference_sex_outliers <- if ("is_reference_sex_outlier" %in% names(sample_summary)) {
+    sum(sample_summary$is_reference_sex_outlier %in% TRUE, na.rm = TRUE)
+  } else {
+    NA_integer_
+  }
+  sex_readiness <- if (!is.null(sex_summary) && nrow(sex_summary)) {
+    list(
+      n_sex_groups_with_ncv_ready = sum(sex_summary$can_build_ncv %in% TRUE, na.rm = TRUE),
+      n_sex_groups_with_regression_ready = sum(sex_summary$can_build_regression %in% TRUE, na.rm = TRUE)
+    )
+  } else {
+    list(
+      n_sex_groups_with_ncv_ready = NA_integer_,
+      n_sex_groups_with_regression_ready = NA_integer_
+    )
+  }
+
   .as_nipt_control_group_qc(list(
     sample_names = sample_names,
     chromosome_summary = chromosome_summary,
@@ -220,7 +240,13 @@ nipter_control_group_qc <- function(control_group,
       rbz_train_fraction = as.numeric(rbz_train_fraction),
       rbz_seed = if (is.null(rbz_seed)) NA_integer_ else as.integer(rbz_seed),
       rbz_exclude_chromosomes = as.integer(rbz_exclude_chromosomes),
-      sample_sex_counts = if (is.null(sample_sex)) NULL else as.list(table(sample_sex))
+      sample_sex_counts = if (is.null(sample_sex)) NULL else as.list(table(sample_sex)),
+      n_matching_outliers = n_matching_outliers,
+      n_chromosomal_outliers = n_chromosomal_outliers,
+      n_samples_with_aberrant_rows = n_samples_with_aberrant_rows,
+      n_reference_sex_outliers = n_reference_sex_outliers,
+      n_sex_groups_with_ncv_ready = sex_readiness$n_sex_groups_with_ncv_ready,
+      n_sex_groups_with_regression_ready = sex_readiness$n_sex_groups_with_regression_ready
     )
   ))
 }

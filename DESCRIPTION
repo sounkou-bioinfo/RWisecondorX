@@ -20,7 +20,7 @@ Description: An 'R' toolkit for copy number analysis and trisomy prediction in n
             Optional conformance testing against the official 'wisecondorx' bioconda package is available via 'condathis' and 'reticulate'; no Python installation is required at runtime.
 Imports: Rduckhts(>= 1.1.7.9000), Rcpp, stats, utils, DNAcopy, DBI, duckdb, mclust, S7 (>= 0.2.0), data.table
 LinkingTo: Rcpp
-Suggests: tinytest, condathis, reticulate, NIPTeR, jsonlite, ParDNAcopy, optparse, ggplot2
+Suggests: tinytest, condathis, reticulate, NIPTeR, jsonlite, ParDNAcopy, optparse, this.path, ggplot2
 Additional_repositories: https://rgenomicsetl.r-universe.dev, https://gsun2018.r-universe.dev
 biocViews:
 Config/WisecondorX/bioconda-package: wisecondorx

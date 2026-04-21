@@ -240,17 +240,13 @@
     }
 
     if (length(start_pos) != length(end_pos)) {
-      warning(
+      stop(
         sprintf(
-          "CBS NA-gap split mismatch on chr %s segment [%d, %d]; keeping the original segment unsplit.",
+          "CBS NA-gap split mismatch on chr %s segment [%d, %d]. Refuse to keep an unsplit fallback segment.",
           chr_i, start_i, end_i
         ),
         call. = FALSE
       )
-      n_new <- n_new + 1L
-      new_rows[[n_new]] <- data.frame(chr = chr_i, s = start_i,
-                                      e = end_i, r = seg_df$r[row_i])
-      next
     }
     stopifnot(length(start_pos) == length(end_pos))
 

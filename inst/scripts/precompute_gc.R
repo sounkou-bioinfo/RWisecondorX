@@ -15,6 +15,13 @@ if (!requireNamespace("optparse", quietly = TRUE)) {
   stop("optparse is required. Install it with: install.packages('optparse')",
        call. = FALSE)
 }
+if (!requireNamespace("this.path", quietly = TRUE)) {
+  stop("this.path is required. Install it with: install.packages('this.path')",
+       call. = FALSE)
+}
+
+.script_path <- normalizePath(this.path::this.path(), winslash = "/", mustWork = TRUE)
+.script_dir <- dirname(.script_path)
 
 library(optparse)
 

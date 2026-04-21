@@ -41,9 +41,28 @@
   raw_flat <- as.numeric(t(raw_auto))
   corrected_flat <- as.numeric(t(corrected_auto))
   valid <- !is.na(gc_auto) & gc_auto > 0 & is.finite(raw_flat) & raw_flat > 0
+  invalid <- !valid
+  invalid_gc_missing_or_nonfinite <- !is.finite(gc_auto)
+  invalid_gc_nonpositive <- is.finite(gc_auto) & gc_auto <= 0
+  invalid_raw_nonfinite <- !is.finite(raw_flat)
+  invalid_raw_nonpositive <- is.finite(raw_flat) & raw_flat <= 0
+  invalid_corrected_nonfinite <- !is.finite(corrected_flat)
+
+  valid_n <- sum(valid)
+  total_n <- length(valid)
 
   out_metrics <- list(
-    gc_loess_valid_bins = sum(valid),
+    gc_loess_valid_bins = valid_n,
+    gc_loess_total_bins = total_n,
+    gc_loess_invalid_bins = sum(invalid),
+    gc_loess_valid_bin_fraction_pct = if (total_n > 0L) 100 * valid_n / total_n else NA_real_,
+    gc_loess_invalid_gc_missing_or_nonfinite = sum(invalid & invalid_gc_missing_or_nonfinite),
+    gc_loess_invalid_gc_nonpositive = sum(invalid & invalid_gc_nonpositive),
+    gc_loess_invalid_raw_nonfinite = sum(invalid & invalid_raw_nonfinite),
+    gc_loess_invalid_raw_nonpositive = sum(invalid & invalid_raw_nonpositive),
+    gc_loess_invalid_corrected_nonfinite = sum(invalid & invalid_corrected_nonfinite),
+    gc_curve_has_valid_bins = isTRUE(valid_n > 0L),
+    gc_curve_has_loess_support = isTRUE(valid_n >= 10L && length(unique(gc_auto[valid])) >= 5L),
     nipter_autosomal_bin_cv_pre = NA_real_,
     nipter_autosomal_bin_cv_post = NA_real_,
     nipter_corrected_bin_ratio_mean = NA_real_,

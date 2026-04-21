@@ -10,7 +10,6 @@ if (!requireNamespace("optparse", quietly = TRUE)) {
   stop("optparse is required. Install it with install.packages('optparse').",
        call. = FALSE)
 }
-
 library(optparse)
 
 if (!exists("%||%", mode = "function")) {
@@ -130,6 +129,21 @@ if (!exists("%||%", mode = "function")) {
     return(NA_real_)
   }
   suppressWarnings(as.numeric(row[[col]][[1L]]))
+}
+
+.qc_logical <- function(row, col) {
+  if (is.null(row) || !nrow(row) || !(col %in% names(row))) {
+    return(NA)
+  }
+  as.logical(row[[col]][[1L]])
+}
+
+.qc_text <- function(row, col) {
+  if (is.null(row) || !nrow(row) || !(col %in% names(row))) {
+    return(NA_character_)
+  }
+  val <- as.character(row[[col]][[1L]])
+  if (is.na(val) || !nzchar(val) || identical(val, "NA")) NA_character_ else val
 }
 
 .rwx_stat_scalar <- function(prediction, chrom, field = "zscore") {
@@ -402,7 +416,8 @@ if (!exists("%||%", mode = "function")) {
                                       segment_zscore_cap,
                                       cpus,
                                       overwrite,
-                                      seed) {
+                                      seed,
+                                      sample_qc_row = NULL) {
   sample_dir <- .ensure_dir(file.path(out_dir, sample_name))
   outprefix <- file.path(sample_dir, sample_name)
   pred_rds <- file.path(sample_dir, "prediction.rds")
@@ -444,6 +459,10 @@ if (!exists("%||%", mode = "function")) {
     z_18 = .rwx_stat_scalar(prediction, 18, "zscore"),
     z_21 = .rwx_stat_scalar(prediction, 21, "zscore"),
     z_X = .rwx_stat_scalar(prediction, "X", "zscore"),
+    sample_metrics_ready = .qc_logical(sample_qc_row, "sample_metrics_ready"),
+    missing_native_metrics = .qc_logical(sample_qc_row, "missing_native_metrics"),
+    missing_nipter_preprocess_qc_metrics = .qc_logical(sample_qc_row, "missing_nipter_preprocess_qc_metrics"),
+    nipter_bed_status = .qc_text(sample_qc_row, "nipter_bed_status"),
     out_dir = sample_dir,
     stringsAsFactors = FALSE
   )
@@ -547,6 +566,18 @@ if (!exists("%||%", mode = "function")) {
     error = NA_character_,
     predicted_sex = sex_summary$predicted_sex[[1L]],
     too_few_reads_for_metrics = if (is.null(sample_qc_row)) NA else as.logical(sample_qc_row$too_few_reads_for_metrics[[1L]]),
+    sample_metrics_ready = .qc_logical(sample_qc_row, "sample_metrics_ready"),
+    seqff_metrics_ready = .qc_logical(sample_qc_row, "seqff_metrics_ready"),
+    y_unique_metrics_ready = .qc_logical(sample_qc_row, "y_unique_metrics_ready"),
+    native_metrics_ready = .qc_logical(sample_qc_row, "native_metrics_ready"),
+    nipter_preprocess_qc_ready = .qc_logical(sample_qc_row, "nipter_preprocess_qc_ready"),
+    missing_seqff_metrics = .qc_logical(sample_qc_row, "missing_seqff_metrics"),
+    missing_y_unique_metrics = .qc_logical(sample_qc_row, "missing_y_unique_metrics"),
+    missing_native_metrics = .qc_logical(sample_qc_row, "missing_native_metrics"),
+    missing_nipter_preprocess_qc_metrics = .qc_logical(sample_qc_row, "missing_nipter_preprocess_qc_metrics"),
+    gc_curve_has_valid_bins = .qc_logical(sample_qc_row, "gc_curve_has_valid_bins"),
+    gc_curve_has_loess_support = .qc_logical(sample_qc_row, "gc_curve_has_loess_support"),
+    nipter_bed_status = .qc_text(sample_qc_row, "nipter_bed_status"),
     z_13 = autosomal_summary$z_score[autosomal_summary$chromosome == 13L][[1L]],
     z_18 = autosomal_summary$z_score[autosomal_summary$chromosome == 18L][[1L]],
     z_21 = if (nrow(chr21)) chr21$z_score[[1L]] else NA_real_,
@@ -742,6 +773,7 @@ rwx_rows <- .run_stage_samples(
     row <- item[[1L]]
     sample_name <- row$sample_name[[1L]]
     bed_path <- row$rwcx_bed[[1L]]
+    sample_qc_row <- .match_sample_qc_row(sample_qc, sample_name)
     .log_sample(i, nrow(sample_manifest), "RWisecondorX predict", sample_name)
     if (!file.exists(bed_path)) {
       return(data.frame(
@@ -756,6 +788,10 @@ rwx_rows <- .run_stage_samples(
         z_18 = NA_real_,
         z_21 = NA_real_,
         z_X = NA_real_,
+        sample_metrics_ready = .qc_logical(sample_qc_row, "sample_metrics_ready"),
+        missing_native_metrics = .qc_logical(sample_qc_row, "missing_native_metrics"),
+        missing_nipter_preprocess_qc_metrics = .qc_logical(sample_qc_row, "missing_nipter_preprocess_qc_metrics"),
+        nipter_bed_status = .qc_text(sample_qc_row, "nipter_bed_status"),
         out_dir = file.path(dirs$rwisecondorx, sample_name),
         stringsAsFactors = FALSE
       ))
@@ -779,7 +815,8 @@ rwx_rows <- .run_stage_samples(
         segment_zscore_cap = as.numeric(opts$`rwcx-segment-zscore-cap`),
         cpus = worker_threads,
         overwrite = isTRUE(opts$overwrite),
-        seed = opts$seed
+        seed = opts$seed,
+        sample_qc_row = sample_qc_row
       ),
       error = function(e) {
         data.frame(
@@ -794,6 +831,10 @@ rwx_rows <- .run_stage_samples(
           z_18 = NA_real_,
           z_21 = NA_real_,
           z_X = NA_real_,
+          sample_metrics_ready = .qc_logical(sample_qc_row, "sample_metrics_ready"),
+          missing_native_metrics = .qc_logical(sample_qc_row, "missing_native_metrics"),
+          missing_nipter_preprocess_qc_metrics = .qc_logical(sample_qc_row, "missing_nipter_preprocess_qc_metrics"),
+          nipter_bed_status = .qc_text(sample_qc_row, "nipter_bed_status"),
           out_dir = file.path(dirs$rwisecondorx, sample_name),
           stringsAsFactors = FALSE
         )
@@ -820,6 +861,18 @@ nipter_rows <- .run_stage_samples(
         error = paste("Missing NIPTeR BED:", bed_path),
         predicted_sex = NA_character_,
         too_few_reads_for_metrics = if (is.null(sample_qc_row)) NA else as.logical(sample_qc_row$too_few_reads_for_metrics[[1L]]),
+        sample_metrics_ready = .qc_logical(sample_qc_row, "sample_metrics_ready"),
+        seqff_metrics_ready = .qc_logical(sample_qc_row, "seqff_metrics_ready"),
+        y_unique_metrics_ready = .qc_logical(sample_qc_row, "y_unique_metrics_ready"),
+        native_metrics_ready = .qc_logical(sample_qc_row, "native_metrics_ready"),
+        nipter_preprocess_qc_ready = .qc_logical(sample_qc_row, "nipter_preprocess_qc_ready"),
+        missing_seqff_metrics = .qc_logical(sample_qc_row, "missing_seqff_metrics"),
+        missing_y_unique_metrics = .qc_logical(sample_qc_row, "missing_y_unique_metrics"),
+        missing_native_metrics = .qc_logical(sample_qc_row, "missing_native_metrics"),
+        missing_nipter_preprocess_qc_metrics = .qc_logical(sample_qc_row, "missing_nipter_preprocess_qc_metrics"),
+        gc_curve_has_valid_bins = .qc_logical(sample_qc_row, "gc_curve_has_valid_bins"),
+        gc_curve_has_loess_support = .qc_logical(sample_qc_row, "gc_curve_has_loess_support"),
+        nipter_bed_status = .qc_text(sample_qc_row, "nipter_bed_status"),
         z_13 = NA_real_,
         z_18 = NA_real_,
         z_21 = NA_real_,
@@ -860,6 +913,18 @@ nipter_rows <- .run_stage_samples(
           error = conditionMessage(e),
           predicted_sex = NA_character_,
           too_few_reads_for_metrics = if (is.null(sample_qc_row)) NA else as.logical(sample_qc_row$too_few_reads_for_metrics[[1L]]),
+          sample_metrics_ready = .qc_logical(sample_qc_row, "sample_metrics_ready"),
+          seqff_metrics_ready = .qc_logical(sample_qc_row, "seqff_metrics_ready"),
+          y_unique_metrics_ready = .qc_logical(sample_qc_row, "y_unique_metrics_ready"),
+          native_metrics_ready = .qc_logical(sample_qc_row, "native_metrics_ready"),
+          nipter_preprocess_qc_ready = .qc_logical(sample_qc_row, "nipter_preprocess_qc_ready"),
+          missing_seqff_metrics = .qc_logical(sample_qc_row, "missing_seqff_metrics"),
+          missing_y_unique_metrics = .qc_logical(sample_qc_row, "missing_y_unique_metrics"),
+          missing_native_metrics = .qc_logical(sample_qc_row, "missing_native_metrics"),
+          missing_nipter_preprocess_qc_metrics = .qc_logical(sample_qc_row, "missing_nipter_preprocess_qc_metrics"),
+          gc_curve_has_valid_bins = .qc_logical(sample_qc_row, "gc_curve_has_valid_bins"),
+          gc_curve_has_loess_support = .qc_logical(sample_qc_row, "gc_curve_has_loess_support"),
+          nipter_bed_status = .qc_text(sample_qc_row, "nipter_bed_status"),
           z_13 = NA_real_,
           z_18 = NA_real_,
           z_21 = NA_real_,
@@ -891,6 +956,20 @@ cohort_summary <- Reduce(
 )
 .write_tsv(cohort_summary, file.path(out_root, "cohort_summary.tsv"))
 
+prediction_readiness <- cohort_summary[, intersect(c(
+  "sample_name",
+  "status_rwisecondorx", "status_nipter",
+  "sample_metrics_ready_rwisecondorx", "sample_metrics_ready_nipter",
+  "missing_native_metrics_rwisecondorx", "missing_native_metrics_nipter",
+  "missing_nipter_preprocess_qc_metrics_rwisecondorx", "missing_nipter_preprocess_qc_metrics_nipter",
+  "seqff_metrics_ready", "y_unique_metrics_ready", "native_metrics_ready", "nipter_preprocess_qc_ready",
+  "missing_seqff_metrics", "missing_y_unique_metrics", "missing_native_metrics", "missing_nipter_preprocess_qc_metrics",
+  "gc_curve_has_valid_bins", "gc_curve_has_loess_support",
+  "nipter_bed_status_rwisecondorx", "nipter_bed_status_nipter"
+), names(cohort_summary)), drop = FALSE]
+.write_tsv(prediction_readiness, file.path(out_root, "prediction_readiness.tsv"))
+
 cat(sprintf("RWisecondorX summary: %s\n", file.path(out_root, "rwisecondorx_summary.tsv")))
 cat(sprintf("NIPTeR summary: %s\n", file.path(out_root, "nipter_summary.tsv")))
 cat(sprintf("Combined cohort summary: %s\n", file.path(out_root, "cohort_summary.tsv")))
+cat(sprintf("Prediction readiness summary: %s\n", file.path(out_root, "prediction_readiness.tsv")))

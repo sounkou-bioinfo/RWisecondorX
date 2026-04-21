@@ -137,6 +137,22 @@ gender_high <- .predict_gender(s_high_y, trained_cutoff = 0.001)
 expect_equal(gender_high, "M",
              info = "high Y-fraction sample classified as male")
 
+# Manual gender-model cutoffs must remain deterministic when supplied
+manual_gender_model <- .train_gender_model(
+  list(.make_female_sample(n_bins = 30L, seed = 1), .make_male_sample(n_bins = 30L, seed = 2)),
+  yfrac = 0.005
+)
+expect_identical(manual_gender_model$cutoff, 0.005,
+                 info = "manual gender-model cutoff is used exactly when supplied")
+
+s_zero_total <- stats::setNames(vector("list", 24L), as.character(1:24))
+for (k in names(s_zero_total)) s_zero_total[[k]] <- integer(0)
+expect_error(
+  .predict_gender(s_zero_total, trained_cutoff = 0.001),
+  pattern = "total read count is non-finite or zero",
+  info = "predict_gender errors on zero-total samples instead of classifying by fallback"
+)
+
 # ===========================================================================
 # Tests for .get_mask()
 # ===========================================================================
@@ -163,6 +179,12 @@ n_total <- sum(mask_info$bins_per_chr)
 expect_true(n_kept > n_total * 0.8,
             info = "uniform-coverage mask keeps most bins")
 
+expect_error(
+  .get_mask(list(s_zero_total, s_zero_total)),
+  pattern = "non-finite or zero total coverage",
+  info = "get_mask errors on zero-coverage reference samples"
+)
+
 # ===========================================================================
 # Tests for .normalize_and_mask()
 # ===========================================================================
@@ -176,6 +198,12 @@ expect_true(is.matrix(nm_data),
             info = ".normalize_and_mask returns a matrix")
 expect_equal(ncol(nm_data), 10L,
              info = ".normalize_and_mask has one column per sample")
+
+expect_error(
+  .normalize_and_mask(list(s_zero_total, s_zero_total), chr_range = 1:22, mask = logical(0)),
+  pattern = "non-finite or zero total coverage",
+  info = ".normalize_and_mask errors on zero-coverage samples"
+)
 
 # ===========================================================================
 # Tests for .train_pca() and .project_pc()
@@ -359,6 +387,7 @@ if (has_mclust && has_dnacopy) {
       binsize     = 100000L,
       nipt        = FALSE,
       refsize     = 10L,  # small for testing speed
+      yfrac       = 0.005,
       cpus        = 1L
     )
   )
@@ -384,7 +413,9 @@ if (has_mclust && has_dnacopy) {
   expect_true(qc$overall_verdict %in% c("PASS", "WARN", "FAIL"),
               info = "QC report has a valid overall verdict")
   expect_identical(sort(names(qc$metrics)), c("F", "M"),
-                   info = "non-NIPT QC reports female and male branches")
+                   info = "non-NIPT QC reports female and male gonosomal branches")
+  expect_identical(sort(qc$readiness$evaluated_branches), c("F", "M"),
+                   info = "QC readiness reports the evaluated non-NIPT branches")
   expect_true(all(vapply(qc$metrics, function(branch) {
     is.finite(branch$mean_of_means) &&
       is.finite(branch$std_of_means) &&
@@ -500,6 +531,7 @@ if (has_mclust && has_dnacopy) {
       binsize = 100000L,
       nipt    = TRUE,
       refsize = 10L,
+      yfrac   = 0.005,
       cpus    = 1L
     )
   )
@@ -509,7 +541,9 @@ if (has_mclust && has_dnacopy) {
 
   qc_nipt <- rwisecondorx_ref_qc(ref_nipt, min_ref_bins = 5L)
   expect_identical(names(qc_nipt$metrics), "F",
-                   info = "NIPT QC follows upstream female-only branch selection")
+                   info = "NIPT QC reports the female branch only")
+  expect_identical(qc_nipt$readiness$evaluated_branches, "F",
+                   info = "NIPT QC readiness reports the evaluated female branch")
 
 } else {
   if (!has_mclust) {
@@ -541,3 +575,4 @@ expect_equal(length(s_empty_scaled[["1"]]), 0L,
              info = "empty chromosome stays empty after scaling")
 expect_equal(length(s_empty_scaled[["2"]]), 5L,
              info = "non-empty chromosome scaled correctly")
+

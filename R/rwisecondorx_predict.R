@@ -225,6 +225,12 @@ rwisecondorx_predict <- function(sample,
   # partition's own autosomal cum count for a correct split.
   null_ratios_gon_key <- .ref_key("null_ratios.", ref_gender)
   null_ratios_gon_full <- reference[[null_ratios_gon_key]]
+  if (nrow(null_ratios_gon_full) < aut_mapped$n_aut_gon) {
+    stop(
+      "RWisecondorX reference contract violation: gonosomal null-ratio matrix has fewer rows than masked autosomal bins in the selected partition.",
+      call. = FALSE
+    )
+  }
   null_ratios_gon <- null_ratios_gon_full[-seq_len(aut_mapped$n_aut_gon), , drop = FALSE]
   null_ratios_aut <- aut_mapped$null_ratios_aut
 
@@ -410,20 +416,18 @@ rwisecondorx_predict <- function(sample,
   mapped_ranks <- a_rank[g_idx]
   keep <- mapped_ranks > 0L
 
-  remap_aut <- function(aut_vec) {
-    out <- numeric(length(g_idx))
-    out[keep] <- aut_vec[mapped_ranks[keep]]
-    out
+  if (any(!keep)) {
+    stop(
+      "RWisecondorX reference contract violation: gonosomal autosomal mask includes bins absent from autosomal branch A. Refuse to fabricate remapped zeros.",
+      call. = FALSE
+    )
   }
 
-  null_ratios_aut <- matrix(
-    0,
-    nrow = length(g_idx),
-    ncol = ncol(null_ratios_aut_full)
-  )
-  if (any(keep)) {
-    null_ratios_aut[keep, ] <- null_ratios_aut_full[mapped_ranks[keep], , drop = FALSE]
+  remap_aut <- function(aut_vec) {
+    aut_vec[mapped_ranks]
   }
+
+  null_ratios_aut <- null_ratios_aut_full[mapped_ranks, , drop = FALSE]
 
   list(
     r = remap_aut(aut$results_r),

@@ -42,9 +42,19 @@ official bioconda package without requiring a manual conda setup.
 
 ## Installation
 
-Install the development version from GitHub:
+`RWisecondorX` is developed against the current edge of `Rduckhts`, not
+an older CRAN snapshot. Install `Rduckhts` from the r-universe first,
+then install `RWisecondorX`:
 
 ``` r
+install.packages(
+  "Rduckhts",
+  repos = c(
+    "https://rgenomicsetl.r-universe.dev",
+    "https://cloud.r-project.org"
+  )
+)
+
 # install.packages("pak")
 pak::pak("sounkou-bioinfo/RWisecondorX")
 ```
@@ -132,6 +142,51 @@ pred$aberrations
 package is not installed, call `rwisecondorx_predict(..., parallel =
 FALSE)` to use serial `DNAcopy::segment()`.
 
+The native predictor also exposes the two upstream predict controls most
+often needed in practice:
+
+  - `beta` for purity-based ratio calling
+  - `gender = "F"` / `"M"` to force the gonosomal branch instead of
+    using the Y-fraction classifier
+
+<!-- end list -->
+
+``` r
+pred_forced <- rwisecondorx_predict(
+  test_sample,
+  ref,
+  gender = "F",
+  beta = NULL,
+  seed = 42L
+)
+```
+
+### Native WisecondorX QC And Outputs
+
+On the native R side, prediction output is currently tabular rather than
+graphical:
+
+  - `write_wisecondorx_output()` writes
+      - `<outprefix>_bins.bed`
+      - `<outprefix>_segments.bed`
+      - `<outprefix>_aberrations.bed`
+      - `<outprefix>_statistics.txt`
+  - `rwisecondorx_ref_qc()` runs the upstream-style reference QC
+    heuristics and returns a structured report, with optional JSON
+    output
+
+<!-- end list -->
+
+``` r
+qc <- rwisecondorx_ref_qc(ref, output_json = "reference_qc.json")
+write_wisecondorx_output(pred, outprefix = "results/sample_01")
+```
+
+The package does **not yet** provide native ggplot helpers for
+`WisecondorXPrediction` objects. If you need the upstream PNG/PDF
+plotting behaviour, use the CLI wrapper `wisecondorx_predict(..., plot =
+TRUE)` instead.
+
 ### Multi-File BED Input For Reference Building
 
 `rwisecondorx_newref()` also accepts a directory of 4-column BED.gz
@@ -208,6 +263,13 @@ wisecondorx_predict(
 )
 ```
 
+The wrappers keep the upstream plotting and manual override controls
+explicit:
+
+  - `wisecondorx_newref(..., yfrac = ..., plotyfrac = ...)`
+  - `wisecondorx_predict(..., beta = ..., gender = ..., plot = TRUE,
+    add_plot_title = TRUE, ylim = c(-0.5, 0.5), cairo = TRUE)`
+
 For cohort preprocessing and reference building, the package now keeps
 the native and upstream WisecondorX paths explicit:
 
@@ -222,6 +284,8 @@ the native and upstream WisecondorX paths explicit:
     RDS reference from BED.gz files
   - `inst/scripts/build_reference.R --mode wisecondorx` builds an
     upstream NPZ reference from NPZ files
+  - `inst/scripts/predict_cohort.R` scores a preprocessed cohort against
+    native RWisecondorX and/or NIPTeR references
   - `inst/scripts/wisecondorx_conformance.R` takes those prepared
     artifacts (`bed` + `npz` test cases, plus both references), runs
     both `predict` paths, and compares the resulting per-bin `_bins.bed`
@@ -356,6 +420,57 @@ reg21 <- nipter_regression(test_sample, cg, chromo_focus = 21)
 reg21$models[[1]]$z_score
 reg21$models[[1]]$predictors
 ```
+
+### Reference Building, QC, And Plots
+
+For production NIPTeR workflows, the package now exposes a typed
+reference-building and QC layer rather than only the primitive scoring
+functions:
+
+  - `nipter_build_reference()` packages the control group, sex models,
+    and reference frame
+  - `nipter_build_gaunosome_models()` adds sex-stratified X/Y NCV and
+    regression models
+  - `nipter_control_group_qc()` computes chromosome-, sample-,
+    sex-model-, and optional bin-level QC summaries
+  - `write_nipter_reference_plots()` writes the current QC/sex-model
+    plot bundle
+
+<!-- end list -->
+
+``` r
+reference <- nipter_build_reference(
+  cg,
+  sample_sex = sample_sex,
+  y_unique_ratios = y_unique_ratios
+)
+reference <- nipter_build_gaunosome_models(reference)
+
+qc <- nipter_control_group_qc(
+  reference$control_group,
+  reference_model = reference,
+  include_bins = TRUE
+)
+
+plot_paths <- write_nipter_reference_plots(
+  qc,
+  reference,
+  outprefix = "nipter_reference_qc"
+)
+```
+
+The current NIPTeR plotting helpers are:
+
+  - `nipter_plot_qc_chromosomes()` for chromosome CV summaries across Z,
+    NCV, and RBZ, including XX/XY sex-model rows
+  - `nipter_plot_qc_samples()` for retained-vs-outlier control
+    diagnostics
+  - `nipter_plot_qc_bins(..., metric = "cv_scaled" | "chi_z")` for
+    autosomal bin-level QC
+  - `nipter_plot_reference_sex_boxplots()` for
+    fraction/Y-unique/sex-cluster-Z distributions
+  - `nipter_plot_reference_sex_scatter(..., space = "fraction" |
+    "ratio")` for X/Y and RR spaces
 
 ## Sex Prediction
 

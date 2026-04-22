@@ -30,7 +30,9 @@ The output is a 5-column, tab-delimited TSV.bgz:
 \code{chrom}, \code{start}, \code{end}, \code{pct_gc}, \code{seq_len}.
 Coordinates are 0-based half-open intervals (BED convention). Chromosomes
 use no \code{chr} prefix (\code{1}--\code{22}, \code{X}, \code{Y}).
-Bins where all bases are N are written with \code{pct_gc = NA}.
+GC is computed on callable \code{A/C/G/T} sequence only, excluding
+\code{N}/ambiguous bases from the denominator. Bins with no callable
+sequence are written with \code{pct_gc = NA}.
 }
 \examples{
 \dontrun{

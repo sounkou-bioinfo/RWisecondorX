@@ -23,9 +23,9 @@
 
 * Preprocess and prediction cohort scripts now emit more machine-readable QC
   surfaces. Sample-level outputs include metric readiness/missingness flags,
-  GC loess valid/invalid bin summaries, optional GC-curve data TSVs, and new
-  `sample_readiness.tsv`, `qc_flag_summary.tsv`, and
-  `prediction_readiness.tsv` artifacts alongside the existing summary tables.
+  GC loess valid/invalid bin summaries, optional GC-curve data TSVs, and the
+  main sample/cohort summary tables without extra redundant readiness-only
+  projections.
 
 * `sample_metrics` and NIPTeR QC/report helpers now propagate explicit
   degraded-state signals instead of burying them in sparse side fields. This

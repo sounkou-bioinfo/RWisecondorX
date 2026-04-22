@@ -26,7 +26,7 @@ already built by \code{\link{nipter_build_sex_regression_models}}.}
 
 \item{sample_predictors}{Optional named list of extra predictor values for
 the sample, used when the fitted regression models include extra columns
-such as \code{GCPCTAfterFiltering}.}
+such as \code{gc_read_perc_post}.}
 }
 \value{
 A typed \code{NIPTSexRegressionScore}.

@@ -91,7 +91,7 @@ if (nzchar(.helper_nipter)) {
   )
 }
 
-.check_bam_convert_native_stats_metadata <- function() {
+.check_bam_convert_read_counts_metadata <- function() {
   mixed_bam <- system.file("extdata", "fixture_mixed.bam", package = "Rduckhts")
   if (!nzchar(mixed_bam)) {
     return(invisible(NULL))
@@ -118,17 +118,21 @@ if (nzchar(.helper_nipter)) {
     info = "bam_convert_bed preserves explicit caller metadata"
   )
   expect_identical(
-    meta[["native_bin_stats"]],
-    "gc,mq",
-    info = "bam_convert_bed appends native stats metadata when metadata output is enabled"
+    meta[["read_counts_source"]],
+    "samtools_idxstats+bam_bin_counts(gc,mq)",
+    info = "bam_convert_bed appends read-count provenance metadata"
   )
   expect_true(
-    "gc_perc_pre_weighted_mean" %in% names(meta),
+    "gc_read_perc_pre" %in% names(meta),
     info = "bam_convert_bed metadata includes aggregated prefilter GC"
   )
   expect_true(
-    "mean_mapq_post_weighted_mean" %in% names(meta),
+    "mean_mapq_post" %in% names(meta),
     info = "bam_convert_bed metadata includes aggregated postfilter MAPQ"
+  )
+  expect_true(
+    "read_counts_input_total" %in% names(meta),
+    info = "bam_convert_bed metadata includes alignment-total read counts"
   )
 
   bins <- .with_duckhts_con(function(con) bed_to_sample(bed_gz, binsize = 5000L, con = con))
@@ -142,8 +146,8 @@ if (nzchar(.helper_nipter)) {
     info = "bed_to_sample still reads a metadata-bearing bam_convert_bed body"
   )
   expect_true(
-    as.numeric(meta[["count_total_sum"]]) >= total_from_body,
-    info = "native metadata count summary is compatible with the BED body totals"
+    as.numeric(meta[["read_counts_binned_post_sum"]]) >= total_from_body,
+    info = "read-count metadata is compatible with the BED body totals"
   )
 }
 
@@ -192,7 +196,7 @@ if (nzchar(.helper_nipter)) {
       bed = bed_gz,
       binsize = 50000L,
       con = con,
-      metadata = RWisecondorX:::.sample_metrics_tabix_metadata(
+      metadata = RWisecondorX:::.sample_qc_tabix_metadata(
         seqff = seqff,
         y_unique = y_unique,
         filters_pre = list(mapq = 0L, require_flags = 0L, exclude_flags = 0L),
@@ -202,10 +206,12 @@ if (nzchar(.helper_nipter)) {
   })
 
   meta <- .with_duckhts_con(function(con) tabix_metadata(bed_gz, con = con))
-  expect_identical(meta[["ff_seqff_pre"]], "0.07",
+  expect_identical(meta[["seqff_pre"]], "0.07",
                    info = "sample metrics metadata includes nonfiltered SeqFF")
-  expect_identical(meta[["ff_seqff_post"]], "0.06",
+  expect_identical(meta[["seqff_post"]], "0.06",
                    info = "sample metrics metadata includes filtered SeqFF")
+  expect_identical(meta[["fetal_fraction_post"]], "0.06",
+                   info = "sample QC metadata includes the current filtered fetal-fraction summary")
   expect_identical(meta[["y_unique_ratio_pre"]], "0.001",
                    info = "sample metrics metadata includes nonfiltered Y-unique ratio")
   expect_identical(meta[["y_unique_ratio_post"]], "8e-04",
@@ -228,5 +234,5 @@ if (nzchar(.helper_nipter)) {
 
 .check_generic_metadata_roundtrip()
 .check_nipter_metadata_roundtrip()
-.check_bam_convert_native_stats_metadata()
+.check_bam_convert_read_counts_metadata()
 .check_sample_metrics_metadata_roundtrip()

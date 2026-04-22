@@ -28,7 +28,7 @@ for the z-score component. Default \code{2L}.}
 
 \item{sample_predictors}{Optional named list of extra predictor values for
 the sample, used when the regression models include extra columns such as
-\code{GCPCTAfterFiltering}.}
+\code{gc_read_perc_post}.}
 
 \item{focus_chromosomes}{Character vector; any subset of \code{c("X", "Y")}.}
 }

@@ -7,7 +7,7 @@ suppressPackageStartupMessages({
 
 option_list <- list(
   make_option("--rwisecondorx-ref", type = "character",
-              help = "Path to native RWisecondorX reference RDS."),
+              help = "Path to RWisecondorX reference RDS."),
   make_option("--wisecondorx-ref", type = "character",
               help = "Path to upstream WisecondorX reference NPZ."),
   make_option("--case-manifest", type = "character", default = NULL,

@@ -228,7 +228,6 @@ bam_convert_bed <- function(bam,
     on.exit(DBI::dbDisconnect(con, shutdown = TRUE), add = TRUE)
   }
 
-  needs_native_stats <- !is.null(metadata)
   rows <- .bam_bin_count_rows(
     con = con,
     bam = bam,
@@ -238,8 +237,8 @@ bam_convert_bed <- function(bam,
     exclude_flags = exclude_flags,
     rmdup = rmdup,
     reference = reference,
-    stats = if (needs_native_stats) "gc,mq" else NULL,
-    include_unmapped = isTRUE(needs_native_stats)
+    stats = "gc,mq",
+    include_unmapped = TRUE
   )
   chr_lengths <- .bam_chr_lengths(con, bam)
   bins <- .as_wcx_sample(
@@ -277,7 +276,13 @@ bam_convert_bed <- function(bam,
     tmp,
     metadata = .merge_tabix_metadata(
       metadata,
-      if (needs_native_stats) .bam_bin_stats_metadata(rows) else NULL
+      .merge_tabix_metadata(
+        .merge_tabix_metadata(
+          .bam_alignment_count_metadata(con, bam),
+          .bam_read_counts_metadata(rows)
+        ),
+        list(read_counts_source = "samtools_idxstats+bam_bin_counts(gc,mq)")
+      )
     )
   )
 
@@ -407,61 +412,95 @@ bam_convert_bed <- function(bam,
   stats::weighted.mean(values[ok], weights[ok])
 }
 
-.bam_bin_stats_metadata <- function(rows) {
+.bam_alignment_count_metadata <- function(con, bam) {
+  stopifnot(is.character(bam), length(bam) == 1L, nzchar(bam), file.exists(bam))
+
+  out_tsv <- tempfile(fileext = ".idxstats.tsv")
+  on.exit(unlink(out_tsv), add = TRUE)
+
+  result <- Rduckhts::rduckhts_samtools_idxstats(
+    con = con,
+    path = bam,
+    output = out_tsv,
+    overwrite = TRUE
+  )
+  if (!nrow(result) || !isTRUE(result$success[[1L]]) || !file.exists(out_tsv)) {
+    stop(
+      "Failed to compute idxstats-style alignment counts for ", bam,
+      if (nrow(result) && "error_message" %in% names(result) &&
+          !is.na(result$error_message[[1L]]) &&
+          nzchar(result$error_message[[1L]])) {
+        paste0(": ", result$error_message[[1L]])
+      } else {
+        "."
+      },
+      call. = FALSE
+    )
+  }
+
+  idxstats <- utils::read.delim(
+    out_tsv,
+    sep = "\t",
+    header = FALSE,
+    check.names = FALSE,
+    col.names = c("chromosome", "chromosome_length", "mapped_reads", "unmapped_reads")
+  )
+
+  mapped_total <- sum(as.numeric(idxstats$mapped_reads), na.rm = TRUE)
+  unmapped_total <- sum(as.numeric(idxstats$unmapped_reads), na.rm = TRUE)
+
+  list(
+    read_counts_input_total = mapped_total + unmapped_total,
+    read_counts_mapped_total = mapped_total,
+    read_counts_unmapped_total = unmapped_total
+  )
+}
+
+.bam_read_counts_metadata <- function(rows) {
   if (!nrow(rows)) {
     return(NULL)
   }
 
-  out <- list(
-    native_bin_stats = "gc,mq",
-    n_rows_stats = nrow(rows),
-    native_stats_source = "bam_bin_counts(gc,mq)"
-  )
+  out <- list()
   if ("count_total" %in% names(rows)) {
-    out$count_total_sum <- sum(as.numeric(rows$count_total), na.rm = TRUE)
-    out$total_read_starts_post <- out$count_total_sum
-    out$n_nonzero_bins_post <- sum(as.numeric(rows$count_total) > 0, na.rm = TRUE)
+    out$read_counts_binned_post_sum <- sum(as.numeric(rows$count_total), na.rm = TRUE)
+    out$read_counts_binned_nonzero_bins_post <- sum(as.numeric(rows$count_total) > 0, na.rm = TRUE)
   }
   if ("count_fwd" %in% names(rows)) {
-    out$count_fwd_sum <- sum(as.numeric(rows$count_fwd), na.rm = TRUE)
+    out$read_counts_binned_fwd_sum <- sum(as.numeric(rows$count_fwd), na.rm = TRUE)
   }
   if ("count_rev" %in% names(rows)) {
-    out$count_rev_sum <- sum(as.numeric(rows$count_rev), na.rm = TRUE)
+    out$read_counts_binned_rev_sum <- sum(as.numeric(rows$count_rev), na.rm = TRUE)
   }
   if ("count_pre" %in% names(rows)) {
-    out$count_pre_sum <- sum(as.numeric(rows$count_pre), na.rm = TRUE)
-    out$total_read_starts_pre <- out$count_pre_sum
+    out$read_counts_binned_pre_sum <- sum(as.numeric(rows$count_pre), na.rm = TRUE)
   }
   if (all(c("gc_perc_pre", "count_pre") %in% names(rows))) {
-    out$gc_perc_pre_weighted_mean <- .weighted_mean_or_na(
+    out$gc_read_perc_pre <- .weighted_mean_or_na(
       as.numeric(rows$gc_perc_pre),
       as.numeric(rows$count_pre)
     )
-    out$gc_read_perc_pre <- out$gc_perc_pre_weighted_mean
-    out$GCPCTBeforeFiltering <- out$gc_perc_pre_weighted_mean
   }
   if (all(c("gc_perc_post", "count_total") %in% names(rows))) {
-    out$gc_perc_post_weighted_mean <- .weighted_mean_or_na(
+    out$gc_read_perc_post <- .weighted_mean_or_na(
       as.numeric(rows$gc_perc_post),
       as.numeric(rows$count_total)
     )
-    out$gc_read_perc_post <- out$gc_perc_post_weighted_mean
-    out$GCPCTAfterFiltering <- out$gc_perc_post_weighted_mean
   }
   if (all(c("mean_mapq_post", "count_total") %in% names(rows))) {
-    out$mean_mapq_post_weighted_mean <- .weighted_mean_or_na(
+    out$mean_mapq_post <- .weighted_mean_or_na(
       as.numeric(rows$mean_mapq_post),
       as.numeric(rows$count_total)
     )
-    out$mean_mapq_post <- out$mean_mapq_post_weighted_mean
   }
-  if (!is.null(out$count_pre_sum) &&
-      !is.null(out$count_total_sum) &&
-      is.finite(out$count_pre_sum) &&
-      out$count_pre_sum > 0 &&
-      is.finite(out$count_total_sum)) {
-    out$total_read_starts_retained_fraction <-
-      as.numeric(out$count_total_sum) / as.numeric(out$count_pre_sum)
+  if (!is.null(out$read_counts_binned_pre_sum) &&
+      !is.null(out$read_counts_binned_post_sum) &&
+      is.finite(out$read_counts_binned_pre_sum) &&
+      out$read_counts_binned_pre_sum > 0 &&
+      is.finite(out$read_counts_binned_post_sum)) {
+    out$read_counts_binned_retained_fraction <-
+      as.numeric(out$read_counts_binned_post_sum) /
+      as.numeric(out$read_counts_binned_pre_sum)
   }
 
   out[!vapply(out, is.null, logical(1L))]

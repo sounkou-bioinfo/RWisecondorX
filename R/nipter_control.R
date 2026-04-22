@@ -320,10 +320,10 @@ nipter_drop_control_group_samples <- function(control_group, sample_names) {
 #'   are inferred.
 #' @param total_unique_reads_col Optional total-unique-reads column in
 #'   \code{sample_qc}. Required when either read-depth threshold is supplied.
-#'   If \code{NULL}, common names such as \code{TotalUniqueReads} are inferred.
+#'   If \code{NULL}, \code{read_counts_binned_post_sum} is inferred.
 #' @param gc_col Optional GC column in \code{sample_qc}. Required when
-#'   \code{gc_mad_cutoff} is supplied. If \code{NULL}, common names such as
-#'   \code{GCPCTAfterFiltering} are inferred.
+#'   \code{gc_mad_cutoff} is supplied. If \code{NULL},
+#'   \code{gc_read_perc_post} is inferred.
 #' @param min_total_unique_reads Optional minimum allowed total unique reads.
 #'   Samples below this threshold are dropped.
 #' @param max_total_unique_reads Optional maximum allowed total unique reads.
@@ -426,8 +426,7 @@ nipter_filter_control_group_qc <- function(control_group,
     total_unique_reads_col <- .match_sample_qc_col(
       qc,
       total_unique_reads_col,
-      c("TotalUniqueReads", "total_unique_reads", "total_unique_reads_filtered",
-        "UniqueReads", "unique_reads"),
+      c("read_counts_binned_post_sum"),
       "total-unique-reads"
     )
     reads_vals <- suppressWarnings(as.numeric(qc[[total_unique_reads_col]]))
@@ -455,8 +454,7 @@ nipter_filter_control_group_qc <- function(control_group,
     gc_col <- .match_sample_qc_col(
       qc,
       gc_col,
-      c("GCPCTAfterFiltering", "gc_after_filtering", "gc_pct_after_filtering",
-        "GCPCT", "gc_pct", "gc"),
+      c("gc_read_perc_post"),
       "GC"
     )
     gc_vals <- suppressWarnings(as.numeric(qc[[gc_col]]))

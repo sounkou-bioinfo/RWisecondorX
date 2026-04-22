@@ -306,7 +306,6 @@ nipter_bin_bam_bed <- function(bam,
   }
 
   rmdup <- match.arg(rmdup)
-  needs_native_stats <- !is.null(metadata)
   rows <- .bam_bin_count_rows(
     con = con,
     bam = bam,
@@ -316,8 +315,8 @@ nipter_bin_bam_bed <- function(bam,
     exclude_flags = as.integer(exclude_flags),
     rmdup = rmdup,
     reference = reference,
-    stats = if (needs_native_stats) "gc,mq" else NULL,
-    include_unmapped = isTRUE(needs_native_stats)
+    stats = "gc,mq",
+    include_unmapped = TRUE
   )
   chr_lengths <- .bam_chr_lengths(con, bam)
   name <- sub("\\.cram$|\\.bam$", "", basename(bam), ignore.case = TRUE)
@@ -335,7 +334,13 @@ nipter_bin_bam_bed <- function(bam,
                         index     = index,
                         metadata  = .merge_tabix_metadata(
                           metadata,
-                          if (needs_native_stats) .bam_bin_stats_metadata(rows) else NULL
+                          .merge_tabix_metadata(
+                            .merge_tabix_metadata(
+                              .bam_alignment_count_metadata(con, bam),
+                              .bam_read_counts_metadata(rows)
+                            ),
+                            list(read_counts_source = "samtools_idxstats+bam_bin_counts(gc,mq)")
+                          )
                         ))
 }
 

@@ -28,11 +28,11 @@ are inferred.}
 
 \item{total_unique_reads_col}{Optional total-unique-reads column in
 \code{sample_qc}. Required when either read-depth threshold is supplied.
-If \code{NULL}, common names such as \code{TotalUniqueReads} are inferred.}
+If \code{NULL}, \code{read_counts_binned_post_sum} is inferred.}
 
 \item{gc_col}{Optional GC column in \code{sample_qc}. Required when
-\code{gc_mad_cutoff} is supplied. If \code{NULL}, common names such as
-\code{GCPCTAfterFiltering} are inferred.}
+\code{gc_mad_cutoff} is supplied. If \code{NULL},
+\code{gc_read_perc_post} is inferred.}
 
 \item{min_total_unique_reads}{Optional minimum allowed total unique reads.
 Samples below this threshold are dropped.}

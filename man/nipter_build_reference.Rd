@@ -50,12 +50,11 @@ fitted.}
 
 \item{sample_qc_total_unique_reads_col}{Optional total-unique-reads column in
 \code{sample_qc}. Required when either unique-read threshold is enabled.
-When \code{NULL}, common names such as \code{TotalUniqueReads} are
-inferred.}
+When \code{NULL}, \code{read_counts_binned_post_sum} is inferred.}
 
 \item{sample_qc_gc_col}{Optional GC column in \code{sample_qc}. Required
-when \code{gc_mad_cutoff} is enabled. When \code{NULL}, common names such
-as \code{GCPCTAfterFiltering} are inferred.}
+when \code{gc_mad_cutoff} is enabled. When \code{NULL},
+\code{gc_read_perc_post} is inferred.}
 
 \item{min_total_unique_reads}{Optional minimum allowed total unique reads.
 Controls below this threshold are removed before fitting.}

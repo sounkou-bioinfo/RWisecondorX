@@ -95,6 +95,23 @@ BEGIN_RCPP
     return rcpp_result_gen;
 END_RCPP
 }
+// samtools_stats_summary_cpp
+List samtools_stats_summary_cpp(std::string path, std::string reference, int min_mapq, int require_flags, int exclude_flags, int decompression_threads, bool report_filtered_stream_bookkeeping);
+RcppExport SEXP _RWisecondorX_samtools_stats_summary_cpp(SEXP pathSEXP, SEXP referenceSEXP, SEXP min_mapqSEXP, SEXP require_flagsSEXP, SEXP exclude_flagsSEXP, SEXP decompression_threadsSEXP, SEXP report_filtered_stream_bookkeepingSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< std::string >::type path(pathSEXP);
+    Rcpp::traits::input_parameter< std::string >::type reference(referenceSEXP);
+    Rcpp::traits::input_parameter< int >::type min_mapq(min_mapqSEXP);
+    Rcpp::traits::input_parameter< int >::type require_flags(require_flagsSEXP);
+    Rcpp::traits::input_parameter< int >::type exclude_flags(exclude_flagsSEXP);
+    Rcpp::traits::input_parameter< int >::type decompression_threads(decompression_threadsSEXP);
+    Rcpp::traits::input_parameter< bool >::type report_filtered_stream_bookkeeping(report_filtered_stream_bookkeepingSEXP);
+    rcpp_result_gen = Rcpp::wrap(samtools_stats_summary_cpp(path, reference, min_mapq, require_flags, exclude_flags, decompression_threads, report_filtered_stream_bookkeeping));
+    return rcpp_result_gen;
+END_RCPP
+}
 
 static const R_CallMethodDef CallEntries[] = {
     {"_RWisecondorX_knn_reference_cpp", (DL_FUNC) &_RWisecondorX_knn_reference_cpp, 6},
@@ -103,6 +120,7 @@ static const R_CallMethodDef CallEntries[] = {
     {"_RWisecondorX_nipter_ssd_matrix_cpp", (DL_FUNC) &_RWisecondorX_nipter_ssd_matrix_cpp, 3},
     {"_RWisecondorX_nipter_ncv_search_cpp", (DL_FUNC) &_RWisecondorX_nipter_ncv_search_cpp, 4},
     {"_RWisecondorX_nipter_stepwise_cpp", (DL_FUNC) &_RWisecondorX_nipter_stepwise_cpp, 4},
+    {"_RWisecondorX_samtools_stats_summary_cpp", (DL_FUNC) &_RWisecondorX_samtools_stats_summary_cpp, 7},
     {NULL, NULL, 0}
 };
 

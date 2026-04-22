@@ -324,7 +324,7 @@ nipter_ncv_sex_score <- function(sample,
                                              candidate_chromosomes,
                                              n_models,
                                              n_predictors,
-                                             extra_predictors = "GCPCTAfterFiltering") {
+                                             extra_predictors = "gc_read_perc_post") {
   if (nrow(reference_frame) < 4L) {
     stop(
       sprintf(
@@ -417,7 +417,7 @@ nipter_ncv_sex_score <- function(sample,
 #' @param n_predictors Maximum predictors per model.
 #' @param extra_predictors Optional character vector of additional numeric
 #'   columns to use when present in \code{reference$reference_frame}. The
-#'   default \code{"GCPCTAfterFiltering"} keeps room for explicit QC metadata
+#'   default \code{"gc_read_perc_post"} keeps room for explicit QC metadata
 #'   without hard-wiring that requirement into the core sample classes.
 #' @param focus_chromosomes Character vector; any subset of \code{c("X", "Y")}.
 #'
@@ -430,7 +430,7 @@ nipter_build_sex_regression_models <- function(reference,
                                                candidate_chromosomes = c(1:12, 14:16, 20, 22),
                                                n_models = 4L,
                                                n_predictors = 4L,
-                                               extra_predictors = "GCPCTAfterFiltering",
+                                               extra_predictors = "gc_read_perc_post",
                                                focus_chromosomes = c("X", "Y")) {
   if (!.is_nipt_reference_model(reference)) {
     stop("'reference' must be a NIPTReferenceModel.", call. = FALSE)
@@ -477,7 +477,7 @@ nipter_build_sex_regression_models <- function(reference,
 #'   \code{"y_unique"} sex model.
 #' @param sample_predictors Optional named list of extra predictor values for
 #'   the sample, used when the fitted regression models include extra columns
-#'   such as \code{GCPCTAfterFiltering}.
+#'   such as \code{gc_read_perc_post}.
 #'
 #' @return A typed \code{NIPTSexRegressionScore}.
 #'

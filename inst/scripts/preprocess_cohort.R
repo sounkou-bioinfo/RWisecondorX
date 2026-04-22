@@ -7,11 +7,11 @@
 #   2. precomputes a NIPTeR GC table once
 #   3. optionally computes SeqFF fetal-fraction estimates from BAMs
 #   4. computes Y-unique sex-predictor ratios for every BAM
-#   5. converts every BAM to native RWisecondorX BED.gz
+#   5. converts every BAM to RWisecondorX BED.gz
 #   6. optionally writes upstream WisecondorX NPZ files via the Python CLI
 #   7. converts every BAM to NIPTeR BED.gz with separated strands and GC-corrected columns
-#   8. writes native mosdepth-compatible 50 kb coverage outputs for raw-style
-#      and filtered-style NIPT coverage
+#   8. writes native mosdepth-compatible coverage outputs for pre-filter and
+#      post-filter NIPT coverage using an explicit coverage bin size
 #
 # It intentionally does not build references or score samples.
 
@@ -191,10 +191,17 @@ option_list <- list(
               help = "NIPTeR MAPQ filter [default: %default]"),
   make_option("--nipter-exclude-flags", type = "integer", default = 1024L,
               help = "NIPTeR exclude flags [default: %default]"),
-  make_option("--nipter-gc-include-sex", action = "store", type = "logical", default = FALSE,
-              help = "Also GC-correct NIPTeR X/Y bins before BED export. Pass --nipter-gc-include-sex=TRUE to enable [default: %default]"),
+  make_option("--nipter-gc-include-sex", action = "store", type = "logical", default = TRUE,
+              help = "Also GC-correct NIPTeR X/Y bins before BED export. Pass --nipter-gc-include-sex=FALSE to disable [default: %default]"),
+  make_option("--nipter-gc-loess-span", type = "double", default = 0.75,
+              help = "LOESS span used for NIPTeR GC correction [default: %default]"),
   make_option("--nipter-gc-curves", action = "store", type = "logical", default = TRUE,
               help = "Write per-sample NIPTeR GC-curve PNGs. Pass --nipter-gc-curves=FALSE to disable [default: %default]"),
+  make_option("--nipter-corrected-bin-ratio-genome-plots", action = "store", type = "logical", default = TRUE,
+              help = paste0(
+                "Write per-sample genome-order plots of post-GC corrected bin ratios ",
+                "excluding out-of-range bins. Pass --nipter-corrected-bin-ratio-genome-plots=FALSE to disable [default: %default]"
+              )),
   make_option("--nipter-separate-strands", action = "store", type = "logical", default = TRUE,
               help = "Write NIPTeR 9-column separated-strand BEDs. Pass --nipter-separate-strands=FALSE to disable [default: %default]"),
   make_option("--qc-plot-theme", type = "character", default = "minimal",
@@ -226,6 +233,8 @@ option_list <- list(
               help = "Excluded flags used for filtered SeqFF/Y-unique metrics. Defaults to --nipter-exclude-flags."),
   make_option("--wcx-write-npz", action = "store", type = "logical", default = FALSE,
               help = "Also write upstream WisecondorX NPZ files via the Python CLI. Pass --wcx-write-npz=TRUE to enable [default: %default]"),
+  make_option("--coverage-binsize", type = "integer", default = 50000L,
+              help = "Bin size used for pre/post coverage summaries [default: %default]"),
   make_option("--mosdepth-exclude-flags-base", type = "integer", default = .MOSDEPTH_EXCLUDE_FLAGS_BASE,
               help = paste0(
                 "SAM flags excluded in mosdepth coverage outputs. Default excludes unmapped (0x4), ",
@@ -235,8 +244,6 @@ option_list <- list(
               help = "MAPQ used for the filtered mosdepth output. Defaults to --nipter-mapq."),
   make_option("--mosdepth-filtered-exclude-flags", type = "integer", default = NULL,
               help = "Excluded SAM flags used for the filtered mosdepth output. Defaults to --mosdepth-exclude-flags-base."),
-  make_option("--tabix-metadata", action = "store", type = "logical", default = FALSE,
-              help = "Write optional ##RWX_<key>=<value> provenance lines into BED/tabix outputs. Pass --tabix-metadata=TRUE to enable [default: %default]"),
   make_option("--overwrite", action = "store", type = "logical", default = FALSE,
               help = "Overwrite existing outputs. Pass --overwrite=TRUE to enable [default: %default]")
 )
@@ -268,17 +275,27 @@ if (is.na(opts$`nipter-gc-include-sex`)) {
 if (is.na(opts$`nipter-gc-curves`)) {
   stop("--nipter-gc-curves must be TRUE or FALSE.", call. = FALSE)
 }
+if (is.na(opts$`nipter-corrected-bin-ratio-genome-plots`)) {
+  stop("--nipter-corrected-bin-ratio-genome-plots must be TRUE or FALSE.", call. = FALSE)
+}
 if (is.na(opts$`nipter-separate-strands`)) {
   stop("--nipter-separate-strands must be TRUE or FALSE.", call. = FALSE)
 }
 if (is.na(opts$`wcx-write-npz`)) {
   stop("--wcx-write-npz must be TRUE or FALSE.", call. = FALSE)
 }
-if (is.na(opts$`tabix-metadata`)) {
-  stop("--tabix-metadata must be TRUE or FALSE.", call. = FALSE)
-}
 if (is.na(opts$overwrite)) {
   stop("--overwrite must be TRUE or FALSE.", call. = FALSE)
+}
+if (!is.numeric(opts$`nipter-gc-loess-span`) ||
+    length(opts$`nipter-gc-loess-span`) != 1L ||
+    !is.finite(opts$`nipter-gc-loess-span`) ||
+    opts$`nipter-gc-loess-span` <= 0 ||
+    opts$`nipter-gc-loess-span` > 1) {
+  stop("--nipter-gc-loess-span must be a finite number in (0, 1].", call. = FALSE)
+}
+if (is.na(opts$`coverage-binsize`) || as.integer(opts$`coverage-binsize`) < 1L) {
+  stop("--coverage-binsize must be >= 1.", call. = FALSE)
 }
 opts$`qc-plot-theme` <- match.arg(
   tolower(opts$`qc-plot-theme`),
@@ -303,14 +320,15 @@ dirs <- list(
   gc = .ensure_dir(file.path(out_root, "gc")),
   seqff = .ensure_dir(file.path(out_root, "seqff")),
   y_unique = .ensure_dir(file.path(out_root, "y_unique")),
-  sample_metrics = .ensure_dir(file.path(out_root, "sample_metrics")),
+  sample_qc = .ensure_dir(file.path(out_root, "sample_qc")),
   rwcx_beds = .ensure_dir(file.path(out_root, "rwcx_beds")),
   wisecondorx_npz = .ensure_dir(file.path(out_root, "wisecondorx_npz")),
   nipter_beds = .ensure_dir(file.path(out_root, "nipter_beds")),
   nipter_gc_curves = .ensure_dir(file.path(out_root, "nipter_gc_curves")),
   nipter_gc_curve_data = .ensure_dir(file.path(out_root, "nipter_gc_curve_data")),
-  mosdepth_raw_50k = .ensure_dir(file.path(out_root, "mosdepth_raw_50k")),
-  mosdepth_filtered_50k = .ensure_dir(file.path(out_root, "mosdepth_filtered_50k")),
+  nipter_corrected_bin_ratio_genome_plots = .ensure_dir(file.path(out_root, "nipter_corrected_bin_ratio_genome_plots")),
+  coverage_pre = .ensure_dir(file.path(out_root, "coverage_pre")),
+  coverage_post = .ensure_dir(file.path(out_root, "coverage_post")),
   logs = .ensure_dir(file.path(out_root, "logs"))
 )
 
@@ -329,19 +347,43 @@ library(RWisecondorX)
 .match_metric_row <- getFromNamespace(".match_metric_row", "RWisecondorX")
 .seqff_metric_record <- getFromNamespace(".seqff_metric_record", "RWisecondorX")
 .y_unique_metric_record <- getFromNamespace(".y_unique_metric_record", "RWisecondorX")
-.sample_metrics_row <- getFromNamespace(".sample_metrics_row", "RWisecondorX")
-.sample_metrics_with_nipter_status <- getFromNamespace(".sample_metrics_with_nipter_status", "RWisecondorX")
-.sample_metrics_tabix_metadata <- getFromNamespace(".sample_metrics_tabix_metadata", "RWisecondorX")
-.native_bin_metric_record <- getFromNamespace(".native_bin_metric_record", "RWisecondorX")
+.sample_qc_row <- getFromNamespace(".sample_qc_row", "RWisecondorX")
+.sample_qc_row_with_processing_status <- getFromNamespace(".sample_qc_row_with_processing_status", "RWisecondorX")
+.sample_qc_row_with_nipter_status <- getFromNamespace(".sample_qc_row_with_nipter_status", "RWisecondorX")
+.sample_qc_tabix_metadata <- getFromNamespace(".sample_qc_tabix_metadata", "RWisecondorX")
+.samtools_stats_metric_record <- getFromNamespace(".samtools_stats_metric_record", "RWisecondorX")
+.seqff_summary_schema <- getFromNamespace(".seqff_summary_schema", "RWisecondorX")
+.y_unique_summary_schema <- getFromNamespace(".y_unique_summary_schema", "RWisecondorX")
+.sample_qc_schema <- getFromNamespace(".sample_qc_schema", "RWisecondorX")
+.read_counts_metric_record <- getFromNamespace(".read_counts_metric_record", "RWisecondorX")
+.coverage_metric_record <- getFromNamespace(".coverage_metric_record", "RWisecondorX")
+.nipter_preprocess_qc_metric_record <- getFromNamespace(".nipter_preprocess_qc_metric_record", "RWisecondorX")
+.gc_correction_record <- getFromNamespace(".gc_correction_record", "RWisecondorX")
+.metric_filter_record <- getFromNamespace(".metric_filter_record", "RWisecondorX")
 .bam_bin_count_rows <- getFromNamespace(".bam_bin_count_rows", "RWisecondorX")
 .bam_chr_lengths <- getFromNamespace(".bam_chr_lengths", "RWisecondorX")
 .nipter_rows_to_sample <- getFromNamespace(".nipter_rows_to_sample", "RWisecondorX")
 .merge_tabix_metadata <- getFromNamespace(".merge_tabix_metadata", "RWisecondorX")
-.bam_bin_stats_metadata <- getFromNamespace(".bam_bin_stats_metadata", "RWisecondorX")
+.bam_alignment_count_metadata <- getFromNamespace(".bam_alignment_count_metadata", "RWisecondorX")
+.bam_read_counts_metadata <- getFromNamespace(".bam_read_counts_metadata", "RWisecondorX")
 .nipter_preprocess_qc <- getFromNamespace(".nipter_preprocess_qc", "RWisecondorX")
 .write_nipter_gc_curve_plot <- getFromNamespace(".write_nipter_gc_curve_plot", "RWisecondorX")
+.write_nipter_corrected_bin_ratio_genome_plot <- getFromNamespace(".write_nipter_corrected_bin_ratio_genome_plot", "RWisecondorX")
+.write_nipter_gc_curve_data_bgz <- getFromNamespace(".write_nipter_gc_curve_data_bgz", "RWisecondorX")
 .tabix_metadata_frame <- getFromNamespace(".tabix_metadata_frame", "RWisecondorX")
 .ensure_wisecondorx_env <- getFromNamespace(".ensure_wisecondorx_env", "RWisecondorX")
+
+.nipter_gc_correction_record <- function() {
+  .gc_correction_record(
+    applied = TRUE,
+    method = "loess",
+    loess_span = as.numeric(opts$`nipter-gc-loess-span`),
+    include_sex = isTRUE(opts$`nipter-gc-include-sex`),
+    binsize = as.integer(opts$`nipter-binsize`),
+    table_bgz = normalizePath(gc_table, winslash = "/", mustWork = TRUE),
+    fasta = normalizePath(opts$fasta, winslash = "/", mustWork = TRUE)
+  )
+}
 
 .resolve_y_regions_file <- function(path = NULL) {
   if (!is.null(path)) {
@@ -391,79 +433,118 @@ metrics_post_filters <- list(
   require_flags = as.integer(opts$`metrics-post-require-flags`),
   exclude_flags = as.integer(if (is.null(opts$`metrics-post-exclude-flags`)) opts$`nipter-exclude-flags` else opts$`metrics-post-exclude-flags`)
 )
-
-.seqff_summary_cols <- c(
-  "sample_name", "sample", "bam",
-  "SeqFF_pre", "Enet_pre", "WRSC_pre",
-  "SeqFF_post", "Enet_post", "WRSC_post",
-  "NonFiltered_SeqFF", "NonFiltered_Enet", "NonFiltered_WRSC",
-  "NonFiltered_ConsensusFF",
-  "Filtered_SeqFF", "Filtered_Enet", "Filtered_WRSC",
-  "Filtered_ConsensusFF",
-  "metrics_pre_mapq", "metrics_pre_require_flags", "metrics_pre_exclude_flags",
-  "metrics_post_mapq", "metrics_post_require_flags", "metrics_post_exclude_flags",
-  "seqff_source"
+coverage_binsize <- as.integer(opts$`coverage-binsize`)
+coverage_pre_filters <- list(
+  mapq = 0L,
+  exclude_flags = as.integer(opts$`mosdepth-exclude-flags-base`)
 )
-.y_unique_summary_cols <- c(
-  "sample_name", "sample", "bam",
-  "y_unique_ratio_pre", "y_unique_reads_pre", "total_nuclear_reads_pre",
-  "y_unique_ratio_post", "y_unique_reads_post", "total_nuclear_reads_post",
-  "YUniqueRatio", "YUniqueRatioFiltered",
-  "y_unique_regions_file",
-  "metrics_pre_mapq", "metrics_pre_require_flags", "metrics_pre_exclude_flags",
-  "metrics_post_mapq", "metrics_post_require_flags", "metrics_post_exclude_flags",
-  "y_unique_source"
-)
-.sample_qc_summary_cols <- c(
-  "sample_name", "sample", "bam",
-  "TotalMappedReads", "TotalUniqueReads", "TotalUniqueReadsMapped",
-  "TotalUniqueReadsPercent", "TotalUniqueReadsPercentMapped",
-  "too_few_reads_for_metrics",
-  "missing_seqff_metrics", "missing_y_unique_metrics",
-  "missing_native_metrics", "missing_nipter_preprocess_qc_metrics",
-  "seqff_metrics_ready", "y_unique_metrics_ready",
-  "native_metrics_ready", "nipter_preprocess_qc_ready", "sample_metrics_ready",
-  "native_count_pre_sum", "native_count_post_sum",
-  "native_count_fwd_sum", "native_count_rev_sum", "native_n_nonzero_bins_post",
-  "gc_loess_valid_bins", "gc_loess_total_bins", "gc_loess_invalid_bins",
-  "gc_loess_valid_bin_fraction_pct",
-  "gc_loess_invalid_gc_missing_or_nonfinite", "gc_loess_invalid_gc_nonpositive",
-  "gc_loess_invalid_raw_nonfinite", "gc_loess_invalid_raw_nonpositive",
-  "gc_loess_invalid_corrected_nonfinite",
-  "gc_curve_has_valid_bins", "gc_curve_has_loess_support",
-  "nipter_autosomal_bin_cv_pre", "nipter_autosomal_bin_cv_post",
-  "nipter_corrected_bin_ratio_mean", "nipter_corrected_bin_ratio_sd",
-  "nipter_corrected_bin_ratio_cv",
-  "nipter_gc_correlation_pre", "nipter_gc_correlation_post",
-  "nipter_gc_curve_png", "nipter_gc_curve_data_tsv",
-  "gc_read_perc_pre", "gc_read_perc_post", "mean_mapq_post",
-  "GCPCTBeforeFiltering", "GCPCTAfterFiltering",
-  "SeqFF_pre", "Enet_pre", "WRSC_pre",
-  "SeqFF_post", "Enet_post", "WRSC_post",
-  "NonFiltered_SeqFF", "NonFiltered_Enet", "NonFiltered_WRSC",
-  "NonFiltered_ConsensusFF",
-  "Filtered_SeqFF", "Filtered_Enet", "Filtered_WRSC",
-  "Filtered_ConsensusFF",
-  "y_unique_ratio_pre", "y_unique_reads_pre", "total_nuclear_reads_pre",
-  "y_unique_ratio_post", "y_unique_reads_post", "total_nuclear_reads_post",
-  "YUniqueRatio", "YUniqueRatioFiltered",
-  "y_unique_regions_file",
-  "metrics_pre_mapq", "metrics_pre_require_flags", "metrics_pre_exclude_flags",
-  "metrics_post_mapq", "metrics_post_require_flags", "metrics_post_exclude_flags",
-  "seqff_source", "y_unique_source", "native_stats_source",
-  "seqff_metrics_missing_count", "y_unique_metrics_missing_count",
-  "native_metrics_missing_count", "nipter_preprocess_qc_metrics_missing_count",
-  "seqff_metrics_expected_count", "y_unique_metrics_expected_count",
-  "native_metrics_expected_count", "nipter_preprocess_qc_metrics_expected_count",
-  "nipter_bed_status", "nipter_bed_written", "nipter_bed_error"
+coverage_post_filters <- list(
+  mapq = as.integer(if (is.null(opts$`mosdepth-filtered-mapq`)) {
+    opts$`nipter-mapq`
+  } else {
+    opts$`mosdepth-filtered-mapq`
+  }),
+  exclude_flags = as.integer(if (is.null(opts$`mosdepth-filtered-exclude-flags`)) {
+    opts$`mosdepth-exclude-flags-base`
+  } else {
+    opts$`mosdepth-filtered-exclude-flags`
+  })
 )
 
-seqff_metrics_by_sample <- setNames(vector("list", length(bams)),
-                                    sub("\\.(bam|cram)$", "", basename(bams), ignore.case = TRUE))
-y_unique_metrics_by_sample <- setNames(vector("list", length(bams)),
-                                       sub("\\.(bam|cram)$", "", basename(bams), ignore.case = TRUE))
-native_metrics_by_sample <- setNames(vector("list", length(bams)),
-                                     sub("\\.(bam|cram)$", "", basename(bams), ignore.case = TRUE))
+.seqff_summary_cols <- .seqff_summary_schema()
+.y_unique_summary_cols <- .y_unique_summary_schema()
+.sample_qc_summary_cols <- .sample_qc_schema()
+
+.sample_stem <- function(path) {
+  sub("\\.(bam|cram)$", "", basename(path), ignore.case = TRUE)
+}
+
+.stage_success <- function(sample_name, ...) {
+  c(list(ok = TRUE, sample_name = sample_name), list(...))
+}
+
+.stage_failure <- function(sample_name, stage, step, message) {
+  list(
+    ok = FALSE,
+    sample_name = sample_name,
+    failure_stage = stage,
+    failure_step = step,
+    failure_message = message
+  )
+}
+
+sample_names <- vapply(bams, .sample_stem, character(1L))
+names(bams) <- sample_names
+
+seqff_metrics_by_sample <- setNames(vector("list", length(sample_names)), sample_names)
+y_unique_metrics_by_sample <- setNames(vector("list", length(sample_names)), sample_names)
+read_counts_by_sample <- setNames(vector("list", length(sample_names)), sample_names)
+bam_stats_by_sample <- setNames(vector("list", length(sample_names)), sample_names)
+coverage_metrics_by_sample <- setNames(vector("list", length(sample_names)), sample_names)
+sample_failures_by_sample <- setNames(vector("list", length(sample_names)), sample_names)
+final_sample_qc_rows <- setNames(vector("list", length(sample_names)), sample_names)
+
+.record_sample_failure <- function(item, i = NULL, n = NULL) {
+  stopifnot(is.list(item), !is.null(item$sample_name), !is.null(item$failure_stage))
+  stem <- as.character(item$sample_name)[[1L]]
+  if (is.null(sample_failures_by_sample[[stem]])) {
+    sample_failures_by_sample[[stem]] <<- list(
+      stage = as.character(item$failure_stage)[[1L]],
+      step = if (is.null(item$failure_step)) NA_character_ else as.character(item$failure_step)[[1L]],
+      message = as.character(item$failure_message)[[1L]]
+    )
+  }
+  if (!is.null(i) && !is.null(n)) {
+    cat(sprintf(
+      "[%s] [%d/%d] %s failed %s: %s\n",
+      format(Sys.time(), "%Y-%m-%d %H:%M:%S"),
+      as.integer(i), as.integer(n),
+      as.character(item$failure_stage)[[1L]],
+      stem,
+      as.character(item$failure_message)[[1L]]
+    ))
+  }
+  invisible(NULL)
+}
+
+.active_bams <- function() {
+  bams[vapply(names(bams), function(stem) is.null(sample_failures_by_sample[[stem]]), logical(1L))]
+}
+
+.build_sample_qc_row <- function(stem, bam) {
+  row <- .sample_qc_row(
+    sample_name = stem,
+    bam = bam,
+    seqff = seqff_metrics_by_sample[[stem]],
+    y_unique = y_unique_metrics_by_sample[[stem]],
+    read_counts = read_counts_by_sample[[stem]],
+    bam_stats = bam_stats_by_sample[[stem]],
+    coverage = coverage_metrics_by_sample[[stem]],
+    filters_pre = metrics_pre_filters,
+    filters_post = metrics_post_filters
+  )
+
+  failure <- sample_failures_by_sample[[stem]]
+  if (is.null(failure)) {
+    row <- .sample_qc_row_with_processing_status(row, status = "ok")
+    row <- .sample_qc_row_with_nipter_status(row, status = "not_run")
+  } else {
+    row <- .sample_qc_row_with_processing_status(
+      row,
+      status = "failed",
+      failure_stage = failure$stage,
+      failure_step = failure$step,
+      failure_message = failure$message
+    )
+    row <- .sample_qc_row_with_nipter_status(
+      row,
+      status = if (identical(failure$stage, "nipter_bed")) "failed" else "not_run",
+      error = if (identical(failure$stage, "nipter_bed")) failure$message else NULL
+    )
+  }
+
+  row[, .sample_qc_summary_cols, drop = FALSE]
+}
 
 .run_one({
   nipter_gc_precompute(
@@ -474,246 +555,447 @@ native_metrics_by_sample <- setNames(vector("list", length(bams)),
 }, sprintf("Precompute GC table → %s", gc_table))
 
 if (isTRUE(opts$seqff) || !is.null(opts$`seqff-tsv`)) {
-    .run_one({
-      seqff_rows <- .run_stage_samples(bams, opts$jobs, function(i, bam) {
-      stem <- sub("\\.(bam|cram)$", "", basename(bam), ignore.case = TRUE)
-      out_tsv <- file.path(dirs$seqff, paste0(stem, ".seqff.tsv"))
-      if (file.exists(out_tsv) && !isTRUE(opts$overwrite)) {
-        row <- utils::read.delim(
-          out_tsv,
+  .run_one({
+    stage_bams <- .active_bams()
+    if (!length(stage_bams)) {
+      return(invisible(NULL))
+    }
+    seqff_rows <- .run_stage_samples(stage_bams, opts$jobs, function(i, bam) {
+      stem <- .sample_stem(bam)
+      tryCatch({
+        out_tsv <- file.path(dirs$seqff, paste0(stem, ".seqff.tsv"))
+        if (file.exists(out_tsv) && !isTRUE(opts$overwrite)) {
+          row <- utils::read.delim(
+            out_tsv,
+            sep = "\t",
+            header = TRUE,
+            check.names = FALSE
+          )
+          metrics <- .seqff_metric_record(
+            record = row,
+            source = if (!is.null(opts$`seqff-tsv`)) {
+              paste0("file:", basename(opts$`seqff-tsv`))
+            } else {
+              "computed"
+            }
+          )
+          return(.stage_success(stem, row = row, metrics = metrics))
+        }
+        .log_sample(i, length(stage_bams), "SeqFF", stem)
+        seqff_metrics <- if (!is.null(opts$`seqff-tsv`)) {
+          .seqff_metric_record(
+            record = .match_metric_row(opts$`seqff-tsv`, stem),
+            source = paste0("file:", basename(opts$`seqff-tsv`))
+          )
+        } else {
+          .seqff_metric_record(
+            pre = seqff_predict(
+              input = bam,
+              input_type = "bam",
+              mapq = metrics_pre_filters$mapq,
+              require_flags = metrics_pre_filters$require_flags,
+              exclude_flags = metrics_pre_filters$exclude_flags,
+              reference = opts$fasta
+            ),
+            post = seqff_predict(
+              input = bam,
+              input_type = "bam",
+              mapq = metrics_post_filters$mapq,
+              require_flags = metrics_post_filters$require_flags,
+              exclude_flags = metrics_post_filters$exclude_flags,
+              reference = opts$fasta
+            ),
+            source = "computed"
+          )
+        }
+        row <- .sample_qc_row(
+          sample_name = stem,
+          bam = bam,
+          seqff = seqff_metrics,
+          filters_pre = metrics_pre_filters,
+          filters_post = metrics_post_filters
+        )[, .seqff_summary_cols, drop = FALSE]
+        utils::write.table(
+          row,
+          file = out_tsv,
           sep = "\t",
-          header = TRUE,
-          check.names = FALSE
+          row.names = FALSE,
+          col.names = TRUE,
+          quote = FALSE
         )
-        metrics <- .seqff_metric_record(
-          record = row,
-          source = if (!is.null(opts$`seqff-tsv`)) {
-            paste0("file:", basename(opts$`seqff-tsv`))
-          } else {
-            "computed"
-          }
-        )
-        return(list(row = row, metrics = metrics))
-      }
-      .log_sample(i, length(bams), "SeqFF", stem)
-      seqff_metrics <- if (!is.null(opts$`seqff-tsv`)) {
-        .seqff_metric_record(
-          record = .match_metric_row(opts$`seqff-tsv`, stem),
-          source = paste0("file:", basename(opts$`seqff-tsv`))
-        )
-      } else {
-        .seqff_metric_record(
-          pre = seqff_predict(
-            input = bam,
-            input_type = "bam",
-            mapq = metrics_pre_filters$mapq,
-            require_flags = metrics_pre_filters$require_flags,
-            exclude_flags = metrics_pre_filters$exclude_flags,
-            reference = opts$fasta
-          ),
-          post = seqff_predict(
-            input = bam,
-            input_type = "bam",
-            mapq = metrics_post_filters$mapq,
-            require_flags = metrics_post_filters$require_flags,
-            exclude_flags = metrics_post_filters$exclude_flags,
-            reference = opts$fasta
-          ),
-          source = "computed"
-        )
-      }
-      row <- .sample_metrics_row(
-        sample_name = stem,
-        bam = bam,
-        seqff = seqff_metrics,
-        filters_pre = metrics_pre_filters,
-        filters_post = metrics_post_filters
-      )[, .seqff_summary_cols, drop = FALSE]
-      utils::write.table(
-        row,
-        file = out_tsv,
-        sep = "\t",
-        row.names = FALSE,
-        col.names = TRUE,
-        quote = FALSE
-      )
-        list(row = row, metrics = seqff_metrics)
+        .stage_success(stem, row = row, metrics = seqff_metrics)
+      }, error = function(e) {
+        .stage_failure(stem, "seqff", "compute_or_load", conditionMessage(e))
       })
-      for (item in seqff_rows) {
-        stem <- as.character(item$row$sample_name[[1L]])
-        seqff_metrics_by_sample[[stem]] <- item$metrics
+    })
+
+    seqff_summary_rows <- list()
+    for (item in seqff_rows) {
+      if (isTRUE(item$ok)) {
+        seqff_metrics_by_sample[[item$sample_name]] <- item$metrics
+        seqff_summary_rows[[length(seqff_summary_rows) + 1L]] <- item$row
+      } else {
+        .record_sample_failure(item)
       }
-      seqff_summary <- do.call(rbind, lapply(seqff_rows, `[[`, "row"))
-      utils::write.table(
-        seqff_summary,
+    }
+    seqff_summary <- if (length(seqff_summary_rows)) {
+      do.call(rbind, seqff_summary_rows)
+    } else {
+      data.frame(matrix(nrow = 0L, ncol = length(.seqff_summary_cols)))
+    }
+    names(seqff_summary) <- .seqff_summary_cols
+    utils::write.table(
+      seqff_summary,
       file = file.path(dirs$seqff, "seqff_summary.tsv"),
       sep = "\t",
       row.names = FALSE,
       col.names = TRUE,
       quote = FALSE
     )
-  }, sprintf("Compute SeqFF fetal-fraction estimates for %d BAMs", length(bams)))
+  }, sprintf("Compute SeqFF fetal-fraction estimates for %d BAMs", length(.active_bams())))
 }
 
-  .run_one({
-    y_unique_rows <- .run_stage_samples(bams, opts$jobs, function(i, bam) {
-    stem <- sub("\\.(bam|cram)$", "", basename(bam), ignore.case = TRUE)
-    out_tsv <- file.path(dirs$y_unique, paste0(stem, ".y_unique.tsv"))
-    if (file.exists(out_tsv) && !isTRUE(opts$overwrite)) {
-      row <- utils::read.delim(
-        out_tsv,
-        sep = "\t",
-        header = TRUE,
-        check.names = FALSE
-      )
-      metrics <- .y_unique_metric_record(
-        record = row,
-        regions_file = y_regions_file,
-        source = if (!is.null(opts$`y-unique-tsv`)) {
-          paste0("file:", basename(opts$`y-unique-tsv`))
-        } else {
-          "computed"
-        }
-      )
-      return(list(row = row, metrics = metrics))
-    }
-    .log_sample(i, length(bams), "Y-unique ratio", stem)
-    y_unique_metrics <- if (!is.null(opts$`y-unique-tsv`)) {
-      .y_unique_metric_record(
-        record = .match_metric_row(opts$`y-unique-tsv`, stem),
-        regions_file = y_regions_file,
-        source = paste0("file:", basename(opts$`y-unique-tsv`))
-      )
-    } else {
-      .y_unique_metric_record(
-        pre = nipter_y_unique_ratio(
-          bam = bam,
-          mapq = metrics_pre_filters$mapq,
-          require_flags = metrics_pre_filters$require_flags,
-          exclude_flags = metrics_pre_filters$exclude_flags,
-          regions_file = y_regions_file,
-          reference = opts$fasta
-        ),
-        post = nipter_y_unique_ratio(
-          bam = bam,
-          mapq = metrics_post_filters$mapq,
-          require_flags = metrics_post_filters$require_flags,
-          exclude_flags = metrics_post_filters$exclude_flags,
-          regions_file = y_regions_file,
-          reference = opts$fasta
-        ),
-        regions_file = y_regions_file,
-        source = "computed"
-      )
-    }
-    row <- .sample_metrics_row(
-      sample_name = stem,
-      bam = bam,
-      y_unique = y_unique_metrics,
-      filters_pre = metrics_pre_filters,
-      filters_post = metrics_post_filters
-    )[, .y_unique_summary_cols, drop = FALSE]
-    utils::write.table(
-      row,
-      file = out_tsv,
-      sep = "\t",
-      row.names = FALSE,
-      col.names = TRUE,
-      quote = FALSE
-    )
-      list(row = row, metrics = y_unique_metrics)
-    })
-    for (item in y_unique_rows) {
-      stem <- as.character(item$row$sample_name[[1L]])
-      y_unique_metrics_by_sample[[stem]] <- item$metrics
-    }
-    y_unique_summary <- do.call(rbind, lapply(y_unique_rows, `[[`, "row"))
-    utils::write.table(
-      y_unique_summary,
-    file = file.path(dirs$y_unique, "y_unique_summary.tsv"),
-    sep = "\t",
-    row.names = FALSE,
-    col.names = TRUE,
-    quote = FALSE
-  )
-}, sprintf("Compute Y-unique sex-predictor ratios for %d BAMs", length(bams)))
+ .run_one({
+   stage_bams <- .active_bams()
+   if (!length(stage_bams)) {
+     return(invisible(NULL))
+   }
+   y_unique_rows <- .run_stage_samples(stage_bams, opts$jobs, function(i, bam) {
+     stem <- .sample_stem(bam)
+     tryCatch({
+       out_tsv <- file.path(dirs$y_unique, paste0(stem, ".y_unique.tsv"))
+       if (file.exists(out_tsv) && !isTRUE(opts$overwrite)) {
+         row <- utils::read.delim(
+           out_tsv,
+           sep = "\t",
+           header = TRUE,
+           check.names = FALSE
+         )
+         metrics <- .y_unique_metric_record(
+           record = row,
+           regions_file = y_regions_file,
+           source = if (!is.null(opts$`y-unique-tsv`)) {
+             paste0("file:", basename(opts$`y-unique-tsv`))
+           } else {
+             "computed"
+           }
+         )
+         return(.stage_success(stem, row = row, metrics = metrics))
+       }
+       .log_sample(i, length(stage_bams), "Y-unique ratio", stem)
+       y_unique_metrics <- if (!is.null(opts$`y-unique-tsv`)) {
+         .y_unique_metric_record(
+           record = .match_metric_row(opts$`y-unique-tsv`, stem),
+           regions_file = y_regions_file,
+           source = paste0("file:", basename(opts$`y-unique-tsv`))
+         )
+       } else {
+         .y_unique_metric_record(
+           pre = nipter_y_unique_ratio(
+             bam = bam,
+             mapq = metrics_pre_filters$mapq,
+             require_flags = metrics_pre_filters$require_flags,
+             exclude_flags = metrics_pre_filters$exclude_flags,
+             regions_file = y_regions_file,
+             reference = opts$fasta
+           ),
+           post = nipter_y_unique_ratio(
+             bam = bam,
+             mapq = metrics_post_filters$mapq,
+             require_flags = metrics_post_filters$require_flags,
+             exclude_flags = metrics_post_filters$exclude_flags,
+             regions_file = y_regions_file,
+             reference = opts$fasta
+           ),
+           regions_file = y_regions_file,
+           source = "computed"
+         )
+       }
+       row <- .sample_qc_row(
+         sample_name = stem,
+         bam = bam,
+         y_unique = y_unique_metrics,
+         filters_pre = metrics_pre_filters,
+         filters_post = metrics_post_filters
+       )[, .y_unique_summary_cols, drop = FALSE]
+       utils::write.table(
+         row,
+         file = out_tsv,
+         sep = "\t",
+         row.names = FALSE,
+         col.names = TRUE,
+         quote = FALSE
+       )
+       .stage_success(stem, row = row, metrics = y_unique_metrics)
+     }, error = function(e) {
+       .stage_failure(stem, "y_unique", "compute_or_load", conditionMessage(e))
+     })
+   })
+   y_unique_summary_rows <- list()
+   for (item in y_unique_rows) {
+     if (isTRUE(item$ok)) {
+       y_unique_metrics_by_sample[[item$sample_name]] <- item$metrics
+       y_unique_summary_rows[[length(y_unique_summary_rows) + 1L]] <- item$row
+     } else {
+       .record_sample_failure(item)
+     }
+   }
+   y_unique_summary <- if (length(y_unique_summary_rows)) {
+     do.call(rbind, y_unique_summary_rows)
+   } else {
+     data.frame(matrix(nrow = 0L, ncol = length(.y_unique_summary_cols)))
+   }
+   names(y_unique_summary) <- .y_unique_summary_cols
+   utils::write.table(
+     y_unique_summary,
+     file = file.path(dirs$y_unique, "y_unique_summary.tsv"),
+     sep = "\t",
+     row.names = FALSE,
+     col.names = TRUE,
+     quote = FALSE
+   )
+ }, sprintf("Compute Y-unique sex-predictor ratios for %d BAMs", length(.active_bams())))
 
 .run_one({
-  .run_stage_samples(bams, opts$jobs, function(i, bam) {
-    stem <- sub("\\.(bam|cram)$", "", basename(bam), ignore.case = TRUE)
-    out_bed <- file.path(dirs$rwcx_beds, paste0(stem, ".bed.gz"))
-    if (file.exists(out_bed) && !isTRUE(opts$overwrite)) {
-      return(invisible(NULL))
-    }
-    .log_sample(i, length(bams), "RWisecondorX BED", stem)
-    sample_metrics_md <- .sample_metrics_tabix_metadata(
-      seqff = seqff_metrics_by_sample[[stem]],
-      y_unique = y_unique_metrics_by_sample[[stem]],
-      filters_pre = metrics_pre_filters,
-      filters_post = metrics_post_filters
-    )
-    bam_convert_bed(
-      bam = bam,
-      bed = out_bed,
-      binsize = as.integer(opts$`wcx-binsize`),
-      mapq = as.integer(opts$`wcx-mapq`),
-      require_flags = as.integer(opts$`wcx-require-flags`),
-      exclude_flags = as.integer(opts$`wcx-exclude-flags`),
-      rmdup = opts$`wcx-rmdup`,
-      reference = opts$fasta,
-      metadata = if (isTRUE(opts$`tabix-metadata`)) .merge_tabix_metadata(
-        .compact_metadata(list(
-          format = "rwisecondorx_bed",
-          schema = "count_v1",
-          binsize = as.integer(opts$`wcx-binsize`),
-          mapq = as.integer(opts$`wcx-mapq`),
-          require_flags = as.integer(opts$`wcx-require-flags`),
-          exclude_flags = as.integer(opts$`wcx-exclude-flags`),
-          rmdup = opts$`wcx-rmdup`,
-          reference = normalizePath(opts$fasta, winslash = "/", mustWork = TRUE)
-        )),
-        sample_metrics_md
-      ) else NULL
-    )
-    invisible(NULL)
+  stage_bams <- .active_bams()
+  if (!length(stage_bams)) {
+    return(invisible(NULL))
+  }
+  mosdepth_threads <- .mosdepth_thread_args(opts$threads, opts$jobs)
+  coverage_rows <- .run_stage_samples(stage_bams, opts$jobs, function(i, bam) {
+    stem <- .sample_stem(bam)
+    tryCatch({
+      pre_prefix <- file.path(dirs$coverage_pre, stem)
+      pre_summary <- paste0(pre_prefix, ".mosdepth.summary.txt")
+      if (!file.exists(pre_summary) || isTRUE(opts$overwrite)) {
+        .log_sample(i, length(stage_bams), "Coverage pre", stem)
+        .with_duckhts_con(function(con) {
+          Rduckhts::rduckhts_mosdepth(
+            con = con,
+            prefix = pre_prefix,
+            path = bam,
+            by = as.character(coverage_binsize),
+            fasta = opts$fasta,
+            no_per_base = TRUE,
+            threads = mosdepth_threads$threads,
+            processing_threads = mosdepth_threads$processing_threads,
+            flag = coverage_pre_filters$exclude_flags,
+            include_flag = 0L,
+            fast_mode = TRUE,
+            mapq = coverage_pre_filters$mapq,
+            overwrite = isTRUE(opts$overwrite)
+          )
+        })
+      }
+
+      post_prefix <- file.path(dirs$coverage_post, stem)
+      post_summary <- paste0(post_prefix, ".mosdepth.summary.txt")
+      if (!file.exists(post_summary) || isTRUE(opts$overwrite)) {
+        .log_sample(i, length(stage_bams), "Coverage post", stem)
+        .with_duckhts_con(function(con) {
+          Rduckhts::rduckhts_mosdepth(
+            con = con,
+            prefix = post_prefix,
+            path = bam,
+            by = as.character(coverage_binsize),
+            fasta = opts$fasta,
+            no_per_base = TRUE,
+            threads = mosdepth_threads$threads,
+            processing_threads = mosdepth_threads$processing_threads,
+            flag = coverage_post_filters$exclude_flags,
+            include_flag = 0L,
+            fast_mode = TRUE,
+            mapq = coverage_post_filters$mapq,
+            overwrite = isTRUE(opts$overwrite)
+          )
+        })
+      }
+
+      .stage_success(
+        stem,
+        coverage_metrics = .coverage_metric_record(
+          pre_summary = pre_summary,
+          post_summary = post_summary,
+          binsize = coverage_binsize,
+          pre_mapq = coverage_pre_filters$mapq,
+          pre_exclude_flags = coverage_pre_filters$exclude_flags,
+          post_mapq = coverage_post_filters$mapq,
+          post_exclude_flags = coverage_post_filters$exclude_flags,
+          source = "native_mosdepth_dense"
+        )
+      )
+    }, error = function(e) {
+      .stage_failure(stem, "coverage", "pre_or_post_mosdepth", conditionMessage(e))
+    })
   })
-}, sprintf("Convert %d BAMs to native RWisecondorX BED.gz", length(bams)))
+  for (item in coverage_rows) {
+    if (isTRUE(item$ok)) {
+      coverage_metrics_by_sample[[item$sample_name]] <- item$coverage_metrics
+    } else {
+      .record_sample_failure(item)
+    }
+  }
+}, sprintf("Write pre/post coverage outputs for %d BAMs", length(.active_bams())))
+
+.run_one({
+  stage_bams <- .active_bams()
+  if (!length(stage_bams)) {
+    return(invisible(NULL))
+  }
+  bam_stats_rows <- .run_stage_samples(stage_bams, opts$jobs, function(i, bam) {
+    stem <- .sample_stem(bam)
+    tryCatch({
+      .log_sample(i, length(stage_bams), "samtools-stats summary", stem)
+      .stage_success(
+        stem,
+        bam_stats = .samtools_stats_metric_record(
+          pre = bam_samtools_stats_summary(
+            path = bam,
+            reference = opts$fasta,
+            min_mapq = metrics_pre_filters$mapq,
+            require_flags = metrics_pre_filters$require_flags,
+            exclude_flags = metrics_pre_filters$exclude_flags
+          ),
+          post = bam_samtools_stats_summary(
+            path = bam,
+            reference = opts$fasta,
+            min_mapq = metrics_post_filters$mapq,
+            require_flags = metrics_post_filters$require_flags,
+            exclude_flags = metrics_post_filters$exclude_flags,
+            report_filtered_stream_bookkeeping = TRUE
+          ),
+          source = "native_htslib_samtools_stats"
+        )
+      )
+    }, error = function(e) {
+      .stage_failure(stem, "samtools_stats", "summary", conditionMessage(e))
+    })
+  })
+  for (item in bam_stats_rows) {
+    if (isTRUE(item$ok)) {
+      bam_stats_by_sample[[item$sample_name]] <- item$bam_stats
+    } else {
+      .record_sample_failure(item)
+    }
+  }
+}, sprintf("Compute pre/post samtools-stats summaries for %d BAMs", length(.active_bams())))
+
+.run_one({
+  stage_bams <- .active_bams()
+  if (!length(stage_bams)) {
+    return(invisible(NULL))
+  }
+  rwcx_rows <- .run_stage_samples(stage_bams, opts$jobs, function(i, bam) {
+    stem <- .sample_stem(bam)
+    out_bed <- file.path(dirs$rwcx_beds, paste0(stem, ".bed.gz"))
+    tryCatch({
+      if (file.exists(out_bed) && !isTRUE(opts$overwrite)) {
+        return(.stage_success(stem))
+      }
+      .log_sample(i, length(stage_bams), "RWisecondorX BED", stem)
+      sample_qc_md <- .sample_qc_tabix_metadata(
+        seqff = seqff_metrics_by_sample[[stem]],
+        y_unique = y_unique_metrics_by_sample[[stem]],
+        read_counts = read_counts_by_sample[[stem]],
+        bam_stats = bam_stats_by_sample[[stem]],
+        coverage = coverage_metrics_by_sample[[stem]],
+        filters_pre = metrics_pre_filters,
+        filters_post = metrics_post_filters
+      )
+      bam_convert_bed(
+        bam = bam,
+        bed = out_bed,
+        binsize = as.integer(opts$`wcx-binsize`),
+        mapq = as.integer(opts$`wcx-mapq`),
+        require_flags = as.integer(opts$`wcx-require-flags`),
+        exclude_flags = as.integer(opts$`wcx-exclude-flags`),
+        rmdup = opts$`wcx-rmdup`,
+        reference = opts$fasta,
+        metadata = .merge_tabix_metadata(
+          .compact_metadata(list(
+            format = "rwisecondorx_bed",
+            schema = "count_v1",
+            binsize = as.integer(opts$`wcx-binsize`),
+            mapq = as.integer(opts$`wcx-mapq`),
+            require_flags = as.integer(opts$`wcx-require-flags`),
+            exclude_flags = as.integer(opts$`wcx-exclude-flags`),
+            rmdup = opts$`wcx-rmdup`,
+            reference = normalizePath(opts$fasta, winslash = "/", mustWork = TRUE)
+          )),
+          sample_qc_md
+        )
+      )
+      .stage_success(stem)
+    }, error = function(e) {
+      partial_paths <- c(out_bed, paste0(out_bed, ".tbi"))
+      partial_paths <- partial_paths[file.exists(partial_paths)]
+      if (length(partial_paths)) {
+        unlink(partial_paths, force = TRUE)
+      }
+      .stage_failure(stem, "rwcx_bed", "convert", conditionMessage(e))
+    })
+  })
+  for (item in rwcx_rows) {
+    if (!isTRUE(item$ok)) {
+      .record_sample_failure(item)
+    }
+  }
+}, sprintf("Convert %d BAMs to RWisecondorX BED.gz", length(.active_bams())))
 
 .run_one({
   .write_bed_header_qc_summary(
     bed_dir = dirs$rwcx_beds,
-    out_tsv = file.path(dirs$sample_metrics, "rwcx_bed_header_qc.tsv")
+    out_tsv = file.path(dirs$sample_qc, "rwcx_bed_header_qc.tsv")
   )
 }, sprintf("Summarize RWisecondorX BED headers for %d samples", length(bams)))
 
 if (isTRUE(opts$`wcx-write-npz`)) {
   .run_one({
+    stage_bams <- .active_bams()
+    if (!length(stage_bams)) {
+      return(invisible(NULL))
+    }
     .ensure_wisecondorx_env("wisecondorx")
-    .run_stage_samples(bams, opts$jobs, function(i, bam) {
-      stem <- sub("\\.(bam|cram)$", "", basename(bam), ignore.case = TRUE)
+    npz_rows <- .run_stage_samples(stage_bams, opts$jobs, function(i, bam) {
+      stem <- .sample_stem(bam)
       out_npz <- file.path(dirs$wisecondorx_npz, paste0(stem, ".npz"))
-      .normalize_legacy_wisecondorx_npz(out_npz)
-      if (file.exists(out_npz) && !isTRUE(opts$overwrite)) {
-        return(invisible(NULL))
-      }
-      .log_sample(i, length(bams), "WisecondorX CLI NPZ", stem)
-      wisecondorx_convert(
-        bam = bam,
-        npz = out_npz,
-        binsize = as.integer(opts$`wcx-binsize`),
-        reference = opts$fasta,
-        normdup = FALSE
-      )
-      invisible(NULL)
+      tryCatch({
+        .normalize_legacy_wisecondorx_npz(out_npz)
+        if (file.exists(out_npz) && !isTRUE(opts$overwrite)) {
+          return(.stage_success(stem))
+        }
+        .log_sample(i, length(stage_bams), "WisecondorX CLI NPZ", stem)
+        wisecondorx_convert(
+          bam = bam,
+          npz = out_npz,
+          binsize = as.integer(opts$`wcx-binsize`),
+          reference = opts$fasta,
+          normdup = FALSE
+        )
+        .stage_success(stem)
+      }, error = function(e) {
+        partial_paths <- c(out_npz, paste0(out_npz, ".npz"))
+        partial_paths <- partial_paths[file.exists(partial_paths)]
+        if (length(partial_paths)) {
+          unlink(partial_paths, force = TRUE)
+        }
+        .stage_failure(stem, "wisecondorx_npz", "convert", conditionMessage(e))
+      })
     })
-  }, sprintf("Convert %d BAMs to upstream WisecondorX NPZ via Python CLI", length(bams)))
+    for (item in npz_rows) {
+      if (!isTRUE(item$ok)) {
+        .record_sample_failure(item)
+      }
+    }
+  }, sprintf("Convert %d BAMs to upstream WisecondorX NPZ via Python CLI", length(.active_bams())))
 }
 
 .run_one({
-  sample_qc_rows <- .run_stage_samples(bams, opts$jobs, function(i, bam) {
-    stem <- sub("\\.(bam|cram)$", "", basename(bam), ignore.case = TRUE)
+  stage_bams <- .active_bams()
+  sample_qc_rows <- .run_stage_samples(stage_bams, opts$jobs, function(i, bam) {
+    stem <- .sample_stem(bam)
     out_bed <- file.path(dirs$nipter_beds, paste0(stem, ".bed.gz"))
-    out_qc <- file.path(dirs$sample_metrics, paste0(stem, ".sample_qc.tsv"))
+    out_qc <- file.path(dirs$sample_qc, paste0(stem, ".sample_qc.tsv"))
     if (file.exists(out_bed) && file.exists(out_qc) && !isTRUE(opts$overwrite)) {
       cached_row <- utils::read.delim(
         out_qc,
@@ -721,27 +1003,44 @@ if (isTRUE(opts$`wcx-write-npz`)) {
         header = TRUE,
         check.names = FALSE
       )
-      native_metrics <- .native_bin_metric_record(
+      read_counts_metrics <- .read_counts_metric_record(
         record = cached_row,
-        source = "bam_bin_counts(gc,mq)"
+        source = "samtools_idxstats+bam_bin_counts(gc,mq)"
       )
-      row <- .sample_metrics_with_nipter_status(
-        cached_row,
-        written = file.exists(out_bed)
+      coverage_metrics <- coverage_metrics_by_sample[[stem]]
+      if (is.null(coverage_metrics) || !length(coverage_metrics)) {
+        coverage_metrics <- .coverage_metric_record(record = cached_row)
+      }
+      row <- tryCatch(
+        .sample_qc_row_with_nipter_status(
+          cached_row,
+          written = file.exists(out_bed),
+          status = "ok"
+        ),
+        error = function(e) NULL
       )
-      if (!all(.sample_qc_summary_cols %in% names(row))) {
-        row <- .sample_metrics_row(
+      if (is.null(row) || !all(.sample_qc_summary_cols %in% names(row))) {
+        row <- .sample_qc_row(
           sample_name = stem,
           bam = bam,
           seqff = seqff_metrics_by_sample[[stem]],
           y_unique = y_unique_metrics_by_sample[[stem]],
-          native = native_metrics,
+          read_counts = read_counts_metrics,
+          bam_stats = bam_stats_by_sample[[stem]],
+          coverage = coverage_metrics,
+          nipter_qc = .nipter_preprocess_qc_metric_record(record = cached_row),
+          gc_correction = .gc_correction_record(record = cached_row),
           filters_pre = metrics_pre_filters,
           filters_post = metrics_post_filters
         )
-        row <- .sample_metrics_with_nipter_status(
+        row <- .sample_qc_row_with_processing_status(
           row,
-          written = file.exists(out_bed)
+          status = "ok"
+        )
+        row <- .sample_qc_row_with_nipter_status(
+          row,
+          written = file.exists(out_bed),
+          status = "ok"
         )
         utils::write.table(
           row[, .sample_qc_summary_cols, drop = FALSE],
@@ -753,12 +1052,13 @@ if (isTRUE(opts$`wcx-write-npz`)) {
         )
       }
       row <- row[, .sample_qc_summary_cols, drop = FALSE]
-      return(list(row = row, native_metrics = native_metrics))
+      return(list(row = row, read_counts_metrics = read_counts_metrics))
     }
-    .log_sample(i, length(bams), "NIPTeR BED", stem)
+    .log_sample(i, length(stage_bams), "NIPTeR BED", stem)
+    nipter_failure_step <- "read_counts"
     result <- tryCatch(
       .with_duckhts_con(function(con) {
-        native_rows <- .bam_bin_count_rows(
+        read_count_rows <- .bam_bin_count_rows(
           con = con,
           bam = bam,
           binsize = as.integer(opts$`nipter-binsize`),
@@ -770,52 +1070,91 @@ if (isTRUE(opts$`wcx-write-npz`)) {
           stats = "gc,mq",
           include_unmapped = TRUE
         )
-        native_metrics <- .native_bin_metric_record(
-          rows = native_rows,
-          source = "bam_bin_counts(gc,mq)"
+        read_counts_metrics <- .read_counts_metric_record(
+          record = .merge_tabix_metadata(
+            .bam_alignment_count_metadata(con, bam),
+            .bam_read_counts_metadata(read_count_rows)
+          ),
+          source = "samtools_idxstats+bam_bin_counts(gc,mq)"
         )
         chr_lengths <- .bam_chr_lengths(con, bam)
         raw_sample <- .nipter_rows_to_sample(
-          rows = native_rows,
+          rows = read_count_rows,
           chr_lengths = chr_lengths,
           binsize = as.integer(opts$`nipter-binsize`),
           name = stem,
           separate_strands = isTRUE(opts$`nipter-separate-strands`)
         )
+        nipter_failure_step <<- "gc_correction"
         corrected_sample <- nipter_gc_correct(
           raw_sample,
           gc_table = gc_table,
+          span = as.numeric(opts$`nipter-gc-loess-span`),
           include_sex = isTRUE(opts$`nipter-gc-include-sex`),
           con = con
         )
+        nipter_failure_step <<- "qc_metrics"
         nipter_qc <- .nipter_preprocess_qc(
           sample = raw_sample,
           corrected = corrected_sample,
           gc_table = gc_table,
+          include_sex = isTRUE(opts$`nipter-gc-include-sex`),
           binsize = as.integer(opts$`nipter-binsize`),
           con = con
         )
-        curve_tsv <- file.path(dirs$nipter_gc_curve_data, paste0(stem, ".gc_curve_data.tsv"))
-        utils::write.table(
-          nipter_qc$curve_data,
-          file = curve_tsv,
-          sep = "\t",
-          row.names = FALSE,
-          col.names = TRUE,
-          quote = FALSE
+        curve_bgz <- file.path(dirs$nipter_gc_curve_data, paste0(stem, ".gc_curve_data.tsv.bgz"))
+        .write_nipter_gc_curve_data_bgz(
+          curve_data = nipter_qc$curve_data,
+          out_bgz = curve_bgz,
+          con = con,
+          metadata = .merge_tabix_metadata(
+            list(
+              artifact_type = "nipter_gc_curve_data",
+              sample_name = stem
+            ),
+            .sample_qc_tabix_metadata(
+              seqff = seqff_metrics_by_sample[[stem]],
+              y_unique = y_unique_metrics_by_sample[[stem]],
+              read_counts = read_counts_metrics,
+              bam_stats = bam_stats_by_sample[[stem]],
+              coverage = coverage_metrics_by_sample[[stem]],
+              nipter_qc = nipter_qc$metrics,
+              gc_correction = .nipter_gc_correction_record(),
+              filters_pre = metrics_pre_filters,
+              filters_post = metrics_post_filters
+            )
+          )
         )
-        nipter_qc$metrics$gc_curve_data_tsv <- curve_tsv
+        nipter_qc$metrics$gc_curve_data_bgz <- curve_bgz
         if (isTRUE(opts$`nipter-gc-curves`)) {
+          nipter_failure_step <<- "qc_gc_curve_plot"
           curve_png <- file.path(dirs$nipter_gc_curves, paste0(stem, ".gc_curve.png"))
           .write_nipter_gc_curve_plot(
             curve_data = nipter_qc$curve_data,
             sample_name = stem,
             out_png = curve_png,
             theme = opts$`qc-plot-theme`,
-            base_size = as.integer(opts$`qc-plot-base-size`)
+            base_size = as.integer(opts$`qc-plot-base-size`),
+            loess_span = as.numeric(opts$`nipter-gc-loess-span`)
           )
           nipter_qc$metrics$gc_curve_plot <- curve_png
         }
+        if (isTRUE(opts$`nipter-corrected-bin-ratio-genome-plots`)) {
+          nipter_failure_step <<- "qc_corrected_bin_ratio_plot"
+          genome_plot_png <- file.path(
+            dirs$nipter_corrected_bin_ratio_genome_plots,
+            paste0(stem, ".corrected_bin_ratio_genome.png")
+          )
+          .write_nipter_corrected_bin_ratio_genome_plot(
+            curve_data = nipter_qc$curve_data,
+            sample_name = stem,
+            out_png = genome_plot_png,
+            theme = opts$`qc-plot-theme`,
+            base_size = as.integer(opts$`qc-plot-base-size`)
+          )
+          nipter_qc$metrics$corrected_bin_ratio_genome_plot <- genome_plot_png
+        }
+        nipter_failure_step <<- "write_bed"
         nipter_sample_to_bed(
           sample = raw_sample,
           corrected = corrected_sample,
@@ -823,7 +1162,7 @@ if (isTRUE(opts$`wcx-write-npz`)) {
           binsize = as.integer(opts$`nipter-binsize`),
           con = con,
           metadata = .merge_tabix_metadata(
-            if (isTRUE(opts$`tabix-metadata`)) .compact_metadata(list(
+            .compact_metadata(list(
               format = "nipter_bed",
               schema = if (isTRUE(opts$`nipter-separate-strands`)) "separated_v1" else "combined_v1",
               binsize = as.integer(opts$`nipter-binsize`),
@@ -832,36 +1171,37 @@ if (isTRUE(opts$`wcx-write-npz`)) {
               exclude_flags = as.integer(opts$`nipter-exclude-flags`),
               rmdup = "none",
               corrected_columns = TRUE,
-              gc_method = "loess",
-              gc_include_sex = isTRUE(opts$`nipter-gc-include-sex`),
-              reference = normalizePath(opts$fasta, winslash = "/", mustWork = TRUE),
-              gc_table = normalizePath(gc_table, winslash = "/", mustWork = TRUE)
-            )) else NULL,
+              reference = normalizePath(opts$fasta, winslash = "/", mustWork = TRUE)
+            )),
             .merge_tabix_metadata(
-              if (isTRUE(opts$`tabix-metadata`)) .sample_metrics_tabix_metadata(
+              .sample_qc_tabix_metadata(
                 seqff = seqff_metrics_by_sample[[stem]],
                 y_unique = y_unique_metrics_by_sample[[stem]],
-                native = native_metrics,
+                read_counts = read_counts_metrics,
+                bam_stats = bam_stats_by_sample[[stem]],
+                coverage = coverage_metrics_by_sample[[stem]],
                 nipter_qc = nipter_qc$metrics,
+                gc_correction = .nipter_gc_correction_record(),
                 filters_pre = metrics_pre_filters,
                 filters_post = metrics_post_filters
-              ) else NULL,
-              if (isTRUE(opts$`tabix-metadata`)) .bam_bin_stats_metadata(native_rows) else NULL
+              )
             )
           )
         )
         list(
           ok = TRUE,
-          native_metrics = native_metrics,
+          read_counts_metrics = read_counts_metrics,
           nipter_qc = nipter_qc$metrics,
+          failure_step = NULL,
           failure_message = NULL
         )
       }),
       error = function(e) {
         list(
           ok = FALSE,
-          native_metrics = NULL,
+          read_counts_metrics = NULL,
           nipter_qc = NULL,
+          failure_step = nipter_failure_step,
           failure_message = conditionMessage(e)
         )
       }
@@ -873,22 +1213,33 @@ if (isTRUE(opts$`wcx-write-npz`)) {
         unlink(partial_paths, force = TRUE)
       }
     }
-    native_metrics <- result$native_metrics
+    read_counts_metrics <- result$read_counts_metrics
     failure_message <- result$failure_message
-    row <- .sample_metrics_row(
+    row <- .sample_qc_row(
       sample_name = stem,
       bam = bam,
       seqff = seqff_metrics_by_sample[[stem]],
       y_unique = y_unique_metrics_by_sample[[stem]],
-      native = native_metrics,
+      read_counts = read_counts_metrics,
+      bam_stats = bam_stats_by_sample[[stem]],
+      coverage = coverage_metrics_by_sample[[stem]],
       nipter_qc = result$nipter_qc,
+      gc_correction = .nipter_gc_correction_record(),
       filters_pre = metrics_pre_filters,
       filters_post = metrics_post_filters
     )
-    row <- .sample_metrics_with_nipter_status(
+    row <- .sample_qc_row_with_processing_status(
+      row,
+      status = if (isTRUE(result$ok)) "ok" else "failed",
+      failure_stage = if (isTRUE(result$ok)) NULL else "nipter_bed",
+      failure_step = if (isTRUE(result$ok)) NULL else result$failure_step,
+      failure_message = if (isTRUE(result$ok)) NULL else failure_message
+    )
+    row <- .sample_qc_row_with_nipter_status(
       row,
       written = isTRUE(result$ok) && file.exists(out_bed),
-      error = if (isTRUE(result$ok)) NULL else failure_message
+      error = if (isTRUE(result$ok)) NULL else failure_message,
+      status = if (isTRUE(result$ok)) "ok" else "failed"
     )[, .sample_qc_summary_cols, drop = FALSE]
     utils::write.table(
       row,
@@ -905,158 +1256,76 @@ if (isTRUE(opts$`wcx-write-npz`)) {
         i, length(bams), stem, failure_message
       ))
     }
-    list(row = row, native_metrics = native_metrics)
+    list(row = row, read_counts_metrics = read_counts_metrics)
   })
   for (item in sample_qc_rows) {
-    stem <- as.character(item$row$sample_name[[1L]])
-    native_metrics_by_sample[[stem]] <- item$native_metrics
+    row <- item$row[, .sample_qc_summary_cols, drop = FALSE]
+    stem <- as.character(row$sample_name[[1L]])
+    read_counts_by_sample[[stem]] <- item$read_counts_metrics
+    final_sample_qc_rows[[stem]] <- row
+    if (identical(row$sample_processing_status[[1L]], "failed")) {
+      sample_failures_by_sample[[stem]] <- list(
+        stage = as.character(row$sample_failure_stage[[1L]]),
+        step = as.character(row$sample_failure_step[[1L]]),
+        message = as.character(row$sample_failure_message[[1L]])
+      )
+    }
   }
-  sample_qc_summary <- do.call(rbind, lapply(sample_qc_rows, `[[`, "row"))
+  for (stem in sample_names) {
+    if (is.null(final_sample_qc_rows[[stem]])) {
+      final_sample_qc_rows[[stem]] <- .build_sample_qc_row(stem, bams[[stem]])
+    }
+    utils::write.table(
+      final_sample_qc_rows[[stem]][, .sample_qc_summary_cols, drop = FALSE],
+      file = file.path(dirs$sample_qc, paste0(stem, ".sample_qc.tsv")),
+      sep = "\t",
+      row.names = FALSE,
+      col.names = TRUE,
+      quote = FALSE
+    )
+  }
+  sample_qc_summary <- do.call(rbind, final_sample_qc_rows[sample_names])
+  sample_qc_summary <- sample_qc_summary[, .sample_qc_summary_cols, drop = FALSE]
   utils::write.table(
     sample_qc_summary,
-    file = file.path(dirs$sample_metrics, "sample_qc.tsv"),
+    file = file.path(dirs$sample_qc, "sample_qc.tsv"),
     sep = "\t",
     row.names = FALSE,
     col.names = TRUE,
     quote = FALSE
   )
   sample_failures <- sample_qc_summary[
-    is.na(sample_qc_summary$nipter_bed_written) | !sample_qc_summary$nipter_bed_written,
-    c("sample_name", "bam", "nipter_bed_status", "nipter_bed_error"),
+    sample_qc_summary$sample_processing_status %in% "failed",
+    c(
+      "sample_name",
+      "bam",
+      "sample_processing_status",
+      "sample_failure_stage",
+      "sample_failure_step",
+      "sample_failure_message",
+      "nipter_bed_status",
+      "nipter_bed_written",
+      "nipter_bed_error"
+    ),
     drop = FALSE
   ]
   utils::write.table(
     sample_failures,
-    file = file.path(dirs$sample_metrics, "sample_failures.tsv"),
+    file = file.path(dirs$sample_qc, "sample_failures.tsv"),
     sep = "\t",
     row.names = FALSE,
     col.names = TRUE,
     quote = FALSE
   )
 
-  qc_flag_cols <- c(
-    "too_few_reads_for_metrics",
-    "missing_seqff_metrics",
-    "missing_y_unique_metrics",
-    "missing_native_metrics",
-    "missing_nipter_preprocess_qc_metrics",
-    "seqff_metrics_ready",
-    "y_unique_metrics_ready",
-    "native_metrics_ready",
-    "nipter_preprocess_qc_ready",
-    "sample_metrics_ready",
-    "gc_curve_has_valid_bins",
-    "gc_curve_has_loess_support",
-    "nipter_bed_written"
-  )
-  qc_flag_summary <- do.call(
-    rbind,
-    lapply(qc_flag_cols, function(col) {
-      vals <- sample_qc_summary[[col]]
-      data.frame(
-        metric = col,
-        n_true = sum(vals %in% TRUE, na.rm = TRUE),
-        n_false = sum(vals %in% FALSE, na.rm = TRUE),
-        n_na = sum(is.na(vals)),
-        stringsAsFactors = FALSE
-      )
-    })
-  )
-  utils::write.table(
-    qc_flag_summary,
-    file = file.path(dirs$sample_metrics, "qc_flag_summary.tsv"),
-    sep = "\t",
-    row.names = FALSE,
-    col.names = TRUE,
-    quote = FALSE
-  )
-
-  readiness_summary <- sample_qc_summary[, c(
-    "sample_name", "bam",
-    "seqff_metrics_ready", "y_unique_metrics_ready",
-    "native_metrics_ready", "nipter_preprocess_qc_ready",
-    "sample_metrics_ready", "nipter_bed_written",
-    "nipter_bed_status", "nipter_bed_error"
-  ), drop = FALSE]
-  utils::write.table(
-    readiness_summary,
-    file = file.path(dirs$sample_metrics, "sample_readiness.tsv"),
-    sep = "\t",
-    row.names = FALSE,
-    col.names = TRUE,
-    quote = FALSE
-  )
-}, sprintf("Convert %d BAMs to NIPTeR BED.gz", length(bams)))
+}, sprintf("Convert %d BAMs to NIPTeR BED.gz", length(.active_bams())))
 
 .run_one({
   .write_bed_header_qc_summary(
     bed_dir = dirs$nipter_beds,
-    out_tsv = file.path(dirs$sample_metrics, "nipter_bed_header_qc.tsv")
+    out_tsv = file.path(dirs$sample_qc, "nipter_bed_header_qc.tsv")
   )
 }, sprintf("Summarize NIPTeR BED headers for %d samples", length(bams)))
-
-.run_one({
-  mosdepth_threads <- .mosdepth_thread_args(opts$threads, opts$jobs)
-  .run_stage_samples(bams, opts$jobs, function(i, bam) {
-    stem <- sub("\\.(bam|cram)$", "", basename(bam), ignore.case = TRUE)
-
-    raw_prefix <- file.path(dirs$mosdepth_raw_50k, stem)
-    raw_summary <- paste0(raw_prefix, ".mosdepth.summary.txt")
-    if (!file.exists(raw_summary) || isTRUE(opts$overwrite)) {
-      .log_sample(i, length(bams), "Mosdepth raw 50k", stem)
-      .with_duckhts_con(function(con) {
-        Rduckhts::rduckhts_mosdepth(
-          con = con,
-          prefix = raw_prefix,
-          path = bam,
-          by = "50000",
-          fasta = opts$fasta,
-          no_per_base = TRUE,
-          threads = mosdepth_threads$threads,
-          processing_threads = mosdepth_threads$processing_threads,
-          flag = as.integer(opts$`mosdepth-exclude-flags-base`),
-          include_flag = 0L,
-          fast_mode = TRUE,
-          mapq = 0L,
-          overwrite = isTRUE(opts$overwrite)
-        )
-      })
-    }
-
-    filtered_prefix <- file.path(dirs$mosdepth_filtered_50k, stem)
-    filtered_summary <- paste0(filtered_prefix, ".mosdepth.summary.txt")
-    if (!file.exists(filtered_summary) || isTRUE(opts$overwrite)) {
-      .log_sample(i, length(bams), "Mosdepth filtered 50k", stem)
-      .with_duckhts_con(function(con) {
-        Rduckhts::rduckhts_mosdepth(
-          con = con,
-          prefix = filtered_prefix,
-          path = bam,
-          by = "50000",
-          fasta = opts$fasta,
-          no_per_base = TRUE,
-          threads = mosdepth_threads$threads,
-          processing_threads = mosdepth_threads$processing_threads,
-          flag = as.integer(if (is.null(opts$`mosdepth-filtered-exclude-flags`)) {
-            opts$`mosdepth-exclude-flags-base`
-          } else {
-            opts$`mosdepth-filtered-exclude-flags`
-          }),
-          include_flag = 0L,
-          fast_mode = TRUE,
-          mapq = as.integer(if (is.null(opts$`mosdepth-filtered-mapq`)) {
-            opts$`nipter-mapq`
-          } else {
-            opts$`mosdepth-filtered-mapq`
-          }),
-          overwrite = isTRUE(opts$overwrite)
-        )
-      })
-    }
-
-    invisible(NULL)
-  })
-}, sprintf("Write native mosdepth-compatible 50 kb outputs for %d BAMs", length(bams)))
 
 cat("\nPreprocessing layout ready under:\n")
 cat("  out_root:    ", out_root, "\n", sep = "")
@@ -1066,16 +1335,16 @@ cat("  gc_table:    ", gc_table, "\n", sep = "")
 cat("  y_regions:   ", y_regions_file, "\n", sep = "")
 cat("  seqff:       ", dirs$seqff, "\n", sep = "")
 cat("  y_unique:    ", dirs$y_unique, "\n", sep = "")
-cat("  sample_qc:   ", file.path(dirs$sample_metrics, "sample_qc.tsv"), "\n", sep = "")
-cat("  sample_failures: ", file.path(dirs$sample_metrics, "sample_failures.tsv"), "\n", sep = "")
-cat("  sample_readiness: ", file.path(dirs$sample_metrics, "sample_readiness.tsv"), "\n", sep = "")
-cat("  qc_flag_summary: ", file.path(dirs$sample_metrics, "qc_flag_summary.tsv"), "\n", sep = "")
-cat("  rwcx_header_qc: ", file.path(dirs$sample_metrics, "rwcx_bed_header_qc.tsv"), "\n", sep = "")
-cat("  nipter_header_qc: ", file.path(dirs$sample_metrics, "nipter_bed_header_qc.tsv"), "\n", sep = "")
+cat("  sample_qc:   ", file.path(dirs$sample_qc, "sample_qc.tsv"), "\n", sep = "")
+cat("  sample_failures: ", file.path(dirs$sample_qc, "sample_failures.tsv"), "\n", sep = "")
+cat("  rwcx_header_qc: ", file.path(dirs$sample_qc, "rwcx_bed_header_qc.tsv"), "\n", sep = "")
+cat("  nipter_header_qc: ", file.path(dirs$sample_qc, "nipter_bed_header_qc.tsv"), "\n", sep = "")
 cat("  rwcx_beds:   ", dirs$rwcx_beds, "\n", sep = "")
 cat("  wisecondorx_npz: ", dirs$wisecondorx_npz, "\n", sep = "")
 cat("  nipter_beds: ", dirs$nipter_beds, "\n", sep = "")
 cat("  nipter_gc_curves: ", dirs$nipter_gc_curves, "\n", sep = "")
 cat("  nipter_gc_curve_data: ", dirs$nipter_gc_curve_data, "\n", sep = "")
-cat("  mosdepth_raw_50k: ", dirs$mosdepth_raw_50k, "\n", sep = "")
-cat("  mosdepth_filtered_50k: ", dirs$mosdepth_filtered_50k, "\n", sep = "")
+cat("  nipter_corrected_bin_ratio_genome_plots: ", dirs$nipter_corrected_bin_ratio_genome_plots, "\n", sep = "")
+cat("  coverage_pre: ", dirs$coverage_pre, "\n", sep = "")
+cat("  coverage_post: ", dirs$coverage_post, "\n", sep = "")
+cat("  coverage_binsize: ", coverage_binsize, "\n", sep = "")

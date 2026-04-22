@@ -2,7 +2,7 @@
 #
 # predict_cohort.R
 #
-# Score a preprocessed cohort against native RWisecondorX and/or NIPTeR
+# Score a preprocessed cohort against RWisecondorX and/or NIPTeR
 # references. This script expects BED-based cohort artifacts that were already
 # produced by preprocess_cohort.R plus reference objects from build_reference.R.
 
@@ -307,7 +307,7 @@ if (!exists("%||%", mode = "function")) {
     sample_name = sample_name,
     predicted_sex = sex_score$predicted_sex,
     y_unique_ratio_post = .qc_scalar(sample_qc_row, "y_unique_ratio_post"),
-    GCPCTAfterFiltering = .qc_scalar(sample_qc_row, "GCPCTAfterFiltering"),
+    gc_read_perc_post = .qc_scalar(sample_qc_row, "gc_read_perc_post"),
     stringsAsFactors = FALSE
   )
   for (nm in names(sex_score$z_scores)) {
@@ -459,9 +459,12 @@ if (!exists("%||%", mode = "function")) {
     z_18 = .rwx_stat_scalar(prediction, 18, "zscore"),
     z_21 = .rwx_stat_scalar(prediction, 21, "zscore"),
     z_X = .rwx_stat_scalar(prediction, "X", "zscore"),
-    sample_metrics_ready = .qc_logical(sample_qc_row, "sample_metrics_ready"),
-    missing_native_metrics = .qc_logical(sample_qc_row, "missing_native_metrics"),
-    missing_nipter_preprocess_qc_metrics = .qc_logical(sample_qc_row, "missing_nipter_preprocess_qc_metrics"),
+    read_counts_input_total = .qc_scalar(sample_qc_row, "read_counts_input_total"),
+    read_counts_mapped_total = .qc_scalar(sample_qc_row, "read_counts_mapped_total"),
+    read_counts_binned_post_sum = .qc_scalar(sample_qc_row, "read_counts_binned_post_sum"),
+    fetal_fraction_post = .qc_scalar(sample_qc_row, "fetal_fraction_post"),
+    y_unique_ratio_post = .qc_scalar(sample_qc_row, "y_unique_ratio_post"),
+    gc_curve_has_loess_support = .qc_logical(sample_qc_row, "gc_curve_has_loess_support"),
     nipter_bed_status = .qc_text(sample_qc_row, "nipter_bed_status"),
     out_dir = sample_dir,
     stringsAsFactors = FALSE
@@ -565,16 +568,11 @@ if (!exists("%||%", mode = "function")) {
     status = "ok",
     error = NA_character_,
     predicted_sex = sex_summary$predicted_sex[[1L]],
-    too_few_reads_for_metrics = if (is.null(sample_qc_row)) NA else as.logical(sample_qc_row$too_few_reads_for_metrics[[1L]]),
-    sample_metrics_ready = .qc_logical(sample_qc_row, "sample_metrics_ready"),
-    seqff_metrics_ready = .qc_logical(sample_qc_row, "seqff_metrics_ready"),
-    y_unique_metrics_ready = .qc_logical(sample_qc_row, "y_unique_metrics_ready"),
-    native_metrics_ready = .qc_logical(sample_qc_row, "native_metrics_ready"),
-    nipter_preprocess_qc_ready = .qc_logical(sample_qc_row, "nipter_preprocess_qc_ready"),
-    missing_seqff_metrics = .qc_logical(sample_qc_row, "missing_seqff_metrics"),
-    missing_y_unique_metrics = .qc_logical(sample_qc_row, "missing_y_unique_metrics"),
-    missing_native_metrics = .qc_logical(sample_qc_row, "missing_native_metrics"),
-    missing_nipter_preprocess_qc_metrics = .qc_logical(sample_qc_row, "missing_nipter_preprocess_qc_metrics"),
+    read_counts_input_total = .qc_scalar(sample_qc_row, "read_counts_input_total"),
+    read_counts_mapped_total = .qc_scalar(sample_qc_row, "read_counts_mapped_total"),
+    read_counts_binned_post_sum = .qc_scalar(sample_qc_row, "read_counts_binned_post_sum"),
+    fetal_fraction_post = .qc_scalar(sample_qc_row, "fetal_fraction_post"),
+    y_unique_ratio_post = .qc_scalar(sample_qc_row, "y_unique_ratio_post"),
     gc_curve_has_valid_bins = .qc_logical(sample_qc_row, "gc_curve_has_valid_bins"),
     gc_curve_has_loess_support = .qc_logical(sample_qc_row, "gc_curve_has_loess_support"),
     nipter_bed_status = .qc_text(sample_qc_row, "nipter_bed_status"),
@@ -600,9 +598,9 @@ option_list <- list(
   make_option("--out-root", type = "character", default = NULL,
               help = "Prediction output root [required]"),
   make_option("--rwcx-bed-dir", type = "character", default = NULL,
-              help = "Directory of native RWisecondorX BED.gz files. Expected naming contract: <sample_name>.bed.gz unless --rwcx-bed-list is supplied."),
+              help = "Directory of RWisecondorX BED.gz files. Expected naming contract: <sample_name>.bed.gz unless --rwcx-bed-list is supplied."),
   make_option("--rwcx-bed-list", type = "character", default = NULL,
-              help = "Explicit file list with one native RWisecondorX BED.gz path per line. Overrides the implicit --rwcx-bed-dir naming contract."),
+              help = "Explicit file list with one RWisecondorX BED.gz path per line. Overrides the implicit --rwcx-bed-dir naming contract."),
   make_option("--rwcx-reference", type = "character", default = NULL,
               help = "Native RWisecondorX reference RDS [required]"),
   make_option("--rwcx-binsize", type = "integer", default = 100000L,
@@ -666,7 +664,7 @@ parser <- OptionParser(
     "%prog --bam-list cohort.txt --out-root predict/ \\",
     "  --rwcx-bed-dir rwcx_beds --rwcx-reference rwisecondorx_ref.rds \\",
     "  --nipter-bed-dir nipter_beds --nipter-reference nipter_reference_model.rds \\",
-    "  --sample-qc-tsv sample_metrics/sample_qc.tsv",
+    "  --sample-qc-tsv sample_qc/sample_qc.tsv",
     sep = "\n"
   ),
   option_list = option_list
@@ -788,9 +786,12 @@ rwx_rows <- .run_stage_samples(
         z_18 = NA_real_,
         z_21 = NA_real_,
         z_X = NA_real_,
-        sample_metrics_ready = .qc_logical(sample_qc_row, "sample_metrics_ready"),
-        missing_native_metrics = .qc_logical(sample_qc_row, "missing_native_metrics"),
-        missing_nipter_preprocess_qc_metrics = .qc_logical(sample_qc_row, "missing_nipter_preprocess_qc_metrics"),
+        read_counts_input_total = .qc_scalar(sample_qc_row, "read_counts_input_total"),
+        read_counts_mapped_total = .qc_scalar(sample_qc_row, "read_counts_mapped_total"),
+        read_counts_binned_post_sum = .qc_scalar(sample_qc_row, "read_counts_binned_post_sum"),
+        fetal_fraction_post = .qc_scalar(sample_qc_row, "fetal_fraction_post"),
+        y_unique_ratio_post = .qc_scalar(sample_qc_row, "y_unique_ratio_post"),
+        gc_curve_has_loess_support = .qc_logical(sample_qc_row, "gc_curve_has_loess_support"),
         nipter_bed_status = .qc_text(sample_qc_row, "nipter_bed_status"),
         out_dir = file.path(dirs$rwisecondorx, sample_name),
         stringsAsFactors = FALSE
@@ -831,9 +832,12 @@ rwx_rows <- .run_stage_samples(
           z_18 = NA_real_,
           z_21 = NA_real_,
           z_X = NA_real_,
-          sample_metrics_ready = .qc_logical(sample_qc_row, "sample_metrics_ready"),
-          missing_native_metrics = .qc_logical(sample_qc_row, "missing_native_metrics"),
-          missing_nipter_preprocess_qc_metrics = .qc_logical(sample_qc_row, "missing_nipter_preprocess_qc_metrics"),
+          read_counts_input_total = .qc_scalar(sample_qc_row, "read_counts_input_total"),
+          read_counts_mapped_total = .qc_scalar(sample_qc_row, "read_counts_mapped_total"),
+          read_counts_binned_post_sum = .qc_scalar(sample_qc_row, "read_counts_binned_post_sum"),
+          fetal_fraction_post = .qc_scalar(sample_qc_row, "fetal_fraction_post"),
+          y_unique_ratio_post = .qc_scalar(sample_qc_row, "y_unique_ratio_post"),
+          gc_curve_has_loess_support = .qc_logical(sample_qc_row, "gc_curve_has_loess_support"),
           nipter_bed_status = .qc_text(sample_qc_row, "nipter_bed_status"),
           out_dir = file.path(dirs$rwisecondorx, sample_name),
           stringsAsFactors = FALSE
@@ -860,16 +864,11 @@ nipter_rows <- .run_stage_samples(
         status = "missing_input",
         error = paste("Missing NIPTeR BED:", bed_path),
         predicted_sex = NA_character_,
-        too_few_reads_for_metrics = if (is.null(sample_qc_row)) NA else as.logical(sample_qc_row$too_few_reads_for_metrics[[1L]]),
-        sample_metrics_ready = .qc_logical(sample_qc_row, "sample_metrics_ready"),
-        seqff_metrics_ready = .qc_logical(sample_qc_row, "seqff_metrics_ready"),
-        y_unique_metrics_ready = .qc_logical(sample_qc_row, "y_unique_metrics_ready"),
-        native_metrics_ready = .qc_logical(sample_qc_row, "native_metrics_ready"),
-        nipter_preprocess_qc_ready = .qc_logical(sample_qc_row, "nipter_preprocess_qc_ready"),
-        missing_seqff_metrics = .qc_logical(sample_qc_row, "missing_seqff_metrics"),
-        missing_y_unique_metrics = .qc_logical(sample_qc_row, "missing_y_unique_metrics"),
-        missing_native_metrics = .qc_logical(sample_qc_row, "missing_native_metrics"),
-        missing_nipter_preprocess_qc_metrics = .qc_logical(sample_qc_row, "missing_nipter_preprocess_qc_metrics"),
+        read_counts_input_total = .qc_scalar(sample_qc_row, "read_counts_input_total"),
+        read_counts_mapped_total = .qc_scalar(sample_qc_row, "read_counts_mapped_total"),
+        read_counts_binned_post_sum = .qc_scalar(sample_qc_row, "read_counts_binned_post_sum"),
+        fetal_fraction_post = .qc_scalar(sample_qc_row, "fetal_fraction_post"),
+        y_unique_ratio_post = .qc_scalar(sample_qc_row, "y_unique_ratio_post"),
         gc_curve_has_valid_bins = .qc_logical(sample_qc_row, "gc_curve_has_valid_bins"),
         gc_curve_has_loess_support = .qc_logical(sample_qc_row, "gc_curve_has_loess_support"),
         nipter_bed_status = .qc_text(sample_qc_row, "nipter_bed_status"),
@@ -912,16 +911,11 @@ nipter_rows <- .run_stage_samples(
           status = "failed",
           error = conditionMessage(e),
           predicted_sex = NA_character_,
-          too_few_reads_for_metrics = if (is.null(sample_qc_row)) NA else as.logical(sample_qc_row$too_few_reads_for_metrics[[1L]]),
-          sample_metrics_ready = .qc_logical(sample_qc_row, "sample_metrics_ready"),
-          seqff_metrics_ready = .qc_logical(sample_qc_row, "seqff_metrics_ready"),
-          y_unique_metrics_ready = .qc_logical(sample_qc_row, "y_unique_metrics_ready"),
-          native_metrics_ready = .qc_logical(sample_qc_row, "native_metrics_ready"),
-          nipter_preprocess_qc_ready = .qc_logical(sample_qc_row, "nipter_preprocess_qc_ready"),
-          missing_seqff_metrics = .qc_logical(sample_qc_row, "missing_seqff_metrics"),
-          missing_y_unique_metrics = .qc_logical(sample_qc_row, "missing_y_unique_metrics"),
-          missing_native_metrics = .qc_logical(sample_qc_row, "missing_native_metrics"),
-          missing_nipter_preprocess_qc_metrics = .qc_logical(sample_qc_row, "missing_nipter_preprocess_qc_metrics"),
+          read_counts_input_total = .qc_scalar(sample_qc_row, "read_counts_input_total"),
+          read_counts_mapped_total = .qc_scalar(sample_qc_row, "read_counts_mapped_total"),
+          read_counts_binned_post_sum = .qc_scalar(sample_qc_row, "read_counts_binned_post_sum"),
+          fetal_fraction_post = .qc_scalar(sample_qc_row, "fetal_fraction_post"),
+          y_unique_ratio_post = .qc_scalar(sample_qc_row, "y_unique_ratio_post"),
           gc_curve_has_valid_bins = .qc_logical(sample_qc_row, "gc_curve_has_valid_bins"),
           gc_curve_has_loess_support = .qc_logical(sample_qc_row, "gc_curve_has_loess_support"),
           nipter_bed_status = .qc_text(sample_qc_row, "nipter_bed_status"),
@@ -956,20 +950,6 @@ cohort_summary <- Reduce(
 )
 .write_tsv(cohort_summary, file.path(out_root, "cohort_summary.tsv"))
 
-prediction_readiness <- cohort_summary[, intersect(c(
-  "sample_name",
-  "status_rwisecondorx", "status_nipter",
-  "sample_metrics_ready_rwisecondorx", "sample_metrics_ready_nipter",
-  "missing_native_metrics_rwisecondorx", "missing_native_metrics_nipter",
-  "missing_nipter_preprocess_qc_metrics_rwisecondorx", "missing_nipter_preprocess_qc_metrics_nipter",
-  "seqff_metrics_ready", "y_unique_metrics_ready", "native_metrics_ready", "nipter_preprocess_qc_ready",
-  "missing_seqff_metrics", "missing_y_unique_metrics", "missing_native_metrics", "missing_nipter_preprocess_qc_metrics",
-  "gc_curve_has_valid_bins", "gc_curve_has_loess_support",
-  "nipter_bed_status_rwisecondorx", "nipter_bed_status_nipter"
-), names(cohort_summary)), drop = FALSE]
-.write_tsv(prediction_readiness, file.path(out_root, "prediction_readiness.tsv"))
-
 cat(sprintf("RWisecondorX summary: %s\n", file.path(out_root, "rwisecondorx_summary.tsv")))
 cat(sprintf("NIPTeR summary: %s\n", file.path(out_root, "nipter_summary.tsv")))
 cat(sprintf("Combined cohort summary: %s\n", file.path(out_root, "cohort_summary.tsv")))
-cat(sprintf("Prediction readiness summary: %s\n", file.path(out_root, "prediction_readiness.tsv")))

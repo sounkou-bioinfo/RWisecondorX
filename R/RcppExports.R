@@ -25,3 +25,7 @@ nipter_stepwise_cpp <- function(fracs, focus_row, cand_rows, n_step) {
     .Call(`_RWisecondorX_nipter_stepwise_cpp`, fracs, focus_row, cand_rows, n_step)
 }
 
+samtools_stats_summary_cpp <- function(path, reference = "", min_mapq = 0L, require_flags = 0L, exclude_flags = 0L, decompression_threads = 0L, report_filtered_stream_bookkeeping = FALSE) {
+    .Call(`_RWisecondorX_samtools_stats_summary_cpp`, path, reference, min_mapq, require_flags, exclude_flags, decompression_threads, report_filtered_stream_bookkeeping)
+}
+

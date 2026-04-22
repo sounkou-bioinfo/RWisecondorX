@@ -61,7 +61,7 @@ nipter_build_gaunosome_models <- function(reference,
                                           ncv_max_elements = 9L,
                                           regression_n_models = 4L,
                                           regression_n_predictors = 4L,
-                                          regression_extra_predictors = "GCPCTAfterFiltering",
+                                          regression_extra_predictors = "gc_read_perc_post",
                                           focus_chromosomes = c("X", "Y")) {
   reference <- nipter_build_sex_ncv_models(
     reference = reference,
@@ -98,7 +98,7 @@ nipter_build_gaunosome_models <- function(reference,
 #'   for the z-score component. Default \code{2L}.
 #' @param sample_predictors Optional named list of extra predictor values for
 #'   the sample, used when the regression models include extra columns such as
-#'   \code{GCPCTAfterFiltering}.
+#'   \code{gc_read_perc_post}.
 #' @param focus_chromosomes Character vector; any subset of \code{c("X", "Y")}.
 #'
 #' @return A typed \code{NIPTGaunosomeScore} object containing the component

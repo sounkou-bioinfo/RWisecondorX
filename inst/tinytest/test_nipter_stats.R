@@ -420,8 +420,8 @@ expect_true(!("ss_ctrl_01" %in% control_names(ss_drop)),
 
 ss_qc <- data.frame(
   sample_name = control_names(ss_cg),
-  TotalUniqueReads = c(6e6, 6.1e6, 3e6, 6.2e6, 6.0e6, 5.9e6, 6.05e6, 6.15e6, 5.95e6, 6.1e6),
-  GCPCTAfterFiltering = c(40.0, 40.2, 39.9, 40.1, 39.8, 40.3, 40.0, 40.2, 39.7, 45.0),
+  read_counts_binned_post_sum = c(6e6, 6.1e6, 3e6, 6.2e6, 6.0e6, 5.9e6, 6.05e6, 6.15e6, 5.95e6, 6.1e6),
+  gc_read_perc_post = c(40.0, 40.2, 39.9, 40.1, 39.8, 40.3, 40.0, 40.2, 39.7, 45.0),
   stringsAsFactors = FALSE
 )
 ss_qc_filtered <- nipter_filter_control_group_qc(

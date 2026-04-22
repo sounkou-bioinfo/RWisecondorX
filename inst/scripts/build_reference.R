@@ -4,7 +4,7 @@
 # Build a reference/control object from preprocessed cohort artifacts only.
 #
 # Supported modes:
-#   - rwisecondorx : native RWisecondorX reference from 4-column BED.gz files
+#   - rwisecondorx : RWisecondorX reference from 4-column BED.gz files
 #   - wisecondorx  : upstream WisecondorX reference NPZ via condathis wrapper
 #   - nipter       : NIPTeR control group from 5/9-column BED.gz files
 #
@@ -447,13 +447,13 @@ option_list <- list(
   make_option("--sample-qc-sample-col", type = "character", default = NULL,
               help = "Optional sample-name column in --sample-qc-tsv. When omitted, common names such as sample_name/Sample are inferred."),
   make_option("--sample-qc-total-unique-reads-col", type = "character", default = NULL,
-              help = "Optional total-unique-reads column in --sample-qc-tsv. When omitted, common names such as TotalUniqueReads are inferred."),
+              help = "Optional total-unique-reads column in --sample-qc-tsv. When omitted, read_counts_binned_post_sum is inferred."),
   make_option("--sample-qc-gc-col", type = "character", default = NULL,
-              help = "Optional GC column in --sample-qc-tsv. When omitted, common names such as GCPCTAfterFiltering are inferred."),
+              help = "Optional GC column in --sample-qc-tsv. When omitted, gc_read_perc_post is inferred."),
   make_option("--min-total-unique-reads", type = "double", default = NULL,
-              help = "nipter mode: drop controls below this TotalUniqueReads threshold."),
+              help = "nipter mode: drop controls below this read_counts_binned_post_sum threshold."),
   make_option("--max-total-unique-reads", type = "double", default = NULL,
-              help = "nipter mode: drop controls above this TotalUniqueReads threshold."),
+              help = "nipter mode: drop controls above this read_counts_binned_post_sum threshold."),
   make_option("--gc-mad-cutoff", type = "double", default = NULL,
               help = "nipter mode: drop GC outlier controls beyond this many MADs from the cohort median."),
   make_option("--nipter-autosomal-source", type = "character", default = "auto",
@@ -497,7 +497,7 @@ parser <- OptionParser(
     "Build a reference/control object from preprocessed cohort artifacts only.",
     "",
     "Modes:",
-    "  rwisecondorx : native RWisecondorX reference from BED.gz",
+    "  rwisecondorx : RWisecondorX reference from BED.gz",
     "  wisecondorx  : upstream WisecondorX reference from NPZ",
     "  nipter       : NIPTeR control group from BED.gz",
     "",

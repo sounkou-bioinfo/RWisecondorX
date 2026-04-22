@@ -93,7 +93,7 @@
 #' @param sample_predictors Optional named list keyed by sample name. Each
 #'   value should be a named list of extra regression predictors for that
 #'   sample, used when the fitted models include extra columns such as
-#'   \code{GCPCTAfterFiltering}.
+#'   \code{gc_read_perc_post}.
 #' @param focus_chromosomes Character vector; any subset of \code{c("X", "Y")}.
 #'
 #' @return A typed \code{NIPTGaunosomeReport}.

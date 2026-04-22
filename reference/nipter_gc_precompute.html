@@ -81,7 +81,9 @@ every sample in a large cohort.</p>
 <code>chrom</code>, <code>start</code>, <code>end</code>, <code>pct_gc</code>, <code>seq_len</code>.
 Coordinates are 0-based half-open intervals (BED convention). Chromosomes
 use no <code>chr</code> prefix (<code>1</code>–<code>22</code>, <code>X</code>, <code>Y</code>).
-Bins where all bases are N are written with <code>pct_gc = NA</code>.</p>
+GC is computed on callable <code>A/C/G/T</code> sequence only, excluding
+<code>N</code>/ambiguous bases from the denominator. Bins with no callable
+sequence are written with <code>pct_gc = NA</code>.</p>
     </div>
     <div class="section level2">
     <h2 id="see-also">See also<a class="anchor" aria-label="anchor" href="#see-also"></a></h2>

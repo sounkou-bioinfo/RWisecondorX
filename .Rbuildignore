@@ -28,4 +28,7 @@
 ^review\.md$
 ^rwisecondorx_claude_review\.md$
 ^simutation\.txt$
+^\.pi$
 ^\.rlib/.*$
+^example_nv16_gc_curve_loess\.png$
+^tt\.sh$

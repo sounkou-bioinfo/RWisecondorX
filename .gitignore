@@ -15,6 +15,12 @@ RWisecondorX*tar.gz
 # Agent/editor artifacts
 .codex/
 
+# Local runtime and scratch artifacts
+.pi/
+.rlib/
+example_nv16_gc_curve_loess.png
+tt.sh
+
 # Upstream sync mirrors (read-only reference, not shipped)
 .sync/
 

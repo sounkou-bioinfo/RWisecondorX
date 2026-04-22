@@ -41,7 +41,7 @@
 </ul></div>
 <div class="section level3">
 <h3 id="qc-and-cohort-reporting-0-0-0-9001">QC and cohort reporting<a class="anchor" aria-label="anchor" href="#qc-and-cohort-reporting-0-0-0-9001"></a></h3>
-<ul><li><p>Preprocess and prediction cohort scripts now emit more machine-readable QC surfaces. Sample-level outputs include metric readiness/missingness flags, GC loess valid/invalid bin summaries, optional GC-curve data TSVs, and new <code>sample_readiness.tsv</code>, <code>qc_flag_summary.tsv</code>, and <code>prediction_readiness.tsv</code> artifacts alongside the existing summary tables.</p></li>
+<ul><li><p>Preprocess and prediction cohort scripts now emit more machine-readable QC surfaces. Sample-level outputs include metric readiness/missingness flags, GC loess valid/invalid bin summaries, optional GC-curve data TSVs, and the main sample/cohort summary tables without extra redundant readiness-only projections.</p></li>
 <li><p><code>sample_metrics</code> and NIPTeR QC/report helpers now propagate explicit degraded-state signals instead of burying them in sparse side fields. This includes missing metric counts, readiness flags, control-group outlier counts, sex-model readiness counts, and clearer plotting subtitles for sample QC views.</p></li>
 </ul></div>
 <div class="section level3">

@@ -46,7 +46,7 @@ nipter_gaunosome_report(
 
   Optional named list keyed by sample name. Each value should be a named
   list of extra regression predictors for that sample, used when the
-  fitted models include extra columns such as `GCPCTAfterFiltering`.
+  fitted models include extra columns such as `gc_read_perc_post`.
 
 - focus_chromosomes:
 

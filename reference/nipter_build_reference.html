@@ -121,14 +121,13 @@ fitted.</p></dd>
 <dt id="arg-sample-qc-total-unique-reads-col">sample_qc_total_unique_reads_col<a class="anchor" aria-label="anchor" href="#arg-sample-qc-total-unique-reads-col"></a></dt>
 <dd><p>Optional total-unique-reads column in
 <code>sample_qc</code>. Required when either unique-read threshold is enabled.
-When <code>NULL</code>, common names such as <code>TotalUniqueReads</code> are
-inferred.</p></dd>
+When <code>NULL</code>, <code>read_counts_binned_post_sum</code> is inferred.</p></dd>
 
 
 <dt id="arg-sample-qc-gc-col">sample_qc_gc_col<a class="anchor" aria-label="anchor" href="#arg-sample-qc-gc-col"></a></dt>
 <dd><p>Optional GC column in <code>sample_qc</code>. Required
-when <code>gc_mad_cutoff</code> is enabled. When <code>NULL</code>, common names such
-as <code>GCPCTAfterFiltering</code> are inferred.</p></dd>
+when <code>gc_mad_cutoff</code> is enabled. When <code>NULL</code>,
+<code>gc_read_perc_post</code> is inferred.</p></dd>
 
 
 <dt id="arg-min-total-unique-reads">min_total_unique_reads<a class="anchor" aria-label="anchor" href="#arg-min-total-unique-reads"></a></dt>

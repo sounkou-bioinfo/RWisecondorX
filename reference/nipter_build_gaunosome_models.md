@@ -16,7 +16,7 @@ nipter_build_gaunosome_models(
   ncv_max_elements = 9L,
   regression_n_models = 4L,
   regression_n_predictors = 4L,
-  regression_extra_predictors = "GCPCTAfterFiltering",
+  regression_extra_predictors = "gc_read_perc_post",
   focus_chromosomes = c("X", "Y")
 )
 ```

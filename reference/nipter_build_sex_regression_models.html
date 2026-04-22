@@ -49,7 +49,7 @@ $sex_regression_models field."></head><body>
 <span>  candidate_chromosomes <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="fl">1</span><span class="op">:</span><span class="fl">12</span>, <span class="fl">14</span><span class="op">:</span><span class="fl">16</span>, <span class="fl">20</span>, <span class="fl">22</span><span class="op">)</span>,</span>
 <span>  n_models <span class="op">=</span> <span class="fl">4L</span>,</span>
 <span>  n_predictors <span class="op">=</span> <span class="fl">4L</span>,</span>
-<span>  extra_predictors <span class="op">=</span> <span class="st">"GCPCTAfterFiltering"</span>,</span>
+<span>  extra_predictors <span class="op">=</span> <span class="st">"gc_read_perc_post"</span>,</span>
 <span>  focus_chromosomes <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"X"</span>, <span class="st">"Y"</span><span class="op">)</span></span>
 <span><span class="op">)</span></span></code></pre></div>
     </div>
@@ -79,7 +79,7 @@ predictors. Defaults to the production-style set
 <dt id="arg-extra-predictors">extra_predictors<a class="anchor" aria-label="anchor" href="#arg-extra-predictors"></a></dt>
 <dd><p>Optional character vector of additional numeric
 columns to use when present in <code>reference$reference_frame</code>. The
-default <code>"GCPCTAfterFiltering"</code> keeps room for explicit QC metadata
+default <code>"gc_read_perc_post"</code> keeps room for explicit QC metadata
 without hard-wiring that requirement into the core sample classes.</p></dd>
 
 

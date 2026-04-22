@@ -45,7 +45,7 @@ nipter_gaunosome_score(
 
   Optional named list of extra predictor values for the sample, used
   when the regression models include extra columns such as
-  `GCPCTAfterFiltering`.
+  `gc_read_perc_post`.
 
 - focus_chromosomes:
 

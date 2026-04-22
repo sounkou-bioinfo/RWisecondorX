@@ -13,7 +13,7 @@ nipter_build_sex_regression_models(
   candidate_chromosomes = c(1:12, 14:16, 20, 22),
   n_models = 4L,
   n_predictors = 4L,
-  extra_predictors = "GCPCTAfterFiltering",
+  extra_predictors = "gc_read_perc_post",
   focus_chromosomes = c("X", "Y")
 )
 ```
@@ -41,7 +41,7 @@ nipter_build_sex_regression_models(
 
   Optional character vector of additional numeric columns to use when
   present in `reference$reference_frame`. The default
-  `"GCPCTAfterFiltering"` keeps room for explicit QC metadata without
+  `"gc_read_perc_post"` keeps room for explicit QC metadata without
   hard-wiring that requirement into the core sample classes.
 
 - focus_chromosomes:

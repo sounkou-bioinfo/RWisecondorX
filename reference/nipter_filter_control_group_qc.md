@@ -39,14 +39,13 @@ nipter_filter_control_group_qc(
 - total_unique_reads_col:
 
   Optional total-unique-reads column in `sample_qc`. Required when
-  either read-depth threshold is supplied. If `NULL`, common names such
-  as `TotalUniqueReads` are inferred.
+  either read-depth threshold is supplied. If `NULL`,
+  `read_counts_binned_post_sum` is inferred.
 
 - gc_col:
 
   Optional GC column in `sample_qc`. Required when `gc_mad_cutoff` is
-  supplied. If `NULL`, common names such as `GCPCTAfterFiltering` are
-  inferred.
+  supplied. If `NULL`, `gc_read_perc_post` is inferred.
 
 - min_total_unique_reads:
 

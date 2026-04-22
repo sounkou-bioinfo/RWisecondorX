@@ -70,14 +70,13 @@ nipter_build_reference(
 - sample_qc_total_unique_reads_col:
 
   Optional total-unique-reads column in `sample_qc`. Required when
-  either unique-read threshold is enabled. When `NULL`, common names
-  such as `TotalUniqueReads` are inferred.
+  either unique-read threshold is enabled. When `NULL`,
+  `read_counts_binned_post_sum` is inferred.
 
 - sample_qc_gc_col:
 
   Optional GC column in `sample_qc`. Required when `gc_mad_cutoff` is
-  enabled. When `NULL`, common names such as `GCPCTAfterFiltering` are
-  inferred.
+  enabled. When `NULL`, `gc_read_perc_post` is inferred.
 
 - min_total_unique_reads:
 

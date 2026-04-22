@@ -38,6 +38,7 @@
 <url><loc>https://sounkou-bioinfo.github.io/RWisecondorX/reference/bam_convert.html</loc></url>
 <url><loc>https://sounkou-bioinfo.github.io/RWisecondorX/reference/bam_convert_bed.html</loc></url>
 <url><loc>https://sounkou-bioinfo.github.io/RWisecondorX/reference/bam_convert_npz.html</loc></url>
+<url><loc>https://sounkou-bioinfo.github.io/RWisecondorX/reference/bam_samtools_stats_summary.html</loc></url>
 <url><loc>https://sounkou-bioinfo.github.io/RWisecondorX/reference/bed_to_nipter_sample.html</loc></url>
 <url><loc>https://sounkou-bioinfo.github.io/RWisecondorX/reference/bed_to_sample.html</loc></url>
 <url><loc>https://sounkou-bioinfo.github.io/RWisecondorX/reference/control_names.html</loc></url>
@@ -132,6 +133,7 @@
 <url><loc>https://sounkou-bioinfo.github.io/RWisecondorX/reference/wisecondorx_convert.html</loc></url>
 <url><loc>https://sounkou-bioinfo.github.io/RWisecondorX/reference/wisecondorx_newref.html</loc></url>
 <url><loc>https://sounkou-bioinfo.github.io/RWisecondorX/reference/wisecondorx_predict.html</loc></url>
+<url><loc>https://sounkou-bioinfo.github.io/RWisecondorX/reference/write_bam_samtools_stats_summary.html</loc></url>
 <url><loc>https://sounkou-bioinfo.github.io/RWisecondorX/reference/write_nipter_gaunosome_output.html</loc></url>
 <url><loc>https://sounkou-bioinfo.github.io/RWisecondorX/reference/write_nipter_reference_plots.html</loc></url>
 <url><loc>https://sounkou-bioinfo.github.io/RWisecondorX/reference/write_wisecondorx_output.html</loc></url>
